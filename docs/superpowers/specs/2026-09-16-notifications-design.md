@@ -19,11 +19,10 @@ In scope:
 - Script channel: command run without a shell, message on stdin, variables in env.
 - Desktop channel: `terminal-notifier` → `osascript` → `notify-send` → unavailable.
 - "Send test" with the dialog's unsaved settings.
-- Settings persisted in `config.toml` under `[notifications]`.
+- Settings persisted per repo in `config.toml` under `[notifications."owner/repo"]`.
 
 Out of scope (YAGNI):
 
-- Per-repo notification settings.
 - Batching several changes into one notification.
 - Template logic (loops, conditionals, filters); only placeholder substitution.
 - Merged/closed and auto-merge-toggled events.
@@ -37,7 +36,7 @@ Out of scope (YAGNI):
 > shared `[notifications]` section is ignored with a warning.
 
 ```toml
-[notifications]
+[notifications."owner/repo"]
 message = "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}"
 events = ["READY", "FAILING", "CONFLICT"]
 include_drafts = false
