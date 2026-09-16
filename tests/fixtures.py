@@ -33,6 +33,7 @@ def raw_pr(
     head_ref_id="REF_1",
     auto_merge=None,
     committed_date="2026-09-15T02:00:00Z",
+    head_sha="abc1234def5678abc1234def5678abc1234def56",
 ):
     checks = [] if checks is None else checks
     rollup = None
@@ -62,7 +63,15 @@ def raw_pr(
         "reviewDecision": review_decision,
         "autoMergeRequest": auto_merge,
         "commits": {
-            "nodes": [{"commit": {"committedDate": committed_date, "statusCheckRollup": rollup}}]
+            "nodes": [
+                {
+                    "commit": {
+                        "oid": head_sha,
+                        "committedDate": committed_date,
+                        "statusCheckRollup": rollup,
+                    }
+                }
+            ]
         },
     }
 

@@ -26,6 +26,7 @@ fragment PrFields on PullRequest {{
   commits(last: 1) {{
     nodes {{
       commit {{
+        oid
         committedDate
         statusCheckRollup {{
           state

@@ -181,6 +181,7 @@ class ParseTest(unittest.TestCase):
         )
         self.assertEqual(p.created_at, "2026-09-15T01:28:54Z")
         self.assertEqual(p.last_commit_at, "2026-09-15T02:00:00Z")
+        self.assertEqual(p.head_sha, "abc1234def5678abc1234def5678abc1234def56")
         self.assertEqual(p.last_check_started_at, "2026-09-15T04:00:00Z")
 
     def test_no_checks_started(self):
@@ -199,6 +200,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(p.author, "ghost")
         self.assertEqual(p.checks, ())
         self.assertIsNone(p.last_commit_at)
+        self.assertIsNone(p.head_sha)
 
 
 if __name__ == "__main__":

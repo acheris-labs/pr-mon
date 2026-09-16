@@ -82,6 +82,7 @@ class PullRequest:
     checks_total: int
     auto_merge: AutoMerge | None = None
     last_commit_at: str | None = None
+    head_sha: str | None = None
 
     @property
     def last_check_started_at(self) -> str | None:
@@ -189,6 +190,7 @@ def _parse_pr(node: dict) -> PullRequest:
         if auto
         else None,
         last_commit_at=commit.get("committedDate"),
+        head_sha=commit.get("oid"),
     )
 
 

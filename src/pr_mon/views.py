@@ -95,6 +95,9 @@ def pr_details(repo: RepoInfo, pr: PullRequest, now: datetime) -> Text:
         if iso:
             text.append(label, style="dim")
             text.append(f"{format_time(iso, now)}\n")
+    if pr.head_sha:
+        text.append("Head SHA:    ", style="dim")
+        text.append(f"{pr.head_sha}\n")
     text.append(f"{pr.url}\n\n", style="dim underline")
     text.append(f"{icon} {pr.status}\n", style=style)
     if pr.auto_merge:

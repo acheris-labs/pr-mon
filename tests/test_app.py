@@ -127,6 +127,7 @@ class LayoutTest(AppTestCase):
             self.assertIn("Author: alice", details)
             self.assertIn("Opened:", details)
             self.assertIn("Last commit:", details)
+            self.assertIn("Head SHA:    abc1234def5678abc1234def5678abc1234def56", details)
             self.assertNotIn("Last check", details)
             self.assertNotIn("enter", details)
 
