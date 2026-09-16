@@ -121,7 +121,10 @@ class LayoutTest(AppTestCase):
                 ["▼ ● acme/ (3)", "    ● api (2)", "      empty", "    ● web (1)"],
             )
             self.assertEqual(self.pr_numbers(app), ["#1", "#2"])
-            self.assertIn("#1 PR 1", text_of(app.query_one("#details", Static)))
+            details = text_of(app.query_one("#details", Static))
+            self.assertIn("#1 PR 1", details)
+            self.assertIn("Branch: feature-1 → main", details)
+            self.assertIn("Author: alice", details)
 
     async def test_navigating_repos_switches_prs(self):
         app = self.make_app(

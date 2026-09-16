@@ -65,7 +65,10 @@ def pr_details(repo: RepoInfo, pr: PullRequest) -> Text:
     icon, style = STATUS_STYLE[pr.status]
     text = Text()
     text.append(f"#{pr.number} {pr.title}\n", style="bold")
-    text.append(f"{pr.author}  {pr.head_ref} → {pr.base_ref}\n", style="dim")
+    text.append("Branch: ", style="dim")
+    text.append(f"{pr.head_ref} → {pr.base_ref}\n", style="bold")
+    text.append("Author: ", style="dim")
+    text.append(f"{pr.author}\n")
     text.append(f"{pr.url}\n\n", style="dim underline")
     text.append(f"{icon} {pr.status}\n", style=style)
     if pr.auto_merge:
