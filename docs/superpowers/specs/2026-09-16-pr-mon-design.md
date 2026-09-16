@@ -78,7 +78,7 @@ Out of scope (v1, planned later):
 
 | Module | Responsibility | Depends on |
 |--------|----------------|------------|
-| `config.py` | Load/save config (`~/.config/pr-mon/config.toml`): repo list, poll interval, optional per-repo settings | `tomllib` + small hand-written writer |
+| `config.py` | Load/save config (`~/.config/pr-mon/config.toml`): repo list, poll interval | `tomllib` + small hand-written writer |
 | `state.py` | Load/save seen state (`~/.local/state/pr-mon/state.json`) | `json` |
 | `github.py` | GraphQL client: fetch repo + PRs, validate repo, merge, update branch, delete branch | `httpx` |
 | `models.py` | `RepoInfo`, `PullRequest` dataclasses; derive status and blocking reasons from raw fields | — |
