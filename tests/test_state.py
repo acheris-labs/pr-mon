@@ -28,12 +28,6 @@ class StateTest(unittest.TestCase):
         self.assertEqual(load_state(self.path), (state, None))
         self.assertEqual(list(self.path.parent.iterdir()), [self.path])
 
-    def test_legacy_file_is_pr_records(self):
-        self.path.parent.mkdir(parents=True)
-        legacy = {"acme/api": {"12": {"status": "READY", "seen": True}}}
-        self.path.write_text(json.dumps(legacy))
-        self.assertEqual(load_state(self.path), (AppState(prs=legacy), None))
-
     def test_bad_collapsed_is_ignored(self):
         self.path.parent.mkdir(parents=True)
         self.path.write_text(json.dumps({"prs": {}, "collapsed": "acme"}))

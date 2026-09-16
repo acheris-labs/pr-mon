@@ -60,15 +60,8 @@ def _parse_notifications(data: object) -> tuple[dict[str, NotifyConfig], list[st
         return {}, ["ignoring [notifications]: expected per-repo tables"]
     found = {}
     problems = []
-    if any(not isinstance(value, dict) for value in data.values()):
-        problems.append(
-            "notifications are now set per repo (press N on a repo); "
-            "ignoring the shared [notifications] settings"
-        )
     for repo, table in data.items():
-        if not isinstance(table, dict):
-            continue
-        settings = _parse_repo_notifications(table)
+        settings = _parse_repo_notifications(table) if isinstance(table, dict) else None
         if settings is None:
             problems.append(f"ignoring invalid notification settings for {repo}")
         else:

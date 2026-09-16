@@ -32,8 +32,7 @@ Out of scope (YAGNI):
 
 > **Revised:** settings are per repo. `N` requires a selected repo; each repo
 > has its own `[notifications."owner/repo"]` table with the keys below; a repo
-> without a table never notifies; removing a repo removes its table; an old
-> shared `[notifications]` section is ignored with a warning.
+> without a table never notifies; removing a repo removes its table.
 
 ```toml
 [notifications."owner/repo"]

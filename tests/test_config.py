@@ -157,10 +157,10 @@ class NotifyConfigTest(unittest.TestCase):
                     (config.repos, config.poll_interval), (["acme/api", "acme/web"], 30)
                 )
 
-    def test_old_shared_section_is_ignored(self):
-        self.write('repos = ["acme/api"]\n[notifications]\nscript_enabled = true\nscript = "im"\n')
+    def test_non_table_repo_entry_is_skipped(self):
+        self.write('repos = ["acme/api"]\n[notifications]\n"acme/api" = "loud"\n')
         config, warning = load_config(self.path)
-        self.assertIn("per repo", warning)
+        self.assertIn("acme/api", warning)
         self.assertEqual(config.notifications, {})
         self.assertEqual(config.repos, ["acme/api"])
 

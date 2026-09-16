@@ -27,10 +27,9 @@ def load_state(path: Path) -> tuple[AppState, str | None]:
         return AppState(), f"Ignoring unreadable state {path}: {e}"
     if not isinstance(data, dict):
         return AppState(), f"Ignoring invalid state {path}: expected an object"
-    if "prs" not in data:
-        # Before collapsed groups were saved, the file held only the PR records.
-        return AppState(prs=data), None
-    prs = data["prs"] if isinstance(data["prs"], dict) else {}
+    prs = data.get("prs", {})
+    if not isinstance(prs, dict):
+        prs = {}
     collapsed = data.get("collapsed", [])
     if not (isinstance(collapsed, list) and all(isinstance(o, str) for o in collapsed)):
         collapsed = []
