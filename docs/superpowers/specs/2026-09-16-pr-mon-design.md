@@ -57,7 +57,12 @@ Out of scope (v1, planned later):
  A add repo  D remove repo  enter actions  r refresh  q quit
 ```
 
-- Left: repo navigator with attention badge.
+- Left: repo tree grouped by owner (sorted case-insensitively). Owner rows
+  roll up unseen counts, badge color, and errors from their repos; `enter` on
+  an owner toggles it, `enter` on a repo focuses its PR list, `←`/`→`
+  navigate/collapse/expand. Collapsed owners persist in `state.json`; a new
+  event for a repo expands its owner (cursor stays put). Selecting an owner
+  leaves the PR pane empty with a hint.
 - Top right: PR list for the selected repo, newest first (by creation date).
 - Bottom right: details for the selected PR, including all blocking reasons.
 

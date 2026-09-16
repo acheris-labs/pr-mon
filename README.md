@@ -21,8 +21,11 @@ Or run from the checkout with `make run`.
 | Key | Where | Action |
 |-----|-------|--------|
 | `A` | anywhere | Add a repo (`owner/name`) |
-| `D` | repo list | Remove the selected repo |
-| `tab` / `shift+tab` | anywhere | Move between repo list and PR list |
+| `D` | repo tree | Remove the selected repo |
+| `enter` / `space` | owner row | Collapse / expand the group |
+| `enter` | repo row | Jump to its PR list |
+| `←` / `→` | repo tree | Go to owner / collapse; expand |
+| `tab` / `shift+tab` | anywhere | Move between repo tree and PR list |
 | `enter` | PR list | Action menu |
 | `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods) |
 | `u` | action menu | Update branch (when behind base) |
@@ -32,9 +35,12 @@ Or run from the checkout with `make run`.
 
 ## Indicators
 
-- Repo list: `● name (n)` — `n` PRs you haven't looked at since they were opened,
-  became ready, or became blocked. Green = something is ready, red = something
-  got blocked, yellow = new PRs only. `⚠` = the last refresh failed.
+- Repo tree: repos are grouped under their owner. `● name (n)` — `n` PRs you
+  haven't looked at since they were opened, became ready, or became blocked.
+  Green = something is ready, red = something got blocked, yellow = new PRs
+  only. `⚠` = the last refresh failed. Owner rows add up their repos, so a
+  collapsed group still shows alerts; a new alert expands its group.
+  Collapsed groups are remembered.
 - Selecting a PR in the PR list marks it seen.
 - PR statuses: `READY`, `CONFLICT`, `FAILING`, `BLOCKED`, `BEHIND`, `PENDING`,
   `CHECKING` (GitHub still computing), `DRAFT`. The details pane lists every
@@ -51,7 +57,7 @@ Or run from the checkout with `make run`.
   ]
   ```
 
-- State (seen PRs): `~/.local/state/pr-mon/state.json` (respects `XDG_STATE_HOME`)
+- State (seen PRs, collapsed groups): `~/.local/state/pr-mon/state.json` (respects `XDG_STATE_HOME`)
 
 ## Development
 

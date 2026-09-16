@@ -3,13 +3,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from textual.widgets import Checkbox, DataTable, Input, OptionList, Static
+from textual.widgets import Checkbox, DataTable, Input, Static
 
-from pr_mon.app import PrMonApp
+from pr_mon.app import PrMonApp, PrTable
 from pr_mon.config import Config, load_config, save_config
 from pr_mon.github import GitHubError, NotFoundError
 from pr_mon.models import MergeMethod, parse_repo
 from pr_mon.screens import ActionMenuScreen, AddRepoScreen, ConfirmScreen, MergeMethodScreen
+from pr_mon.state import AppState, save_state
 from tests.fixtures import raw_pr, raw_repo
 
 READY = {}
@@ -84,9 +85,14 @@ class AppTestCase(unittest.IsolatedAsyncioTestCase):
         await pilot.app.workers.wait_for_complete()
         await pilot.pause()
 
-    def repo_labels(self, app):
-        options = app.query_one("#repos", OptionList)
-        return [str(options.get_option_at_index(i).prompt) for i in range(options.option_count)]
+    def tree_view(self, app):
+        """Visible repo tree lines: '▼'/'▶' + owner label, repos indented."""
+        lines = []
+        for owner in app.query_one("#repos").root.children:
+            lines.append(f"{'▼' if owner.is_expanded else '▶'} {owner.label}")
+            if owner.is_expanded:
+                lines += [f"    {repo.label}" for repo in owner.children]
+        return lines
 
     def pr_numbers(self, app):
         table = app.query_one("#prs", DataTable)
@@ -105,8 +111,8 @@ class LayoutTest(AppTestCase):
         async with app.run_test(size=(120, 30)) as pilot:
             await self.settle(pilot)
             self.assertEqual(
-                self.repo_labels(app),
-                ["● acme/api (2)", "● acme/web (1)", "  acme/empty"],
+                self.tree_view(app),
+                ["▼ ● acme/ (3)", "    ● api (2)", "      empty", "    ● web (1)"],
             )
             self.assertEqual(self.pr_numbers(app), ["#1", "#2"])
             self.assertIn("#1 PR 1", text_of(app.query_one("#details", Static)))
@@ -132,12 +138,12 @@ class LayoutTest(AppTestCase):
             await self.settle(pilot)
             await pilot.press("tab")
             await pilot.pause()
-            self.assertEqual(self.repo_labels(app), ["● acme/api (1)"])
+            self.assertEqual(self.tree_view(app), ["▼ ● acme/ (1)", "    ● api (1)"])
             await pilot.press("down")
             await pilot.pause()
-            self.assertEqual(self.repo_labels(app), ["  acme/api"])
+            self.assertEqual(self.tree_view(app), ["▼   acme/", "      api"])
             state = json.loads(self.state_path.read_text())
-            self.assertTrue(all(e["seen"] for e in state["acme/api"].values()))
+            self.assertTrue(all(e["seen"] for e in state["prs"]["acme/api"].values()))
 
     async def test_seen_state_survives_restart(self):
         repos = {"acme/api": make_repo("acme/api", (1, READY))}
@@ -149,7 +155,7 @@ class LayoutTest(AppTestCase):
         app = self.make_app(repos)
         async with app.run_test(size=(120, 30)) as pilot:
             await self.settle(pilot)
-            self.assertEqual(self.repo_labels(app), ["  acme/api"])
+            self.assertEqual(self.tree_view(app), ["▼   acme/", "      api"])
 
     async def test_fetch_error_shows_warning_and_keeps_data(self):
         app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
@@ -158,7 +164,7 @@ class LayoutTest(AppTestCase):
             self.client.repos["acme/api"] = GitHubError("Network error: down")
             await pilot.press("r")
             await self.settle(pilot)
-            self.assertEqual(self.repo_labels(app), ["⚠ acme/api (1)"])
+            self.assertEqual(self.tree_view(app), ["▼ ⚠ acme/ (1)", "    ⚠ api (1)"])
             self.assertEqual(self.pr_numbers(app), ["#1"])
             self.assertIn("Network error: down", text_of(app.query_one("#details", Static)))
 
@@ -344,7 +350,7 @@ class ActionTest(AppTestCase):
 class RepoManagementTest(AppTestCase):
     async def test_add_repo(self):
         app = self.make_app(
-            {"acme/api": make_repo("acme/api"), "Acme/New": make_repo("Acme/New", (9, READY))},
+            {"acme/api": make_repo("acme/api"), "acme/new": make_repo("acme/new", (9, READY))},
             config_repos=["acme/api"],
         )
         async with app.run_test(size=(120, 30)) as pilot:
@@ -352,12 +358,14 @@ class RepoManagementTest(AppTestCase):
             await pilot.press("A")
             await pilot.pause()
             self.assertIsInstance(app.screen, AddRepoScreen)
-            app.screen.query_one(Input).value = "acme/new"
+            app.screen.query_one(Input).value = "ACME/NEW"
             await pilot.press("enter")
             await self.settle(pilot)
             self.assertNotIsInstance(app.screen, AddRepoScreen)
-            self.assertEqual(self.repo_labels(app), ["  acme/api", "● Acme/New (1)"])
-            self.assertEqual(load_config(self.config_path)[0].repos, ["acme/api", "Acme/New"])
+            self.assertEqual(self.tree_view(app), ["▼ ● acme/ (1)", "      api", "    ● new (1)"])
+            self.assertEqual(load_config(self.config_path)[0].repos, ["acme/api", "acme/new"])
+            self.assertEqual(app.selected_repo, "acme/new")
+            self.assertEqual(self.pr_numbers(app), ["#9"])
 
     async def test_add_rejects_bad_format_and_missing_repo(self):
         app = self.make_app({"acme/api": make_repo("acme/api")})
@@ -401,9 +409,10 @@ class RepoManagementTest(AppTestCase):
             self.assertIsInstance(app.screen, ConfirmScreen)
             await pilot.press("y")
             await pilot.pause()
-            self.assertEqual(self.repo_labels(app), ["  acme/web"])
+            self.assertEqual(self.tree_view(app), ["▼   acme/", "      web"])
             self.assertEqual(load_config(self.config_path)[0].repos, ["acme/web"])
-            self.assertNotIn("acme/api", json.loads(self.state_path.read_text()))
+            self.assertNotIn("acme/api", json.loads(self.state_path.read_text())["prs"])
+            self.assertEqual(app.selected_repo, "acme/web")
             self.assertEqual(self.pr_numbers(app), [])
 
     async def test_remove_cancelled(self):
@@ -421,6 +430,151 @@ class RepoManagementTest(AppTestCase):
             await pilot.press("tab", "D")
             await pilot.pause()
             self.assertNotIsInstance(app.screen, ConfirmScreen)
+
+
+class RepoTreeTest(AppTestCase):
+    def write_state(self, **kwargs):
+        save_state(self.state_path, AppState(**kwargs))
+
+    async def test_groups_by_owner_sorted(self):
+        app = self.make_app(
+            {n: make_repo(n) for n in ("zeta/b", "Alpha/x", "zeta/a")},
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.assertEqual(
+                self.tree_view(app),
+                ["▼   Alpha/", "      x", "▼   zeta/", "      a", "      b"],
+            )
+            self.assertEqual(app.selected_repo, "Alpha/x")
+
+    async def test_rollup_across_repos_and_owners(self):
+        app = self.make_app(
+            {
+                "acme/api": make_repo("acme/api", (1, CONFLICT)),
+                "acme/web": make_repo("acme/web", (2, READY), (3, BEHIND)),
+                "beta/x": make_repo("beta/x", (4, CONFLICT)),
+            }
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.assertEqual(
+                self.tree_view(app),
+                [
+                    "▼ ● acme/ (3)",
+                    "    ● api (1)",
+                    "    ● web (2)",
+                    "▼ ● beta/ (1)",
+                    "    ● x (1)",
+                ],
+            )
+            owners = app.query_one("#repos").root.children
+            self.assertEqual(owners[0].label.spans[0].style, "bold green")
+            self.assertEqual(owners[1].label.spans[0].style, "bold red")
+
+    async def test_enter_on_owner_toggles_and_persists(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            await pilot.press("up")
+            await pilot.pause()
+            self.assertIsNone(app.selected_repo)
+            self.assertEqual(self.pr_numbers(app), [])
+            self.assertIn("Select a repository", text_of(app.query_one("#details", Static)))
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertEqual(self.tree_view(app), ["▶ ● acme/ (1)"])
+            self.assertEqual(json.loads(self.state_path.read_text())["collapsed"], ["acme"])
+            self.assertFalse(app.query_one(PrTable).has_focus)
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.assertEqual(self.tree_view(app), ["▶ ● acme/ (1)"])
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertEqual(self.tree_view(app), ["▼ ● acme/ (1)", "    ● api (1)"])
+            self.assertEqual(json.loads(self.state_path.read_text())["collapsed"], [])
+
+    async def test_enter_on_repo_focuses_prs(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertTrue(app.query_one(PrTable).has_focus)
+            self.assertEqual(self.tree_view(app), ["▼   acme/", "      api"])
+
+    async def test_left_and_right(self):
+        app = self.make_app({"acme/api": make_repo("acme/api")})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            await pilot.press("left")
+            await pilot.pause()
+            self.assertIsNone(app.selected_repo)
+            self.assertEqual(self.tree_view(app), ["▼   acme/", "      api"])
+            await pilot.press("left")
+            await pilot.pause()
+            self.assertEqual(self.tree_view(app), ["▶   acme/"])
+            await pilot.press("right")
+            await pilot.pause()
+            self.assertEqual(self.tree_view(app), ["▼   acme/", "      api"])
+
+    async def test_collapsed_owner_with_old_unseen_stays_collapsed(self):
+        self.write_state(
+            prs={"beta/x": {"5": {"status": "CONFLICT", "seen": False}}}, collapsed=["beta"]
+        )
+        app = self.make_app(
+            {"acme/api": make_repo("acme/api"), "beta/x": make_repo("beta/x", (5, CONFLICT))}
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.assertEqual(self.tree_view(app), ["▼   acme/", "      api", "▶ ● beta/ (1)"])
+
+    async def test_new_alert_expands_owner_and_keeps_cursor(self):
+        self.write_state(
+            prs={"acme/api": {"1": {"status": "PENDING", "seen": True}}}, collapsed=["acme"]
+        )
+        pending = {"merge_state": "BLOCKED", "check_state": "PENDING"}
+        app = self.make_app(
+            {
+                "acme/api": make_repo("acme/api", (1, pending)),
+                "beta/x": make_repo("beta/x", (7, READY), (8, READY)),
+            }
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.assertEqual(self.tree_view(app), ["▶   acme/", "▼ ● beta/ (2)", "    ● x (2)"])
+            self.assertEqual(app.selected_repo, "beta/x")
+            await pilot.press("tab", "down")
+            await pilot.pause()
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, READY))
+            await pilot.press("r")
+            await self.settle(pilot)
+            self.assertEqual(
+                self.tree_view(app),
+                ["▼ ● acme/ (1)", "    ● api (1)", "▼   beta/", "      x"],
+            )
+            self.assertEqual(app.selected_repo, "beta/x")
+            self.assertEqual(app.query_one(PrTable).cursor_row, 1)
+            self.assertEqual(app.query_one("#repos").cursor_node.data, "beta/x")
+            self.assertEqual(json.loads(self.state_path.read_text())["collapsed"], [])
+
+    async def test_remove_ignores_owner_rows(self):
+        app = self.make_app({"acme/api": make_repo("acme/api")})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            await pilot.press("up", "D")
+            await pilot.pause()
+            self.assertNotIsInstance(app.screen, ConfirmScreen)
+
+    async def test_removing_last_repo_of_owner_drops_group(self):
+        app = self.make_app({"acme/api": make_repo("acme/api"), "beta/x": make_repo("beta/x")})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            await pilot.press("D", "y")
+            await self.settle(pilot)
+            self.assertEqual(self.tree_view(app), ["▼   beta/", "      x"])
+            self.assertEqual(app.selected_repo, "beta/x")
 
 
 if __name__ == "__main__":

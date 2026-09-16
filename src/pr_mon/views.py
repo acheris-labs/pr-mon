@@ -27,7 +27,7 @@ def badge_style(prs: list[PullRequest]) -> str:
     return "bold yellow"
 
 
-def repo_label(name: str, unseen: list[PullRequest], error: str | None, loaded: bool) -> Text:
+def _badged(name: str, unseen: list[PullRequest], error: bool, name_style: str) -> Text:
     label = Text()
     if error:
         label.append("⚠ ", style="bold red")
@@ -35,10 +35,19 @@ def repo_label(name: str, unseen: list[PullRequest], error: str | None, loaded: 
         label.append("● ", style=badge_style(unseen))
     else:
         label.append("  ")
-    label.append(name, style="" if loaded or error else "dim")
+    label.append(name, style=name_style)
     if unseen:
         label.append(f" ({len(unseen)})", style=badge_style(unseen))
     return label
+
+
+def repo_label(name: str, unseen: list[PullRequest], error: str | None, loaded: bool) -> Text:
+    return _badged(name, unseen, bool(error), "" if loaded or error else "dim")
+
+
+def owner_label(owner: str, unseen: list[PullRequest], error: bool) -> Text:
+    """Owner group row; `unseen` and `error` roll up from all of its repos."""
+    return _badged(f"{owner}/", unseen, error, "bold")
 
 
 def pr_row(pr: PullRequest, unseen: bool) -> tuple[Text, Text, Text, Text, Text]:
