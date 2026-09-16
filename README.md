@@ -31,6 +31,7 @@ Or run from the checkout with `make run`.
 | `a` | action menu | Enable / disable GitHub auto-merge (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
 | `space` | action menu | Toggle "delete remote branch" |
+| `N` | anywhere | Notification settings |
 | `r` | anywhere | Refresh now |
 | `q` | anywhere | Quit |
 
@@ -54,9 +55,33 @@ when pr-mon isn't running. The repo must have "Allow auto-merge" enabled.
 It's offered for PRs that aren't mergeable yet; ready PRs use `m`. The head
 branch is only deleted afterwards if the repo auto-deletes head branches.
 
+## Notifications
+
+`N` opens the settings dialog:
+
+- **Message** — template with `{{PR_REPO}}`, `{{PR_NUM}}`, `{{PR_TITLE}}`,
+  `{{PR_AUTHOR}}`, `{{PR_BRANCH}}`, `{{PR_TARGET}}`, `{{PR_STATE}}`,
+  `{{PR_URL}}`; a live preview uses a sample PR.
+- **Events** — notify when a PR *becomes* Ready, Failing, Conflict, Blocked,
+  Behind, Pending, or is newly opened (defaults: Ready, Failing, Conflict).
+  Drafts are skipped unless "Include draft PRs" is ticked.
+- **Script** — a command such as `im --deliver tgram`. It runs without a shell
+  (quotes and a leading `~` work; `$VARS` don't), receives the message on
+  stdin, and gets the `PR_*` values as environment variables. 30 s timeout.
+- **Desktop** — uses the first of `terminal-notifier` (click opens the PR),
+  `osascript`, `notify-send` found on `PATH`.
+
+**Send test** fires the enabled channels with a sample PR using the unsaved
+settings. A repo's first load after startup (or after adding it) never
+notifies; only later changes do. Failures show as warning toasts.
+
+If `terminal-notifier` reports "Notifications are turned off", allow it in
+System Settings › Notifications (or `tccutil reset UserNotification
+fr.julienxx.oss.terminal-notifier` to be asked again).
+
 ## Files
 
-- Config: `~/.config/pr-mon/config.toml` (respects `XDG_CONFIG_HOME`)
+- Config (repos, poll interval, `[notifications]`): `~/.config/pr-mon/config.toml` (respects `XDG_CONFIG_HOME`)
 
   ```toml
   poll_interval = 60
