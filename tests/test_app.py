@@ -98,7 +98,8 @@ class AppTestCase(unittest.IsolatedAsyncioTestCase):
 
     def make_app(self, repos, config_repos=None, notifications=None, notifier=None):
         names = list(repos) if config_repos is None else config_repos
-        config = Config(repos=names, notifications=notifications or NotifyConfig())
+        per_repo = {name: notifications for name in names} if notifications else {}
+        config = Config(repos=names, notifications=per_repo)
         save_config(self.config_path, config)
         self.client = FakeClient(repos)
         return PrMonApp(self.client, self.config_path, self.state_path, notifier=notifier)
@@ -773,11 +774,11 @@ class NotificationDispatchTest(AppTestCase):
             await self.refresh(pilot)
             self.assertEqual(self.deliver.states(), [("acme/api", "5", "NEW")])
 
-    async def test_added_repo_first_load_is_silent(self):
+    async def test_added_repo_notifies_once_configured(self):
         app = self.make_app(
             {"acme/api": make_repo("acme/api"), "acme/new": make_repo("acme/new", (9, PENDING))},
             config_repos=["acme/api"],
-            notifications=NotifyConfig(events=["NEW", "READY"], script_enabled=True, script="x"),
+            notifications=ON,
         )
         async with app.run_test(size=(120, 30)) as pilot:
             await self.settle(pilot)
@@ -786,6 +787,13 @@ class NotificationDispatchTest(AppTestCase):
             app.screen.query_one(Input).value = "acme/new"
             await pilot.press("enter")
             await self.settle(pilot)
+            self.assertNotIn("acme/new", app.config.notifications)
+            await pilot.press("N")
+            await pilot.pause()
+            app.screen.query_one("#script-enabled", Checkbox).value = True
+            app.screen.query_one("#script", Input).value = "im"
+            await pilot.press("ctrl+s")
+            await pilot.pause()
             self.assertEqual(self.deliver.calls, [])
             self.client.repos["acme/new"] = make_repo("acme/new", (9, READY))
             await self.refresh(pilot)
@@ -806,14 +814,15 @@ class NotificationDispatchTest(AppTestCase):
             await self.refresh(pilot)
             self.assertEqual(self.deliver.states(), [("acme/api", "1", "FAILING")])
 
-    async def test_removed_and_readded_repo_is_first_load_again(self):
-        repos = {"acme/api": make_repo("acme/api", (1, PENDING))}
-        settings = NotifyConfig(events=["NEW", "READY"], script_enabled=True, script="im")
-        app = self.make_app(repos, notifications=settings)
+    async def test_removing_repo_drops_its_settings(self):
+        repos = {"acme/api": make_repo("acme/api", (1, PENDING)), "acme/web": make_repo("acme/web")}
+        app = self.make_app(repos, notifications=ON)
         async with app.run_test(size=(120, 30)) as pilot:
             await self.settle(pilot)
             await pilot.press("D", "y")
             await pilot.pause()
+            self.assertEqual(list(app.config.notifications), ["acme/web"])
+            self.assertEqual(list(load_config(self.config_path)[0].notifications), ["acme/web"])
             self.client.repos["acme/api"] = make_repo("acme/api", (1, READY))
             await pilot.press("A")
             await pilot.pause()
@@ -821,6 +830,50 @@ class NotificationDispatchTest(AppTestCase):
             await pilot.press("enter")
             await self.settle(pilot)
             self.assertEqual(self.deliver.calls, [])
+            self.assertNotIn("acme/api", app.config.notifications)
+
+    async def test_only_configured_repos_notify(self):
+        save_config(
+            self.config_path,
+            Config(repos=["acme/api", "acme/web"], notifications={"acme/web": ON}),
+        )
+        self.client = FakeClient(
+            {
+                "acme/api": make_repo("acme/api", (1, PENDING)),
+                "acme/web": make_repo("acme/web", (2, PENDING)),
+            }
+        )
+        app = PrMonApp(self.client, self.config_path, self.state_path)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, READY))
+            self.client.repos["acme/web"] = make_repo("acme/web", (2, READY))
+            await self.refresh(pilot)
+            self.assertEqual(self.deliver.states(), [("acme/web", "2", "READY")])
+
+    async def test_each_repo_uses_its_own_settings(self):
+        api = NotifyConfig(script_enabled=True, script="api-hook", events=["READY"])
+        web = NotifyConfig(desktop_enabled=True, events=["FAILING"])
+        save_config(
+            self.config_path,
+            Config(
+                repos=["acme/api", "acme/web"], notifications={"acme/api": api, "acme/web": web}
+            ),
+        )
+        self.client = FakeClient(
+            {
+                "acme/api": make_repo("acme/api", (1, PENDING)),
+                "acme/web": make_repo("acme/web", (2, PENDING)),
+            }
+        )
+        app = PrMonApp(self.client, self.config_path, self.state_path, notifier="/x/tn")
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, FAILING))
+            self.client.repos["acme/web"] = make_repo("acme/web", (2, FAILING))
+            await self.refresh(pilot)
+            self.assertEqual(self.deliver.states(), [("acme/web", "2", "FAILING")])
+            self.assertEqual(self.deliver.calls[0][0], web)
 
     async def test_delivery_errors_are_toasted(self):
         app = self.make_app({"acme/api": make_repo("acme/api", (1, PENDING))}, notifications=ON)
@@ -833,6 +886,9 @@ class NotificationDispatchTest(AppTestCase):
             self.assertIn(
                 ("warning", "Script notification failed: im exited with code 1: nope"), messages
             )
+
+
+API = {"acme/api": make_repo("acme/api")}
 
 
 class NotificationsScreenTest(AppTestCase):
@@ -850,6 +906,27 @@ class NotificationsScreenTest(AppTestCase):
         self.assertIsInstance(pilot.app.screen, NotificationsScreen)
         return pilot.app.screen
 
+    async def test_requires_a_repo(self):
+        app = self.make_app(API)
+        async with app.run_test(size=(120, 40), notifications=True) as pilot:
+            await self.settle(pilot)
+            await pilot.press("left")
+            await pilot.pause()
+            self.assertIsNone(app.selected_repo)
+            await pilot.press("N")
+            await pilot.pause()
+            self.assertNotIsInstance(app.screen, NotificationsScreen)
+            self.assertTrue(any("Select a repository" in n.message for n in app._notifications))
+
+    async def test_title_names_repo_and_shows_its_settings(self):
+        app = self.make_app(API, notifications=NotifyConfig(events=["NEW"], script="im"))
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            self.assertIn("acme/api", text_of(screen.query_one("#title")))
+            self.assertEqual(self.event_values(screen)["new"], True)
+            self.assertEqual(self.event_values(screen)["ready"], False)
+            self.assertEqual(screen.query_one("#script", Input).value, "im")
+
     def event_values(self, screen):
         return {
             box.id.removeprefix("event-"): box.value
@@ -858,7 +935,7 @@ class NotificationsScreenTest(AppTestCase):
         }
 
     async def test_shows_current_settings(self):
-        app = self.make_app({})
+        app = self.make_app(API)
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             self.assertEqual(
@@ -879,7 +956,7 @@ class NotificationsScreenTest(AppTestCase):
             self.assertIn("stdin", text_of(screen.query_one("#script-help")))
 
     async def test_preview_and_unknown_placeholders(self):
-        app = self.make_app({})
+        app = self.make_app(API)
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             self.assertIn("acme/api#123 is READY", text_of(screen.query_one("#preview")))
@@ -908,22 +985,23 @@ class NotificationsScreenTest(AppTestCase):
                 script_enabled=True,
                 script="im --deliver tgram",
             )
-            self.assertEqual(app.config.notifications, expected)
+            self.assertEqual(app.config.notifications, {"acme/api": expected})
             saved = load_config(self.config_path)[0]
-            self.assertEqual(saved.notifications, expected)
+            self.assertEqual(saved.notifications, {"acme/api": expected})
             self.assertEqual(saved.repos, ["acme/api"])
 
     async def test_save_button(self):
-        app = self.make_app({})
+        app = self.make_app(API)
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             screen.query_one("#event-behind", Checkbox).value = True
             await pilot.click("#save")
             await pilot.pause()
-            self.assertIn("BEHIND", load_config(self.config_path)[0].notifications.events)
+            saved = load_config(self.config_path)[0].notifications["acme/api"]
+            self.assertIn("BEHIND", saved.events)
 
     async def test_cancel_discards(self):
-        app = self.make_app({})
+        app = self.make_app(API)
         async with app.run_test(size=(120, 40)) as pilot:
             for leave in ("escape", "#cancel"):
                 screen = await self.open(pilot)
@@ -934,11 +1012,11 @@ class NotificationsScreenTest(AppTestCase):
                     await pilot.press(leave)
                 await pilot.pause()
                 self.assertNotIsInstance(app.screen, NotificationsScreen)
-                self.assertEqual(app.config.notifications, NotifyConfig())
-                self.assertFalse(load_config(self.config_path)[0].notifications.script_enabled)
+                self.assertEqual(app.config.notifications, {})
+                self.assertEqual(load_config(self.config_path)[0].notifications, {})
 
     async def test_send_test_uses_unsaved_settings(self):
-        app = self.make_app({}, notifier="/opt/bin/terminal-notifier")
+        app = self.make_app(API, notifier="/opt/bin/terminal-notifier")
         async with app.run_test(size=(120, 40), notifications=True) as pilot:
             screen = await self.open(pilot)
             screen.query_one("#script-enabled", Checkbox).value = True
@@ -951,14 +1029,21 @@ class NotificationsScreenTest(AppTestCase):
             self.assertEqual((settings.script_enabled, settings.script), (True, "im"))
             self.assertTrue(settings.desktop_enabled)
             self.assertEqual(notifier, "/opt/bin/terminal-notifier")
-            self.assertEqual(variables, SAMPLE_VARIABLES)
+            self.assertEqual(
+                variables,
+                {
+                    **SAMPLE_VARIABLES,
+                    "PR_REPO": "acme/api",
+                    "PR_URL": "https://github.com/acme/api/pull/123",
+                },
+            )
             messages = [n.message for n in app._notifications]
             self.assertIn("Test script notification sent", messages)
             self.assertIn("Test desktop notification sent", messages)
-            self.assertEqual(app.config.notifications, NotifyConfig())
+            self.assertEqual(app.config.notifications, {})
 
     async def test_send_test_with_nothing_enabled(self):
-        app = self.make_app({})
+        app = self.make_app(API)
         async with app.run_test(size=(120, 40), notifications=True) as pilot:
             await self.open(pilot)
             await pilot.click("#test")
@@ -966,7 +1051,7 @@ class NotificationsScreenTest(AppTestCase):
             self.assertTrue(any("Nothing to send" in n.message for n in app._notifications))
 
     async def test_desktop_notifier_detected(self):
-        app = self.make_app({}, notifier="/opt/homebrew/bin/terminal-notifier")
+        app = self.make_app(API, notifier="/opt/homebrew/bin/terminal-notifier")
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             self.assertFalse(screen.query_one("#desktop-enabled", Checkbox).disabled)
@@ -974,7 +1059,7 @@ class NotificationsScreenTest(AppTestCase):
 
     async def test_no_desktop_notifier(self):
         settings = NotifyConfig(desktop_enabled=True)
-        app = self.make_app({}, notifications=settings, notifier=None)
+        app = self.make_app(API, notifications=settings, notifier=None)
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             box = screen.query_one("#desktop-enabled", Checkbox)
@@ -983,10 +1068,12 @@ class NotificationsScreenTest(AppTestCase):
             await pilot.press("ctrl+s")
             await pilot.pause()
             # A setting made on a machine with a notifier is preserved.
-            self.assertTrue(load_config(self.config_path)[0].notifications.desktop_enabled)
+            self.assertTrue(
+                load_config(self.config_path)[0].notifications["acme/api"].desktop_enabled
+            )
 
     async def test_buttons_present(self):
-        app = self.make_app({})
+        app = self.make_app(API)
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             labels = [str(b.label) for b in screen.query(Button)]
@@ -996,7 +1083,7 @@ class NotificationsScreenTest(AppTestCase):
         return screen.query_one(TabbedContent).active
 
     async def test_left_right_switch_tabs_up_down_move_between_events(self):
-        app = self.make_app({}, notifier="/x/terminal-notifier")
+        app = self.make_app(API, notifier="/x/terminal-notifier")
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             self.assertEqual(self.active_tab(screen), "tab-message")
@@ -1037,7 +1124,7 @@ class NotificationsScreenTest(AppTestCase):
             self.assertEqual(app.focused.id, "desktop-enabled")
 
     async def test_left_right_edit_text_fields(self):
-        app = self.make_app({})
+        app = self.make_app(API)
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             await pilot.press("right", "right")
@@ -1049,7 +1136,7 @@ class NotificationsScreenTest(AppTestCase):
             self.assertEqual(self.active_tab(screen), "tab-script")
 
     async def test_tab_without_usable_controls_keeps_focus_on_tab_bar(self):
-        app = self.make_app({}, notifier=None)
+        app = self.make_app(API, notifier=None)
         async with app.run_test(size=(120, 40)) as pilot:
             screen = await self.open(pilot)
             await pilot.press("right", "right")
@@ -1065,7 +1152,7 @@ class NotificationsScreenTest(AppTestCase):
             self.assertEqual(self.active_tab(screen), "tab-message")
 
     async def test_down_reaches_buttons(self):
-        app = self.make_app({})
+        app = self.make_app(API)
         async with app.run_test(size=(120, 40)) as pilot:
             await self.open(pilot)
             await pilot.press("right")

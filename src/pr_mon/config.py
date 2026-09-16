@@ -27,7 +27,8 @@ class NotifyConfig:
 class Config:
     repos: list[str] = field(default_factory=list)
     poll_interval: int = DEFAULT_POLL_INTERVAL
-    notifications: NotifyConfig = field(default_factory=NotifyConfig)
+    # Per-repo notification settings; a repo without an entry never notifies.
+    notifications: dict[str, NotifyConfig] = field(default_factory=dict)
 
 
 def default_config_path() -> Path:
@@ -48,18 +49,35 @@ def load_config(path: Path) -> tuple[Config, str | None]:
     valid_interval = isinstance(interval, int) and not isinstance(interval, bool) and interval > 0
     if not (valid_repos and valid_interval):
         return Config(), f"Ignoring invalid config {path}: bad 'repos' or 'poll_interval'"
-    notifications = _parse_notifications(data.get("notifications", {}))
-    warning = None
-    if notifications is None:
-        notifications = NotifyConfig()
-        warning = f"Ignoring invalid [notifications] in {path}; using defaults"
+    notifications, problems = _parse_notifications(data.get("notifications", {}))
+    warning = f"{path}: {'; '.join(problems)}" if problems else None
     return Config(repos=repos, poll_interval=interval, notifications=notifications), warning
 
 
-def _parse_notifications(data: object) -> NotifyConfig | None:
-    """Build NotifyConfig from a TOML table; None if anything is the wrong type."""
+def _parse_notifications(data: object) -> tuple[dict[str, NotifyConfig], list[str]]:
+    """Per-repo tables; returns the valid ones and a description of anything skipped."""
     if not isinstance(data, dict):
-        return None
+        return {}, ["ignoring [notifications]: expected per-repo tables"]
+    found = {}
+    problems = []
+    if any(not isinstance(value, dict) for value in data.values()):
+        problems.append(
+            "notifications are now set per repo (press N on a repo); "
+            "ignoring the shared [notifications] settings"
+        )
+    for repo, table in data.items():
+        if not isinstance(table, dict):
+            continue
+        settings = _parse_repo_notifications(table)
+        if settings is None:
+            problems.append(f"ignoring invalid notification settings for {repo}")
+        else:
+            found[repo] = settings
+    return found, problems
+
+
+def _parse_repo_notifications(data: dict) -> NotifyConfig | None:
+    """Build NotifyConfig from a TOML table; None if anything is the wrong type."""
     values = {}
     for f in fields(NotifyConfig):
         if f.name not in data:
@@ -88,15 +106,18 @@ def save_config(path: Path, config: Config) -> None:
     lines = [f"poll_interval = {config.poll_interval}", "repos = ["]
     lines += [f"    {_toml(repo)}," for repo in config.repos]
     lines.append("]")
-    n = config.notifications
-    lines += [
-        "",
-        "[notifications]",
-        f"message = {_toml(n.message)}",
-        f"events = {_toml(n.events)}",
-        f"include_drafts = {_toml(n.include_drafts)}",
-        f"script_enabled = {_toml(n.script_enabled)}",
-        f"script = {_toml(n.script)}",
-        f"desktop_enabled = {_toml(n.desktop_enabled)}",
-    ]
+    for repo in config.repos:
+        n = config.notifications.get(repo)
+        if n is None:
+            continue
+        lines += [
+            "",
+            f"[notifications.{_toml(repo)}]",
+            f"message = {_toml(n.message)}",
+            f"events = {_toml(n.events)}",
+            f"include_drafts = {_toml(n.include_drafts)}",
+            f"script_enabled = {_toml(n.script_enabled)}",
+            f"script = {_toml(n.script)}",
+            f"desktop_enabled = {_toml(n.desktop_enabled)}",
+        ]
     write_atomic(path, "\n".join(lines) + "\n")

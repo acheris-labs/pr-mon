@@ -81,7 +81,8 @@ class NotifyConfigTest(unittest.TestCase):
         self.path.write_text(text)
 
     def test_defaults(self):
-        n = Config().notifications
+        self.assertEqual(Config().notifications, {})
+        n = NotifyConfig()
         self.assertEqual(n.message, DEFAULT_MESSAGE)
         self.assertEqual(
             DEFAULT_MESSAGE, "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}"
@@ -90,15 +91,15 @@ class NotifyConfigTest(unittest.TestCase):
         self.assertFalse(n.include_drafts or n.script_enabled or n.desktop_enabled)
         self.assertEqual(n.script, "")
 
-    def test_old_file_without_section_gets_defaults(self):
+    def test_file_without_section(self):
         self.write('poll_interval = 30\nrepos = ["acme/api"]\n')
         config, warning = load_config(self.path)
         self.assertIsNone(warning)
-        self.assertEqual(config.notifications, NotifyConfig())
+        self.assertEqual(config.notifications, {})
         self.assertEqual(config.repos, ["acme/api"])
 
-    def test_round_trip(self):
-        notifications = NotifyConfig(
+    def test_round_trip_per_repo(self):
+        api = NotifyConfig(
             message='Line "one"\n{{PR_URL}} \\ done 🚀 café \x7f\t',
             events=["BEHIND", "NEW"],
             include_drafts=True,
@@ -106,18 +107,34 @@ class NotifyConfigTest(unittest.TestCase):
             script="~/bin/send 'two words'",
             desktop_enabled=True,
         )
-        save_config(self.path, Config(repos=["acme/api"], notifications=notifications))
+        web = NotifyConfig(events=[], desktop_enabled=True)
+        config = Config(
+            repos=["acme/api", "Acme.Org/web-app"],
+            notifications={"acme/api": api, "Acme.Org/web-app": web},
+        )
+        save_config(self.path, config)
+        loaded, warning = load_config(self.path)
+        self.assertIsNone(warning)
+        self.assertEqual(loaded, config)
+        self.assertIn('[notifications."acme/api"]', self.path.read_text())
+
+    def test_settings_for_unmonitored_repos_are_not_saved(self):
+        config = Config(repos=["acme/api"], notifications={"gone/repo": NotifyConfig()})
+        save_config(self.path, config)
+        self.assertEqual(load_config(self.path)[0].notifications, {})
+
+    def test_partial_repo_section_uses_defaults(self):
+        self.write(
+            'repos = ["acme/api"]\n[notifications."acme/api"]\n'
+            'script_enabled = true\nscript = "im"\n'
+        )
         config, warning = load_config(self.path)
         self.assertIsNone(warning)
-        self.assertEqual(config, Config(repos=["acme/api"], notifications=notifications))
+        self.assertEqual(
+            config.notifications, {"acme/api": NotifyConfig(script_enabled=True, script="im")}
+        )
 
-    def test_partial_section_uses_defaults(self):
-        self.write('repos = []\n[notifications]\nscript_enabled = true\nscript = "im"\n')
-        config, warning = load_config(self.path)
-        self.assertIsNone(warning)
-        self.assertEqual(config.notifications, NotifyConfig(script_enabled=True, script="im"))
-
-    def test_invalid_section_keeps_repos(self):
+    def test_invalid_repo_section_is_skipped(self):
         for body in (
             'events = "READY"',
             'events = ["READY", "EXPLODED"]',
@@ -126,17 +143,32 @@ class NotifyConfigTest(unittest.TestCase):
             "include_drafts = []",
         ):
             with self.subTest(body=body):
-                self.write(f'poll_interval = 30\nrepos = ["acme/api"]\n[notifications]\n{body}\n')
+                self.write(
+                    'poll_interval = 30\nrepos = ["acme/api", "acme/web"]\n'
+                    f'[notifications."acme/api"]\n{body}\n'
+                    '[notifications."acme/web"]\ndesktop_enabled = true\n'
+                )
                 config, warning = load_config(self.path)
-                self.assertIn("notifications", warning)
-                self.assertEqual(config.notifications, NotifyConfig())
-                self.assertEqual((config.repos, config.poll_interval), (["acme/api"], 30))
+                self.assertIn("acme/api", warning)
+                self.assertEqual(
+                    config.notifications, {"acme/web": NotifyConfig(desktop_enabled=True)}
+                )
+                self.assertEqual(
+                    (config.repos, config.poll_interval), (["acme/api", "acme/web"], 30)
+                )
+
+    def test_old_shared_section_is_ignored(self):
+        self.write('repos = ["acme/api"]\n[notifications]\nscript_enabled = true\nscript = "im"\n')
+        config, warning = load_config(self.path)
+        self.assertIn("per repo", warning)
+        self.assertEqual(config.notifications, {})
+        self.assertEqual(config.repos, ["acme/api"])
 
     def test_section_not_a_table(self):
         self.write('repos = []\nnotifications = "loud"\n')
         config, warning = load_config(self.path)
         self.assertIsNotNone(warning)
-        self.assertEqual(config.notifications, NotifyConfig())
+        self.assertEqual(config.notifications, {})
 
 
 if __name__ == "__main__":

@@ -28,14 +28,14 @@ VARIABLE_NAMES = (
     "PR_URL",
 )
 SAMPLE_VARIABLES = {
-    "PR_REPO": "acme/api",
+    "PR_REPO": "owner/repo",
     "PR_NUM": "123",
     "PR_TITLE": "Example change",
     "PR_AUTHOR": "octocat",
     "PR_BRANCH": "feature",
     "PR_TARGET": "main",
     "PR_STATE": "READY",
-    "PR_URL": "https://github.com/acme/api/pull/123",
+    "PR_URL": "https://github.com/owner/repo/pull/123",
 }
 PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
 
@@ -45,6 +45,15 @@ class Notification:
     repo: str
     pr: PullRequest
     state: str  # a Status value, or "NEW"
+
+
+def sample_variables(repo_name: str) -> dict[str, str]:
+    """Example values for previews and test sends, using a real repo name."""
+    return {
+        **SAMPLE_VARIABLES,
+        "PR_REPO": repo_name,
+        "PR_URL": f"https://github.com/{repo_name}/pull/{SAMPLE_VARIABLES['PR_NUM']}",
+    }
 
 
 def render(template: str, variables: dict[str, str]) -> str:

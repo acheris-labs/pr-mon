@@ -23,7 +23,7 @@ from textual.widgets import (
 
 from pr_mon.config import EVENT_NAMES, NotifyConfig
 from pr_mon.models import MergeMethod, PullRequest, RepoInfo, Status
-from pr_mon.notify import SAMPLE_VARIABLES, VARIABLE_NAMES, render, unknown_placeholders
+from pr_mon.notify import VARIABLE_NAMES, render, sample_variables, unknown_placeholders
 
 MODAL_CSS = """
 {name} {{
@@ -275,7 +275,7 @@ SCRIPT_HELP = (
 
 
 class NotificationsScreen(ModalScreen[NotifyConfig | None]):
-    """Edit notification settings; `send_test` fires the unsaved settings."""
+    """Edit one repo's notification settings; `send_test` fires the unsaved settings."""
 
     DEFAULT_CSS = (
         MODAL_CSS.format(name="NotificationsScreen")
@@ -312,11 +312,13 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
 
     def __init__(
         self,
+        repo: str,
         settings: NotifyConfig,
         notifier: str | None,
         send_test: Callable[[NotifyConfig], None],
     ):
         super().__init__()
+        self.repo = repo
         self.settings = settings
         self.notifier = notifier
         self.send_test = send_test
@@ -324,7 +326,7 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
     def compose(self) -> ComposeResult:
         s = self.settings
         with Vertical():
-            yield Label(Text("Notifications", style="bold"))
+            yield Label(Text(f"Notifications — {self.repo}", style="bold"), id="title")
             with TabbedContent():
                 with TabPane("Message", id="tab-message"):
                     yield Label("Template")
@@ -389,7 +391,9 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
     @on(Input.Changed, "#message")
     def update_preview(self) -> None:
         template = self.query_one("#message", Input).value
-        self.query_one("#preview", Static).update("Preview: " + render(template, SAMPLE_VARIABLES))
+        self.query_one("#preview", Static).update(
+            "Preview: " + render(template, sample_variables(self.repo))
+        )
         unknown = unknown_placeholders(template)
         self.query_one("#unknown", Static).update(
             f"Unknown placeholders: {', '.join(unknown)}" if unknown else ""

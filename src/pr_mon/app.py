@@ -14,7 +14,7 @@ from textual.widgets.tree import TreeNode
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
 from pr_mon.github import GitHubError, RateLimitError
 from pr_mon.models import PullRequest, RepoInfo, Status
-from pr_mon.notify import SAMPLE_VARIABLES, deliver, pr_variables, select_notifications
+from pr_mon.notify import deliver, pr_variables, sample_variables, select_notifications
 from pr_mon.screens import (
     Action,
     ActionMenuScreen,
@@ -368,10 +368,11 @@ class PrMonApp(App):
             return
         self.repos[name] = repo
         changes = self.tracker.changes(repo)
-        if name in self.loaded_repos:
-            for found in select_notifications(repo, changes, self.config.notifications):
+        settings = self.config.notifications.get(name)
+        if settings is not None and name in self.loaded_repos:
+            for found in select_notifications(repo, changes, settings):
                 variables = pr_variables(found.repo, found.pr, found.state)
-                self.send_notification(self.config.notifications, variables)
+                self.send_notification(settings, variables)
         self.loaded_repos.add(name)
         if self.tracker.update(repo):
             owner = self.owner_nodes.get(owner_key(name))
@@ -403,16 +404,22 @@ class PrMonApp(App):
             )
 
     def action_notifications(self) -> None:
+        name = self.selected_repo
+        if name is None:
+            self.notify("Select a repository to configure its notifications", severity="warning")
+            return
+
         def saved(settings: NotifyConfig | None) -> None:
             if settings is not None:
-                self.config.notifications = settings
+                self.config.notifications[name] = settings
                 save_config(self.config_path, self.config)
-                self.notify("Notification settings saved")
+                self.notify(f"Notification settings saved for {name}")
 
         def send_test(settings: NotifyConfig) -> None:
-            self.send_notification(settings, SAMPLE_VARIABLES, is_test=True)
+            self.send_notification(settings, sample_variables(name), is_test=True)
 
-        screen = NotificationsScreen(self.config.notifications, self.notifier, send_test)
+        current = self.config.notifications.get(name, NotifyConfig())
+        screen = NotificationsScreen(name, current, self.notifier, send_test)
         self.push_screen(screen, saved)
 
     # ----- actions -----
@@ -475,6 +482,7 @@ class PrMonApp(App):
             index = ordered.index(name)
             neighbors = ordered[index + 1 :] + ordered[:index][::-1]
             self.config.repos.remove(name)
+            self.config.notifications.pop(name, None)
             self.repos.pop(name, None)
             self.errors.pop(name, None)
             self.loaded_repos.discard(name)

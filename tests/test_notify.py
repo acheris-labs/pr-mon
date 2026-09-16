@@ -18,6 +18,7 @@ from pr_mon.notify import (
     pr_variables,
     render,
     run_command,
+    sample_variables,
     script_argv,
     select_notifications,
     unknown_placeholders,
@@ -74,6 +75,12 @@ def repo_of(*prs):
 
 
 class VariablesTest(unittest.TestCase):
+    def test_sample_variables_use_repo(self):
+        v = sample_variables("acme/web")
+        self.assertEqual(v["PR_REPO"], "acme/web")
+        self.assertEqual(v["PR_URL"], "https://github.com/acme/web/pull/123")
+        self.assertEqual(v["PR_TITLE"], SAMPLE_VARIABLES["PR_TITLE"])
+
     def test_pr_variables(self):
         pr = repo_of((7, {"title": "Fix it"})).prs[0]
         self.assertEqual(
