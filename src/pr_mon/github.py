@@ -22,6 +22,7 @@ fragment PrFields on PullRequest {{
   headRef {{ id }}
   headRepository {{ nameWithOwner }}
   mergeable mergeStateStatus reviewDecision
+  autoMergeRequest {{ mergeMethod enabledBy {{ login }} }}
   commits(last: 1) {{
     nodes {{
       commit {{
@@ -53,6 +54,7 @@ query($owner: String!, $name: String!) {{
     squashMergeAllowed
     rebaseMergeAllowed
     deleteBranchOnMerge
+    autoMergeAllowed
     newest: pullRequests(
       states: OPEN, first: {PR_LIMIT}, orderBy: {{field: CREATED_AT, direction: DESC}}
     ) {{
@@ -91,6 +93,20 @@ mutation($id: ID!, $method: PullRequestMergeMethod!) {
 UPDATE_BRANCH_MUTATION = """
 mutation($id: ID!) {
   updatePullRequestBranch(input: {pullRequestId: $id}) { clientMutationId }
+}
+"""
+
+ENABLE_AUTO_MERGE_MUTATION = """
+mutation($id: ID!, $method: PullRequestMergeMethod!) {
+  enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method}) {
+    clientMutationId
+  }
+}
+"""
+
+DISABLE_AUTO_MERGE_MUTATION = """
+mutation($id: ID!) {
+  disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId }
 }
 """
 
@@ -205,6 +221,12 @@ class GitHubClient:
 
     async def update_branch(self, pr_id: str) -> None:
         await self._graphql(UPDATE_BRANCH_MUTATION, {"id": pr_id})
+
+    async def enable_auto_merge(self, pr_id: str, method: MergeMethod) -> None:
+        await self._graphql(ENABLE_AUTO_MERGE_MUTATION, {"id": pr_id, "method": str(method)})
+
+    async def disable_auto_merge(self, pr_id: str) -> None:
+        await self._graphql(DISABLE_AUTO_MERGE_MUTATION, {"id": pr_id})
 
     async def delete_branch(self, ref_id: str) -> None:
         await self._graphql(DELETE_REF_MUTATION, {"id": ref_id})

@@ -28,6 +28,7 @@ Or run from the checkout with `make run`.
 | `tab` / `shift+tab` | anywhere | Move between repo tree and PR list |
 | `enter` | PR list | Action menu |
 | `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods) |
+| `a` | action menu | Enable / disable GitHub auto-merge (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
 | `space` | action menu | Toggle "delete remote branch" |
 | `r` | anywhere | Refresh now |
@@ -44,7 +45,14 @@ Or run from the checkout with `make run`.
 - Selecting a PR in the PR list marks it seen.
 - PR statuses: `READY`, `CONFLICT`, `FAILING`, `BLOCKED`, `BEHIND`, `PENDING`,
   `CHECKING` (GitHub still computing), `DRAFT`. The details pane lists every
-  blocking reason.
+  blocking reason. `auto` after a status means GitHub auto-merge is on.
+
+## Auto-merge
+
+`a` uses GitHub's built-in auto-merge, so the merge happens on GitHub even
+when pr-mon isn't running. The repo must have "Allow auto-merge" enabled.
+It's offered for PRs that aren't mergeable yet; ready PRs use `m`. The head
+branch is only deleted afterwards if the repo auto-deletes head branches.
 
 ## Files
 

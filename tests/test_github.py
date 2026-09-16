@@ -183,6 +183,28 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("updatePullRequestBranch", rec.body["query"])
         self.assertEqual(rec.body["variables"], {"id": "PR_1"})
 
+    async def test_enable_auto_merge(self):
+        client, rec = self.client_for(
+            ok({"enablePullRequestAutoMerge": {"clientMutationId": None}})
+        )
+        await client.enable_auto_merge("PR_1", MergeMethod.REBASE)
+        self.assertIn("enablePullRequestAutoMerge", rec.body["query"])
+        self.assertEqual(rec.body["variables"], {"id": "PR_1", "method": "REBASE"})
+
+    async def test_disable_auto_merge(self):
+        client, rec = self.client_for(
+            ok({"disablePullRequestAutoMerge": {"clientMutationId": None}})
+        )
+        await client.disable_auto_merge("PR_1")
+        self.assertIn("disablePullRequestAutoMerge", rec.body["query"])
+        self.assertEqual(rec.body["variables"], {"id": "PR_1"})
+
+    async def test_queries_request_auto_merge_fields(self):
+        client, rec = self.client_for(ok(repo_response(raw_repo([raw_pr()]))))
+        await client.fetch_repo("acme/api")
+        self.assertIn("autoMergeAllowed", rec.body["query"])
+        self.assertIn("autoMergeRequest", rec.body["query"])
+
     async def test_delete_branch(self):
         client, rec = self.client_for(ok({"deleteRef": {"clientMutationId": None}}))
         await client.delete_branch("REF_1")

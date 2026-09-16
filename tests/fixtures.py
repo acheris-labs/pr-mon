@@ -20,6 +20,7 @@ def raw_pr(
     checks=None,
     checks_total=None,
     head_ref_id="REF_1",
+    auto_merge=None,
 ):
     checks = [] if checks is None else checks
     rollup = None
@@ -47,8 +48,13 @@ def raw_pr(
         "mergeable": mergeable,
         "mergeStateStatus": merge_state,
         "reviewDecision": review_decision,
+        "autoMergeRequest": auto_merge,
         "commits": {"nodes": [{"commit": {"statusCheckRollup": rollup}}]},
     }
+
+
+def auto_merge(method="SQUASH", login="bob"):
+    return {"mergeMethod": method, "enabledBy": {"login": login}}
 
 
 def raw_repo(
@@ -58,6 +64,7 @@ def raw_repo(
     squash=True,
     rebase=True,
     delete_on_merge=False,
+    auto_merge_allowed=True,
     total=None,
 ):
     prs = list(prs)
@@ -67,6 +74,7 @@ def raw_repo(
         "squashMergeAllowed": squash,
         "rebaseMergeAllowed": rebase,
         "deleteBranchOnMerge": delete_on_merge,
+        "autoMergeAllowed": auto_merge_allowed,
         "pullRequests": {
             "totalCount": len(prs) if total is None else total,
             "nodes": prs,

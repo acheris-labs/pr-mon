@@ -1,7 +1,7 @@
 import unittest
 
-from pr_mon.models import MergeMethod, Status, parse_repo
-from tests.fixtures import check_run, raw_pr, raw_repo, status_context
+from pr_mon.models import AutoMerge, MergeMethod, Status, parse_repo
+from tests.fixtures import auto_merge, check_run, raw_pr, raw_repo, status_context
 
 
 def pr(**kwargs):
@@ -155,6 +155,20 @@ class ParseTest(unittest.TestCase):
     def test_only_allowed_methods(self):
         repo = parse_repo(raw_repo(merge=False, squash=False))
         self.assertEqual(repo.merge_methods, (MergeMethod.REBASE,))
+
+    def test_auto_merge(self):
+        repo = parse_repo(raw_repo([raw_pr(auto_merge=auto_merge("REBASE", "carol")), raw_pr()]))
+        self.assertTrue(repo.auto_merge_allowed)
+        self.assertEqual(repo.prs[0].auto_merge, AutoMerge(MergeMethod.REBASE, "carol"))
+        self.assertIsNone(repo.prs[1].auto_merge)
+
+    def test_auto_merge_not_allowed(self):
+        self.assertFalse(parse_repo(raw_repo(auto_merge_allowed=False)).auto_merge_allowed)
+
+    def test_auto_merge_enabled_by_ghost(self):
+        raw = raw_pr(auto_merge={"mergeMethod": "MERGE", "enabledBy": None})
+        pr = parse_repo(raw_repo([raw])).prs[0]
+        self.assertEqual(pr.auto_merge, AutoMerge(MergeMethod.MERGE, "ghost"))
 
     def test_missing_optional_nodes(self):
         raw = raw_pr(head_ref_id=None, check_state=None)

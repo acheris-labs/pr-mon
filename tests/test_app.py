@@ -11,7 +11,7 @@ from pr_mon.github import GitHubError, NotFoundError
 from pr_mon.models import MergeMethod, parse_repo
 from pr_mon.screens import ActionMenuScreen, AddRepoScreen, ConfirmScreen, MergeMethodScreen
 from pr_mon.state import AppState, save_state
-from tests.fixtures import raw_pr, raw_repo
+from tests.fixtures import auto_merge, raw_pr, raw_repo
 
 READY = {}
 CONFLICT = {"mergeable": "CONFLICTING", "merge_state": "DIRTY"}
@@ -49,6 +49,12 @@ class FakeClient:
 
     async def update_branch(self, pr_id):
         self.calls.append(("update", pr_id))
+
+    async def enable_auto_merge(self, pr_id, method):
+        self.calls.append(("auto_on", pr_id, method))
+
+    async def disable_auto_merge(self, pr_id):
+        self.calls.append(("auto_off", pr_id))
 
     async def delete_branch(self, ref_id):
         self.calls.append(("delete", ref_id))
@@ -345,6 +351,84 @@ class ActionTest(AppTestCase):
             await pilot.press("m")
             await self.settle(pilot)
             self.assertEqual(self.pr_numbers(app), [])
+
+
+class AutoMergeTest(AppTestCase):
+    open_menu = ActionTest.open_menu
+
+    async def test_enable_single_method(self):
+        app = self.make_app(
+            {"acme/api": make_repo("acme/api", (1, BEHIND), merge=False, rebase=False)}
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            self.assertIn("Enable auto-merge", text_of(app.screen.query_one("#auto")))
+            await pilot.press("a")
+            await self.settle(pilot)
+            self.assertEqual(self.client.actions(), [("auto_on", "PR_1", MergeMethod.SQUASH)])
+
+    async def test_enable_asks_for_method(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, BEHIND), squash=False)})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            await pilot.press("a")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, MergeMethodScreen)
+            await pilot.press("m")
+            await self.settle(pilot)
+            self.assertEqual(self.client.actions(), [("auto_on", "PR_1", MergeMethod.MERGE)])
+
+    async def test_disable(self):
+        on = {"merge_state": "BLOCKED", "auto_merge": auto_merge("SQUASH", "bob")}
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, on))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.assertIn("auto", str(app.query_one("#prs", DataTable).get_row_at(0)[2]))
+            self.assertIn(
+                "Auto-merge: on (squash, by bob)", text_of(app.query_one("#details", Static))
+            )
+            await self.open_menu(pilot)
+            self.assertIn("Disable auto-merge", text_of(app.screen.query_one("#auto")))
+            await pilot.press("a")
+            await self.settle(pilot)
+            self.assertEqual(self.client.actions(), [("auto_off", "PR_1")])
+
+    async def test_unavailable_when_repo_disallows(self):
+        app = self.make_app(
+            {"acme/api": make_repo("acme/api", (1, BEHIND), auto_merge_allowed=False)}
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            self.assertIn("repo settings", text_of(app.screen.query_one("#auto")))
+            await pilot.press("a")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, ActionMenuScreen)
+            self.assertEqual(self.client.actions(), [])
+
+    async def test_unavailable_when_already_mergeable(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            self.assertIn("already mergeable", text_of(app.screen.query_one("#auto")))
+            await pilot.press("a")
+            await pilot.pause()
+            self.assertEqual(self.client.actions(), [])
+
+    async def test_unavailable_for_draft(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, {"is_draft": True}))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            self.assertIn("draft", text_of(app.screen.query_one("#auto")))
+
+    async def test_branch_deletion_note(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, BEHIND))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            self.assertIn("branch won't be deleted", text_of(app.screen.query_one("#auto")))
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, BEHIND), delete_on_merge=True)})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            self.assertNotIn("deleted", text_of(app.screen.query_one("#auto")))
 
 
 class RepoManagementTest(AppTestCase):

@@ -197,6 +197,17 @@ Enter on a PR opens the action menu.
     is still reported as successful.
 - After the action, the repo is refreshed immediately.
 
+### Auto-merge (`a`)
+
+- Uses GitHub's native auto-merge (`enablePullRequestAutoMerge` /
+  `disablePullRequestAutoMerge`), toggled per PR.
+- Disable is offered when the PR already has auto-merge on.
+- Enable is unavailable (with reason) when the repo disallows auto-merge, the
+  PR is a draft, or it is already `READY` (use `m`).
+- Merge method choice follows the same rules as `m`. No delete-branch option;
+  the menu notes when the repo won't auto-delete the head branch.
+- PR list shows `auto` after the status; details show method and who enabled it.
+
 ### Update branch (`u`)
 
 - Shown only when `mergeStateStatus` is `BEHIND`.

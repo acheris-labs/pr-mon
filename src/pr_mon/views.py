@@ -55,7 +55,7 @@ def pr_row(pr: PullRequest, unseen: bool) -> tuple[Text, Text, Text, Text, Text]
     return (
         Text(icon, style=style),
         Text(f"#{pr.number}", style="bold" if unseen else ""),
-        Text(str(pr.status), style=style),
+        Text(str(pr.status), style=style) + Text(" auto" if pr.auto_merge else "", style="cyan"),
         Text(pr.author, style="dim"),
         Text(pr.title, style="bold" if unseen else ""),
     )
@@ -68,6 +68,9 @@ def pr_details(repo: RepoInfo, pr: PullRequest) -> Text:
     text.append(f"{pr.author}  {pr.head_ref} → {pr.base_ref}\n", style="dim")
     text.append(f"{pr.url}\n\n", style="dim underline")
     text.append(f"{icon} {pr.status}\n", style=style)
+    if pr.auto_merge:
+        method = pr.auto_merge.method.lower()
+        text.append(f"Auto-merge: on ({method}, by {pr.auto_merge.enabled_by})\n", style="cyan")
     reasons = pr.reasons
     if reasons:
         text.append("\nBlocked by:\n" if pr.status != Status.READY else "\nNotes:\n")

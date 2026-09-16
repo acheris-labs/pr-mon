@@ -49,6 +49,12 @@ class Check:
 
 
 @dataclass(frozen=True)
+class AutoMerge:
+    method: MergeMethod
+    enabled_by: str
+
+
+@dataclass(frozen=True)
 class Reason:
     text: str
     level: str  # "error" | "warning" | "info"
@@ -73,6 +79,7 @@ class PullRequest:
     check_state: str | None
     checks: tuple[Check, ...]
     checks_total: int
+    auto_merge: AutoMerge | None = None
 
     @property
     def status(self) -> Status:
@@ -133,6 +140,7 @@ class RepoInfo:
     delete_branch_on_merge: bool
     prs: tuple[PullRequest, ...]
     pr_total: int
+    auto_merge_allowed: bool = False
 
 
 def _parse_check(node: dict) -> Check:
@@ -147,6 +155,7 @@ def _parse_pr(node: dict) -> PullRequest:
     commits = node["commits"]["nodes"]
     rollup = commits[0]["commit"]["statusCheckRollup"] if commits else None
     contexts = rollup["contexts"] if rollup else {"nodes": [], "totalCount": 0}
+    auto = node.get("autoMergeRequest")
     return PullRequest(
         id=node["id"],
         number=node["number"],
@@ -165,6 +174,11 @@ def _parse_pr(node: dict) -> PullRequest:
         check_state=rollup["state"] if rollup else None,
         checks=tuple(_parse_check(c) for c in contexts["nodes"] if c),
         checks_total=contexts["totalCount"],
+        auto_merge=AutoMerge(
+            MergeMethod(auto["mergeMethod"]), (auto.get("enabledBy") or {}).get("login", "ghost")
+        )
+        if auto
+        else None,
     )
 
 
@@ -181,4 +195,5 @@ def parse_repo(data: dict) -> RepoInfo:
         delete_branch_on_merge=data["deleteBranchOnMerge"],
         prs=tuple(_parse_pr(node) for node in prs["nodes"]),
         pr_total=prs["totalCount"],
+        auto_merge_allowed=data.get("autoMergeAllowed", False),
     )

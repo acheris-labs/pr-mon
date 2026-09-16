@@ -363,11 +363,18 @@ class PrMonApp(App):
                             f"Merged {label}, but couldn't delete {pr.head_ref}: {e}",
                             severity="warning",
                         )
+            elif action.kind == "auto_merge_on":
+                await self.client.enable_auto_merge(pr.id, action.method)
+                self.notify(f"Auto-merge enabled for {label} ({action.method.lower()})")
+            elif action.kind == "auto_merge_off":
+                await self.client.disable_auto_merge(pr.id)
+                self.notify(f"Auto-merge disabled for {label}")
             else:
                 await self.client.update_branch(pr.id)
                 self.notify(f"Updated branch for {label}")
         except GitHubError as e:
-            self.notify(f"{action.kind.capitalize()} failed for {label}: {e}", severity="error")
+            what = action.kind.replace("_", " ").capitalize()
+            self.notify(f"{what} failed for {label}: {e}", severity="error")
         await self._refresh(repo.name)
 
     def action_add_repo(self) -> None:

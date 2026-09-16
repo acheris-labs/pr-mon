@@ -42,7 +42,7 @@ METHOD_KEYS = {
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # "merge" | "update"
+    kind: str  # "merge" | "update" | "auto_merge_on" | "auto_merge_off"
     method: MergeMethod | None = None
     delete_branch: bool = False
 
@@ -141,6 +141,7 @@ class ActionMenuScreen(ModalScreen[Action | None]):
     BINDINGS = [
         Binding("m", "merge", "Merge", show=False),
         Binding("u", "update", "Update branch", show=False),
+        Binding("a", "auto_merge", "Auto-merge", show=False),
         Binding("escape", "cancel", "Close"),
     ]
 
@@ -158,6 +159,32 @@ class ActionMenuScreen(ModalScreen[Action | None]):
         return self.pr.merge_state == "BEHIND"
 
     @property
+    def auto_merge_blocker(self) -> str | None:
+        """Why auto-merge can't be enabled, or None if it can."""
+        if not self.repo.auto_merge_allowed:
+            return "disabled in repo settings"
+        if not self.repo.merge_methods:
+            return "no merge methods allowed"
+        if self.pr.is_draft:
+            return "draft PR"
+        if self.pr.status == Status.READY:
+            return "already mergeable — use m"
+        return None
+
+    def auto_merge_line(self) -> Static:
+        if self.pr.auto_merge:
+            return Static("[b]\\[a][/b] Disable auto-merge", id="auto")
+        blocker = self.auto_merge_blocker
+        if blocker:
+            return Static(Text(f"[a] Auto-merge — unavailable ({blocker})", style="dim"), id="auto")
+        note = (
+            ""
+            if self.repo.delete_branch_on_merge
+            else " [dim](branch won't be deleted: repo doesn't auto-delete)[/dim]"
+        )
+        return Static(f"[b]\\[a][/b] Enable auto-merge{note}", id="auto")
+
+    @property
     def offers_delete(self) -> bool:
         return self.can_merge and not self.repo.delete_branch_on_merge and bool(self.pr.head_ref_id)
 
@@ -172,6 +199,7 @@ class ActionMenuScreen(ModalScreen[Action | None]):
                     why.append("no merge methods allowed")
                 detail = f"{self.pr.status}: {', '.join(why)}" if why else str(self.pr.status)
                 yield Static(Text(f"[m] Merge — unavailable ({detail})", style="dim"), id="merge")
+            yield self.auto_merge_line()
             if self.can_update:
                 yield Static("[b]\\[u][/b] Update branch", id="update")
             if self.offers_delete:
@@ -181,20 +209,32 @@ class ActionMenuScreen(ModalScreen[Action | None]):
     def _delete_branch(self) -> bool:
         return self.offers_delete and self.query_one("#delete", Checkbox).value
 
-    def action_merge(self) -> None:
-        if not self.can_merge:
-            self.app.bell()
-            return
+    def _dismiss_with_method(self, kind: str, delete_branch: bool = False) -> None:
+        """Dismiss with `kind`, asking for a merge method if the repo allows several."""
         methods = self.repo.merge_methods
         if len(methods) == 1:
-            self.dismiss(Action("merge", methods[0], self._delete_branch()))
+            self.dismiss(Action(kind, methods[0], delete_branch))
             return
 
         def chosen(method: MergeMethod | None) -> None:
             if method is not None:
-                self.dismiss(Action("merge", method, self._delete_branch()))
+                self.dismiss(Action(kind, method, delete_branch))
 
         self.app.push_screen(MergeMethodScreen(methods), chosen)
+
+    def action_merge(self) -> None:
+        if not self.can_merge:
+            self.app.bell()
+            return
+        self._dismiss_with_method("merge", self._delete_branch())
+
+    def action_auto_merge(self) -> None:
+        if self.pr.auto_merge:
+            self.dismiss(Action("auto_merge_off"))
+        elif self.auto_merge_blocker:
+            self.app.bell()
+        else:
+            self._dismiss_with_method("auto_merge_on")
 
     def action_update(self) -> None:
         if not self.can_update:
