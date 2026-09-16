@@ -13,6 +13,15 @@ class EventKind(StrEnum):
 
 
 @dataclass(frozen=True)
+class Change:
+    """A PR's status moved; `old` is None for a PR with no real status yet."""
+
+    number: int
+    old: Status | None
+    new: Status
+
+
+@dataclass(frozen=True)
 class Event:
     kind: EventKind
     repo: str
@@ -35,6 +44,22 @@ class Tracker:
         if not isinstance(entries, dict) or not all(isinstance(e, dict) for e in entries.values()):
             entries = self.records[repo] = {}
         return entries
+
+    def changes(self, repo: RepoInfo) -> list[Change]:
+        """Status changes `update` would record for this poll, without recording them."""
+        previous = self._repo(repo.name)
+        changes = []
+        for pr in repo.prs:
+            status = pr.status
+            if status == Status.CHECKING:
+                continue
+            old = (previous.get(str(pr.number)) or {}).get("status")
+            old_status = Status(old) if old in Status.__members__ else None
+            if old_status == Status.CHECKING:
+                old_status = None
+            if status != old_status:
+                changes.append(Change(pr.number, old_status, status))
+        return changes
 
     def update(self, repo: RepoInfo) -> list[Event]:
         previous = self._repo(repo.name)
