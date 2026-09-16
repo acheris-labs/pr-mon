@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import unittest
 from datetime import UTC, datetime
@@ -15,7 +16,7 @@ from pr_mon.github import (
     get_token,
 )
 from pr_mon.models import MergeMethod
-from tests.fixtures import raw_pr, raw_repo
+from tests.fixtures import raw_pr, raw_repo, repo_response
 
 
 class Recorder:
@@ -52,16 +53,57 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
         return client, recorder
 
     async def test_fetch_repo(self):
-        client, rec = self.client_for(ok({"repository": raw_repo([raw_pr(number=5)])}))
+        client, rec = self.client_for(ok(repo_response(raw_repo([raw_pr(number=5)], total=70))))
         repo = await client.fetch_repo("acme/api")
         self.assertEqual(repo.name, "acme/api")
         self.assertEqual([p.number for p in repo.prs], [5])
+        self.assertEqual(repo.pr_total, 70)
+        self.assertEqual(len(rec.requests), 1)
         request = rec.requests[0]
         self.assertEqual(str(request.url), "https://api.github.com/graphql")
         self.assertEqual(request.headers["authorization"], "Bearer tok")
         self.assertEqual(rec.body["variables"], {"owner": "acme", "name": "api"})
         self.assertIn("CREATED_AT", rec.body["query"])
         self.assertIn("first: 50", rec.body["query"])
+        self.assertIn("first: 10", rec.body["query"])
+
+    async def test_fetch_repo_batches_remaining_prs(self):
+        prs = [raw_pr(number=n) for n in range(125, 100, -1)]  # 25 PRs, newest first
+        closed = raw_pr(number=101)
+        closed["state"] = "MERGED"
+        by_number = {pr["number"]: pr for pr in prs}
+        by_number[101] = closed
+        requests = []
+
+        def handler(request):
+            body = json.loads(request.content)
+            requests.append(body)
+            if "newest:" in body["query"]:
+                return ok(repo_response(raw_repo(prs)))
+            numbers = [int(n) for n in re.findall(r"pullRequest\(number: (\d+)\)", body["query"])]
+            return ok({"repository": {f"pr{n}": by_number[n] for n in numbers}})
+
+        client = GitHubClient("tok", transport=httpx.MockTransport(handler))
+        self.addAsyncCleanup(client.aclose)
+        repo = await client.fetch_repo("acme/api")
+        self.assertEqual([p.number for p in repo.prs], list(range(125, 101, -1)))
+        self.assertEqual(len(requests), 3)
+        self.assertEqual(requests[1]["variables"], {"owner": "acme", "name": "api"})
+        batch_sizes = sorted(len(re.findall("pullRequest\\(", r["query"])) for r in requests[1:])
+        self.assertEqual(batch_sizes, [5, 10])
+
+    async def test_batch_failure_fails_fetch(self):
+        prs = [raw_pr(number=n) for n in range(15)]
+
+        def handler(request):
+            if "newest:" in json.loads(request.content)["query"]:
+                return ok(repo_response(raw_repo(prs)))
+            return httpx.Response(502, headers={"content-type": "text/html"}, text="<html>")
+
+        client = GitHubClient("tok", transport=httpx.MockTransport(handler))
+        self.addAsyncCleanup(client.aclose)
+        with self.assertRaisesRegex(GitHubError, "timed out"):
+            await client.fetch_repo("acme/api")
 
     async def test_fetch_missing_repo_null(self):
         client, _ = self.client_for(ok({"repository": None}))
@@ -104,9 +146,16 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(ctx.exception.reset_at, before)
 
     async def test_http_error(self):
-        client, _ = self.client_for(httpx.Response(502, text="bad gateway"))
-        with self.assertRaisesRegex(GitHubError, "502"):
+        client, _ = self.client_for(httpx.Response(500, text="server broke"))
+        with self.assertRaisesRegex(GitHubError, "500 server broke"):
             await client.fetch_repo("acme/api")
+
+    async def test_html_error_body_is_hidden(self):
+        response = httpx.Response(503, headers={"content-type": "text/html"}, text="<html>")
+        client, _ = self.client_for(response)
+        with self.assertRaises(GitHubError) as ctx:
+            await client.fetch_repo("acme/api")
+        self.assertEqual(str(ctx.exception), "GitHub API error 503")
 
     async def test_transport_error(self):
         def fail(request):

@@ -34,6 +34,7 @@ def raw_pr(
     return {
         "id": f"PR_{number}",
         "number": number,
+        "state": "OPEN",
         "title": title,
         "url": f"https://github.com/acme/api/pull/{number}",
         "createdAt": "2026-09-15T01:28:54Z",
@@ -71,3 +72,15 @@ def raw_repo(
             "nodes": prs,
         },
     }
+
+
+def repo_response(repo, page_size=10):
+    """Shape a raw_repo() dict like the first-page response of the repo query."""
+    data = {k: v for k, v in repo.items() if k != "pullRequests"}
+    prs = repo["pullRequests"]
+    data["newest"] = {
+        "totalCount": prs["totalCount"],
+        "nodes": [{"number": pr["number"]} for pr in prs["nodes"]],
+    }
+    data["firstPage"] = {"nodes": prs["nodes"][:page_size]}
+    return {"repository": data}
