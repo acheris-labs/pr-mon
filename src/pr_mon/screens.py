@@ -1,17 +1,20 @@
-"""Modal dialogs: add repo, confirm, PR action menu, merge method choice."""
+"""Modal dialogs: add repo, confirm, PR action menu, merge method choice, notifications."""
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Checkbox, Input, Label, Static
+from textual.widgets import Button, Checkbox, Input, Label, Static, TabbedContent, TabPane
 
+from pr_mon.config import EVENT_NAMES, NotifyConfig
 from pr_mon.models import MergeMethod, PullRequest, RepoInfo, Status
+from pr_mon.notify import SAMPLE_VARIABLES, VARIABLE_NAMES, render, unknown_placeholders
 
 MODAL_CSS = """
 {name} {{
@@ -242,5 +245,145 @@ class ActionMenuScreen(ModalScreen[Action | None]):
             return
         self.dismiss(Action("update"))
 
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+EVENT_LABELS = {
+    "READY": "Ready (mergeable)",
+    "FAILING": "Failing (checks failed)",
+    "CONFLICT": "Conflict (merge conflicts)",
+    "BLOCKED": "Blocked (reviews / branch protection)",
+    "BEHIND": "Behind base branch",
+    "PENDING": "Pending (checks running)",
+    "NEW": "New PR opened",
+}
+
+SCRIPT_HELP = (
+    "The message is sent on stdin. PR_* variables are also set in the environment.\n"
+    "Runs without a shell: use full paths or ~ (no $VARS)."
+)
+
+
+class NotificationsScreen(ModalScreen[NotifyConfig | None]):
+    """Edit notification settings; `send_test` fires the unsaved settings."""
+
+    DEFAULT_CSS = (
+        MODAL_CSS.format(name="NotificationsScreen")
+        + """
+    NotificationsScreen > Vertical {
+        width: 90;
+    }
+    NotificationsScreen TabbedContent {
+        height: auto;
+    }
+    NotificationsScreen TabPane {
+        height: auto;
+        padding: 1 0 0 0;
+    }
+    NotificationsScreen .buttons {
+        height: auto;
+        margin-top: 1;
+        align-horizontal: right;
+    }
+    NotificationsScreen Button {
+        margin-left: 1;
+    }
+    """
+    )
+    BINDINGS = [
+        Binding("ctrl+s", "save", "Save"),
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(
+        self,
+        settings: NotifyConfig,
+        notifier: str | None,
+        send_test: Callable[[NotifyConfig], None],
+    ):
+        super().__init__()
+        self.settings = settings
+        self.notifier = notifier
+        self.send_test = send_test
+
+    def compose(self) -> ComposeResult:
+        s = self.settings
+        with Vertical():
+            yield Label(Text("Notifications", style="bold"))
+            with TabbedContent():
+                with TabPane("Message", id="tab-message"):
+                    yield Label("Template")
+                    yield Input(value=s.message, id="message")
+                    yield Static(
+                        "Variables: " + " ".join(f"{{{{{v}}}}}" for v in VARIABLE_NAMES),
+                        classes="hint",
+                        markup=False,
+                    )
+                    yield Static("", id="preview", markup=False)
+                    yield Static("", id="unknown", classes="error", markup=False)
+                with TabPane("Events", id="tab-events"):
+                    yield Label("Notify when a PR becomes:")
+                    for name in EVENT_NAMES:
+                        yield Checkbox(
+                            EVENT_LABELS[name], value=name in s.events, id=f"event-{name.lower()}"
+                        )
+                    yield Checkbox("Include draft PRs", value=s.include_drafts, id="include-drafts")
+                with TabPane("Script", id="tab-script"):
+                    yield Checkbox("Run script", value=s.script_enabled, id="script-enabled")
+                    yield Input(value=s.script, placeholder="e.g. im --deliver tgram", id="script")
+                    yield Static(SCRIPT_HELP, id="script-help", classes="hint", markup=False)
+                with TabPane("Desktop", id="tab-desktop"):
+                    yield Checkbox(
+                        "Show desktop notification",
+                        value=s.desktop_enabled and self.notifier is not None,
+                        disabled=self.notifier is None,
+                        id="desktop-enabled",
+                    )
+                    if self.notifier:
+                        found = f"Using {Path(self.notifier).name} ({self.notifier})"
+                    else:
+                        found = "No notifier found (install terminal-notifier or notify-send)"
+                    yield Static(found, id="notifier", classes="hint", markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Send test", id="test")
+                yield Button("Save", variant="primary", id="save")
+                yield Button("Cancel", id="cancel")
+
+    def on_mount(self) -> None:
+        self.update_preview()
+
+    @on(Input.Changed, "#message")
+    def update_preview(self) -> None:
+        template = self.query_one("#message", Input).value
+        self.query_one("#preview", Static).update("Preview: " + render(template, SAMPLE_VARIABLES))
+        unknown = unknown_placeholders(template)
+        self.query_one("#unknown", Static).update(
+            f"Unknown placeholders: {', '.join(unknown)}" if unknown else ""
+        )
+
+    def current_settings(self) -> NotifyConfig:
+        def checked(widget_id: str) -> bool:
+            return self.query_one(f"#{widget_id}", Checkbox).value
+
+        desktop = checked("desktop-enabled") if self.notifier else self.settings.desktop_enabled
+        return NotifyConfig(
+            message=self.query_one("#message", Input).value,
+            events=[name for name in EVENT_NAMES if checked(f"event-{name.lower()}")],
+            include_drafts=checked("include-drafts"),
+            script_enabled=checked("script-enabled"),
+            script=self.query_one("#script", Input).value,
+            desktop_enabled=desktop,
+        )
+
+    @on(Button.Pressed, "#test")
+    def action_test(self) -> None:
+        self.send_test(self.current_settings())
+
+    @on(Button.Pressed, "#save")
+    def action_save(self) -> None:
+        self.dismiss(self.current_settings())
+
+    @on(Button.Pressed, "#cancel")
     def action_cancel(self) -> None:
         self.dismiss(None)

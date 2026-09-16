@@ -2,14 +2,22 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from textual.widgets import Checkbox, DataTable, Footer, Input, Static
+from textual.widgets import Button, Checkbox, DataTable, Footer, Input, Static
 
 from pr_mon.app import PrMonApp, PrTable
-from pr_mon.config import Config, load_config, save_config
+from pr_mon.config import Config, NotifyConfig, load_config, save_config
 from pr_mon.github import GitHubError, NotFoundError
 from pr_mon.models import MergeMethod, parse_repo
-from pr_mon.screens import ActionMenuScreen, AddRepoScreen, ConfirmScreen, MergeMethodScreen
+from pr_mon.notify import SAMPLE_VARIABLES
+from pr_mon.screens import (
+    ActionMenuScreen,
+    AddRepoScreen,
+    ConfirmScreen,
+    MergeMethodScreen,
+    NotificationsScreen,
+)
 from pr_mon.state import AppState, save_state
 from tests.fixtures import auto_merge, raw_pr, raw_repo
 
@@ -79,11 +87,12 @@ class AppTestCase(unittest.IsolatedAsyncioTestCase):
         self.config_path = Path(self.tmp.name) / "config.toml"
         self.state_path = Path(self.tmp.name) / "state.json"
 
-    def make_app(self, repos, config_repos=None):
+    def make_app(self, repos, config_repos=None, notifications=None, notifier=None):
         names = list(repos) if config_repos is None else config_repos
-        save_config(self.config_path, Config(repos=names))
+        config = Config(repos=names, notifications=notifications or NotifyConfig())
+        save_config(self.config_path, config)
         self.client = FakeClient(repos)
-        return PrMonApp(self.client, self.config_path, self.state_path)
+        return PrMonApp(self.client, self.config_path, self.state_path, notifier=notifier)
 
     async def settle(self, pilot):
         await pilot.app.workers.wait_for_complete()
@@ -679,6 +688,300 @@ class RepoTreeTest(AppTestCase):
             await self.settle(pilot)
             self.assertEqual(self.tree_view(app), ["▼   beta/", "      x"])
             self.assertEqual(app.selected_repo, "beta/x")
+
+
+class FakeDeliver:
+    """Stands in for notify.deliver; records calls and returns canned results."""
+
+    def __init__(self):
+        self.calls = []
+        self.results = None
+
+    async def __call__(self, settings, notifier, variables):
+        self.calls.append((settings, notifier, variables))
+        if self.results is not None:
+            return self.results
+        channels = []
+        if settings.script_enabled and settings.script:
+            channels.append(("script", None))
+        if settings.desktop_enabled and notifier:
+            channels.append(("desktop", None))
+        return channels
+
+    def states(self):
+        return [(v["PR_REPO"], v["PR_NUM"], v["PR_STATE"]) for _, _, v in self.calls]
+
+
+PENDING = {"merge_state": "BLOCKED", "check_state": "PENDING"}
+FAILING = {"merge_state": "BLOCKED", "check_state": "FAILURE"}
+ON = NotifyConfig(script_enabled=True, script="im")
+
+
+class NotificationDispatchTest(AppTestCase):
+    def setUp(self):
+        super().setUp()
+        self.deliver = FakeDeliver()
+        patcher = mock.patch("pr_mon.app.deliver", self.deliver)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    async def refresh(self, pilot):
+        await pilot.press("r")
+        await self.settle(pilot)
+
+    async def test_first_load_is_silent_then_changes_notify(self):
+        save_state(
+            self.state_path,
+            AppState(prs={"acme/api": {"1": {"status": "PENDING", "seen": True}}}),
+        )
+        app = self.make_app(
+            {"acme/api": make_repo("acme/api", (1, READY), (2, READY))}, notifications=ON
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.assertEqual(self.deliver.calls, [])
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, FAILING), (2, READY))
+            await self.refresh(pilot)
+            self.assertEqual(self.deliver.states(), [("acme/api", "1", "FAILING")])
+            settings, _, variables = self.deliver.calls[0]
+            self.assertEqual(settings, ON)
+            self.assertEqual(variables["PR_TITLE"], "PR 1")
+
+    async def test_unselected_changes_are_quiet(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))}, notifications=ON)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, BEHIND), (2, READY))
+            await self.refresh(pilot)
+            self.assertEqual(self.deliver.calls, [])
+
+    async def test_new_pr_after_first_load(self):
+        settings = NotifyConfig(events=["NEW"], script_enabled=True, script="im")
+        app = self.make_app({"acme/api": make_repo("acme/api")}, notifications=settings)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.client.repos["acme/api"] = make_repo("acme/api", (5, PENDING))
+            await self.refresh(pilot)
+            self.assertEqual(self.deliver.states(), [("acme/api", "5", "NEW")])
+
+    async def test_added_repo_first_load_is_silent(self):
+        app = self.make_app(
+            {"acme/api": make_repo("acme/api"), "acme/new": make_repo("acme/new", (9, PENDING))},
+            config_repos=["acme/api"],
+            notifications=NotifyConfig(events=["NEW", "READY"], script_enabled=True, script="x"),
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            await pilot.press("A")
+            await pilot.pause()
+            app.screen.query_one(Input).value = "acme/new"
+            await pilot.press("enter")
+            await self.settle(pilot)
+            self.assertEqual(self.deliver.calls, [])
+            self.client.repos["acme/new"] = make_repo("acme/new", (9, READY))
+            await self.refresh(pilot)
+            self.assertEqual(self.deliver.states(), [("acme/new", "9", "READY")])
+
+    async def test_failed_first_fetch_stays_first_load(self):
+        save_state(
+            self.state_path,
+            AppState(prs={"acme/api": {"1": {"status": "PENDING", "seen": True}}}),
+        )
+        app = self.make_app({"acme/api": GitHubError("down")}, notifications=ON)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, READY))
+            await self.refresh(pilot)
+            self.assertEqual(self.deliver.calls, [])
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, FAILING))
+            await self.refresh(pilot)
+            self.assertEqual(self.deliver.states(), [("acme/api", "1", "FAILING")])
+
+    async def test_removed_and_readded_repo_is_first_load_again(self):
+        repos = {"acme/api": make_repo("acme/api", (1, PENDING))}
+        settings = NotifyConfig(events=["NEW", "READY"], script_enabled=True, script="im")
+        app = self.make_app(repos, notifications=settings)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            await pilot.press("D", "y")
+            await pilot.pause()
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, READY))
+            await pilot.press("A")
+            await pilot.pause()
+            app.screen.query_one(Input).value = "acme/api"
+            await pilot.press("enter")
+            await self.settle(pilot)
+            self.assertEqual(self.deliver.calls, [])
+
+    async def test_delivery_errors_are_toasted(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, PENDING))}, notifications=ON)
+        async with app.run_test(size=(120, 30), notifications=True) as pilot:
+            await self.settle(pilot)
+            self.deliver.results = [("script", "im exited with code 1: nope")]
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, READY))
+            await self.refresh(pilot)
+            messages = [(n.severity, n.message) for n in app._notifications]
+            self.assertIn(
+                ("warning", "Script notification failed: im exited with code 1: nope"), messages
+            )
+
+
+class NotificationsScreenTest(AppTestCase):
+    def setUp(self):
+        super().setUp()
+        self.deliver = FakeDeliver()
+        patcher = mock.patch("pr_mon.app.deliver", self.deliver)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    async def open(self, pilot):
+        await self.settle(pilot)
+        await pilot.press("N")
+        await pilot.pause()
+        self.assertIsInstance(pilot.app.screen, NotificationsScreen)
+        return pilot.app.screen
+
+    def event_values(self, screen):
+        return {
+            box.id.removeprefix("event-"): box.value
+            for box in screen.query(Checkbox)
+            if box.id.startswith("event-")
+        }
+
+    async def test_shows_current_settings(self):
+        app = self.make_app({})
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            self.assertEqual(
+                self.event_values(screen),
+                {
+                    "ready": True,
+                    "failing": True,
+                    "conflict": True,
+                    "blocked": False,
+                    "behind": False,
+                    "pending": False,
+                    "new": False,
+                },
+            )
+            self.assertEqual(screen.query_one("#message", Input).value, NotifyConfig().message)
+            self.assertFalse(screen.query_one("#include-drafts", Checkbox).value)
+            self.assertFalse(screen.query_one("#script-enabled", Checkbox).value)
+            self.assertIn("stdin", text_of(screen.query_one("#script-help")))
+
+    async def test_preview_and_unknown_placeholders(self):
+        app = self.make_app({})
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            self.assertIn("acme/api#123 is READY", text_of(screen.query_one("#preview")))
+            screen.query_one("#message", Input).value = "PR {{PR_NUM}} {{PR_OOPS}}"
+            await pilot.pause()
+            self.assertIn("PR 123 {{PR_OOPS}}", text_of(screen.query_one("#preview")))
+            self.assertIn("PR_OOPS", text_of(screen.query_one("#unknown")))
+
+    async def test_save_persists_and_applies(self):
+        app = self.make_app({"acme/api": make_repo("acme/api")})
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            screen.query_one("#message", Input).value = "hi {{PR_NUM}}"
+            screen.query_one("#event-ready", Checkbox).value = False
+            screen.query_one("#event-new", Checkbox).value = True
+            screen.query_one("#include-drafts", Checkbox).value = True
+            screen.query_one("#script-enabled", Checkbox).value = True
+            screen.query_one("#script", Input).value = "im --deliver tgram"
+            await pilot.press("ctrl+s")
+            await pilot.pause()
+            self.assertNotIsInstance(app.screen, NotificationsScreen)
+            expected = NotifyConfig(
+                message="hi {{PR_NUM}}",
+                events=["FAILING", "CONFLICT", "NEW"],
+                include_drafts=True,
+                script_enabled=True,
+                script="im --deliver tgram",
+            )
+            self.assertEqual(app.config.notifications, expected)
+            saved = load_config(self.config_path)[0]
+            self.assertEqual(saved.notifications, expected)
+            self.assertEqual(saved.repos, ["acme/api"])
+
+    async def test_save_button(self):
+        app = self.make_app({})
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            screen.query_one("#event-behind", Checkbox).value = True
+            await pilot.click("#save")
+            await pilot.pause()
+            self.assertIn("BEHIND", load_config(self.config_path)[0].notifications.events)
+
+    async def test_cancel_discards(self):
+        app = self.make_app({})
+        async with app.run_test(size=(120, 40)) as pilot:
+            for leave in ("escape", "#cancel"):
+                screen = await self.open(pilot)
+                screen.query_one("#script-enabled", Checkbox).value = True
+                if leave.startswith("#"):
+                    await pilot.click(leave)
+                else:
+                    await pilot.press(leave)
+                await pilot.pause()
+                self.assertNotIsInstance(app.screen, NotificationsScreen)
+                self.assertEqual(app.config.notifications, NotifyConfig())
+                self.assertFalse(load_config(self.config_path)[0].notifications.script_enabled)
+
+    async def test_send_test_uses_unsaved_settings(self):
+        app = self.make_app({}, notifier="/opt/bin/terminal-notifier")
+        async with app.run_test(size=(120, 40), notifications=True) as pilot:
+            screen = await self.open(pilot)
+            screen.query_one("#script-enabled", Checkbox).value = True
+            screen.query_one("#script", Input).value = "im"
+            screen.query_one("#desktop-enabled", Checkbox).value = True
+            await pilot.click("#test")
+            await self.settle(pilot)
+            self.assertIsInstance(app.screen, NotificationsScreen)
+            settings, notifier, variables = self.deliver.calls[0]
+            self.assertEqual((settings.script_enabled, settings.script), (True, "im"))
+            self.assertTrue(settings.desktop_enabled)
+            self.assertEqual(notifier, "/opt/bin/terminal-notifier")
+            self.assertEqual(variables, SAMPLE_VARIABLES)
+            messages = [n.message for n in app._notifications]
+            self.assertIn("Test script notification sent", messages)
+            self.assertIn("Test desktop notification sent", messages)
+            self.assertEqual(app.config.notifications, NotifyConfig())
+
+    async def test_send_test_with_nothing_enabled(self):
+        app = self.make_app({})
+        async with app.run_test(size=(120, 40), notifications=True) as pilot:
+            await self.open(pilot)
+            await pilot.click("#test")
+            await self.settle(pilot)
+            self.assertTrue(any("Nothing to send" in n.message for n in app._notifications))
+
+    async def test_desktop_notifier_detected(self):
+        app = self.make_app({}, notifier="/opt/homebrew/bin/terminal-notifier")
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            self.assertFalse(screen.query_one("#desktop-enabled", Checkbox).disabled)
+            self.assertIn("terminal-notifier", text_of(screen.query_one("#notifier")))
+
+    async def test_no_desktop_notifier(self):
+        settings = NotifyConfig(desktop_enabled=True)
+        app = self.make_app({}, notifications=settings, notifier=None)
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            box = screen.query_one("#desktop-enabled", Checkbox)
+            self.assertTrue(box.disabled)
+            self.assertIn("No notifier found", text_of(screen.query_one("#notifier")))
+            await pilot.press("ctrl+s")
+            await pilot.pause()
+            # A setting made on a machine with a notifier is preserved.
+            self.assertTrue(load_config(self.config_path)[0].notifications.desktop_enabled)
+
+    async def test_buttons_present(self):
+        app = self.make_app({})
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            labels = [str(b.label) for b in screen.query(Button)]
+            self.assertEqual(labels, ["Send test", "Save", "Cancel"])
 
 
 if __name__ == "__main__":
