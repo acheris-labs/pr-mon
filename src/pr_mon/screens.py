@@ -10,7 +10,16 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Input, Label, Static, TabbedContent, TabPane
+from textual.widgets import (
+    Button,
+    Checkbox,
+    Input,
+    Label,
+    Static,
+    TabbedContent,
+    TabPane,
+    Tabs,
+)
 
 from pr_mon.config import EVENT_NAMES, NotifyConfig
 from pr_mon.models import MergeMethod, PullRequest, RepoInfo, Status
@@ -294,6 +303,11 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
     BINDINGS = [
         Binding("ctrl+s", "save", "Save"),
         Binding("escape", "cancel", "Cancel"),
+        # Text fields keep left/right for the cursor; the tab bar handles its own.
+        Binding("left", "switch_tab(-1)", "Previous tab", show=False),
+        Binding("right", "switch_tab(1)", "Next tab", show=False),
+        Binding("up", "app.focus_previous", "Previous", show=False),
+        Binding("down", "app.focus_next", "Next", show=False),
     ]
 
     def __init__(
@@ -352,6 +366,25 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
 
     def on_mount(self) -> None:
         self.update_preview()
+        self.query_one(Tabs).focus()
+
+    def action_switch_tab(self, step: int) -> None:
+        if isinstance(self.focused, Tabs):
+            return  # the tab bar already switched on this key
+        tabs = self.query_one(TabbedContent)
+        panes = [pane.id for pane in tabs.query(TabPane)]
+        tabs.active = panes[(panes.index(tabs.active) + step) % len(panes)]
+        pane = tabs.get_pane(tabs.active)
+        # Park focus on the tab bar so it never sits in a hidden pane (which makes
+        # TabbedContent switch back), then enter the new tab once it is visible.
+        self.query_one(Tabs).focus()
+
+        def enter_pane() -> None:
+            controls = [w for w in pane.query("Checkbox, Input") if w.focusable]
+            if controls:
+                controls[0].focus()
+
+        self.call_after_refresh(enter_pane)
 
     @on(Input.Changed, "#message")
     def update_preview(self) -> None:

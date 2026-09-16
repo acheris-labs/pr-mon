@@ -4,7 +4,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from textual.widgets import Button, Checkbox, DataTable, Footer, Input, Static
+from textual.widgets import (
+    Button,
+    Checkbox,
+    DataTable,
+    Footer,
+    Input,
+    Static,
+    TabbedContent,
+    Tabs,
+)
 
 from pr_mon.app import PrMonApp, PrTable
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
@@ -982,6 +991,87 @@ class NotificationsScreenTest(AppTestCase):
             screen = await self.open(pilot)
             labels = [str(b.label) for b in screen.query(Button)]
             self.assertEqual(labels, ["Send test", "Save", "Cancel"])
+
+    def active_tab(self, screen):
+        return screen.query_one(TabbedContent).active
+
+    async def test_left_right_switch_tabs_up_down_move_between_events(self):
+        app = self.make_app({}, notifier="/x/terminal-notifier")
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            self.assertEqual(self.active_tab(screen), "tab-message")
+            self.assertIsInstance(app.focused, Tabs)
+            await pilot.press("right")
+            await pilot.pause()
+            self.assertEqual(self.active_tab(screen), "tab-events")
+            self.assertIsInstance(app.focused, Tabs)
+            await pilot.press("down")
+            self.assertEqual(app.focused.id, "event-ready")
+            await pilot.press("down", "down")
+            self.assertEqual(app.focused.id, "event-conflict")
+            await pilot.press("space")
+            self.assertFalse(screen.query_one("#event-conflict", Checkbox).value)
+            await pilot.press("up")
+            self.assertEqual(app.focused.id, "event-failing")
+            await pilot.press("right")
+            await pilot.pause()
+            self.assertEqual(self.active_tab(screen), "tab-script")
+            self.assertEqual(app.focused.id, "script-enabled")
+            await pilot.press("right")
+            await pilot.pause()
+            self.assertEqual(self.active_tab(screen), "tab-desktop")
+            await pilot.press("right")
+            await pilot.pause()
+            self.assertEqual(self.active_tab(screen), "tab-message")
+            self.assertEqual(app.focused.id, "message")
+            await pilot.press("left")
+            await pilot.pause()
+            self.assertEqual(self.active_tab(screen), "tab-message")
+            await pilot.press("up")
+            self.assertIsInstance(app.focused, Tabs)
+            await pilot.press("left")
+            await pilot.pause()
+            self.assertEqual(self.active_tab(screen), "tab-desktop")
+            self.assertIsInstance(app.focused, Tabs)
+            await pilot.press("down")
+            self.assertEqual(app.focused.id, "desktop-enabled")
+
+    async def test_left_right_edit_text_fields(self):
+        app = self.make_app({})
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            await pilot.press("right", "right")
+            await pilot.pause()
+            await pilot.press("down", "down")
+            self.assertEqual(app.focused.id, "script")
+            await pilot.press("i", "m", "left", "x")
+            self.assertEqual(screen.query_one("#script", Input).value, "ixm")
+            self.assertEqual(self.active_tab(screen), "tab-script")
+
+    async def test_tab_without_usable_controls_keeps_focus_on_tab_bar(self):
+        app = self.make_app({}, notifier=None)
+        async with app.run_test(size=(120, 40)) as pilot:
+            screen = await self.open(pilot)
+            await pilot.press("right", "right")
+            await pilot.pause()
+            await pilot.press("down")
+            self.assertEqual(app.focused.id, "script-enabled")
+            await pilot.press("right")
+            await pilot.pause()
+            self.assertEqual(self.active_tab(screen), "tab-desktop")
+            self.assertIsInstance(app.focused, Tabs)
+            await pilot.press("right")
+            await pilot.pause()
+            self.assertEqual(self.active_tab(screen), "tab-message")
+
+    async def test_down_reaches_buttons(self):
+        app = self.make_app({})
+        async with app.run_test(size=(120, 40)) as pilot:
+            await self.open(pilot)
+            await pilot.press("right")
+            await pilot.pause()
+            await pilot.press(*["down"] * 9)
+            self.assertEqual(app.focused.id, "test")
 
 
 if __name__ == "__main__":
