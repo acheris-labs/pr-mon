@@ -71,7 +71,7 @@ Out of scope (v1, planned later):
 | `q` | global | Quit |
 | `enter` | PR list | Open action menu |
 | `m` | action menu | Merge (disabled with reason if not mergeable) |
-| `u` | action menu | Update branch (only shown when status is `BEHIND`) |
+| `u` | action menu | Update branch (only shown when `mergeStateStatus` is `BEHIND`) |
 | `esc` | dialogs | Close |
 
 ## Modules
@@ -91,7 +91,14 @@ Poll timer → `github` fetches each repo concurrently → `tracker` diffs again
 previous snapshot, emits events, updates unseen set → UI refreshes badges,
 PR list, and details.
 
-## Data fetched per repo (one GraphQL query)
+## Data fetched per repo
+
+GitHub's GraphQL API times out after ~10s and mergeability fields are slow, so
+PR details are paged: one request returns repo settings, the newest 50 PR
+numbers, and full details for the first 10; remaining PRs are fetched in
+parallel batches of 10 via `pullRequest(number:)` aliases (PRs no longer
+`OPEN` by then are dropped).
+
 
 Repository:
 
@@ -187,7 +194,7 @@ Enter on a PR opens the action menu.
 
 ### Update branch (`u`)
 
-- Shown only when status is `BEHIND`.
+- Shown only when `mergeStateStatus` is `BEHIND`.
 - Calls GitHub's update-branch mutation; repo is refreshed afterward.
 
 ## Polling
