@@ -38,6 +38,7 @@ KNOWN_MERGE_STATES = READY_MERGE_STATES | {"BEHIND", "BLOCKED", "DIRTY", "DRAFT"
 class Check:
     name: str
     state: str
+    started_at: str | None = None
 
     @property
     def failed(self) -> bool:
@@ -80,6 +81,12 @@ class PullRequest:
     checks: tuple[Check, ...]
     checks_total: int
     auto_merge: AutoMerge | None = None
+    last_commit_at: str | None = None
+
+    @property
+    def last_check_started_at(self) -> str | None:
+        # ISO-8601 UTC timestamps from GitHub sort correctly as strings.
+        return max((c.started_at for c in self.checks if c.started_at), default=None)
 
     @property
     def status(self) -> Status:
@@ -145,15 +152,17 @@ class RepoInfo:
 
 def _parse_check(node: dict) -> Check:
     if node.get("__typename") == "StatusContext":
-        return Check(node["context"], node["state"])
+        return Check(node["context"], node["state"], node.get("createdAt"))
+    started_at = node.get("startedAt")
     if node.get("status") != "COMPLETED":
-        return Check(node["name"], "PENDING")
-    return Check(node["name"], node.get("conclusion") or "PENDING")
+        return Check(node["name"], "PENDING", started_at)
+    return Check(node["name"], node.get("conclusion") or "PENDING", started_at)
 
 
 def _parse_pr(node: dict) -> PullRequest:
     commits = node["commits"]["nodes"]
-    rollup = commits[0]["commit"]["statusCheckRollup"] if commits else None
+    commit = commits[0]["commit"] if commits else {}
+    rollup = commit.get("statusCheckRollup")
     contexts = rollup["contexts"] if rollup else {"nodes": [], "totalCount": 0}
     auto = node.get("autoMergeRequest")
     return PullRequest(
@@ -179,6 +188,7 @@ def _parse_pr(node: dict) -> PullRequest:
         )
         if auto
         else None,
+        last_commit_at=commit.get("committedDate"),
     )
 
 

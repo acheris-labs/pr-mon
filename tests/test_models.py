@@ -170,6 +170,23 @@ class ParseTest(unittest.TestCase):
         pr = parse_repo(raw_repo([raw])).prs[0]
         self.assertEqual(pr.auto_merge, AutoMerge(MergeMethod.MERGE, "ghost"))
 
+    def test_times(self):
+        p = pr(
+            checks=[
+                check_run("a", started_at="2026-09-15T03:00:00Z"),
+                check_run("b", status="QUEUED", conclusion=None),
+                status_context("c", created_at="2026-09-15T04:00:00Z"),
+                check_run("d", started_at="2026-09-15T02:30:00Z"),
+            ]
+        )
+        self.assertEqual(p.created_at, "2026-09-15T01:28:54Z")
+        self.assertEqual(p.last_commit_at, "2026-09-15T02:00:00Z")
+        self.assertEqual(p.last_check_started_at, "2026-09-15T04:00:00Z")
+
+    def test_no_checks_started(self):
+        p = pr(checks=[check_run("b", status="QUEUED", conclusion=None)])
+        self.assertIsNone(p.last_check_started_at)
+
     def test_missing_optional_nodes(self):
         raw = raw_pr(head_ref_id=None, check_state=None)
         raw["author"] = None
@@ -181,6 +198,7 @@ class ParseTest(unittest.TestCase):
         self.assertIsNone(p.check_state)
         self.assertEqual(p.author, "ghost")
         self.assertEqual(p.checks, ())
+        self.assertIsNone(p.last_commit_at)
 
 
 if __name__ == "__main__":

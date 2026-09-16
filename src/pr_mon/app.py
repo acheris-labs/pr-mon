@@ -55,8 +55,27 @@ class RepoTree(Tree[str]):
 
 
 class PrTable(DataTable):
+    BINDINGS = [Binding("enter", "select_cursor", "Actions")]
+
     def on_focus(self) -> None:
         self.app.mark_current_seen()
+
+
+class PrMonFooter(Footer):
+    """Footer that pins the PR list's Actions key to the right edge."""
+
+    DEFAULT_CSS = """
+    PrMonFooter FooterKey.-actions {
+        dock: right;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        for widget in super().compose():
+            # FooterKey isn't exported by Textual, so match on its action attribute.
+            if getattr(widget, "action", None) == "select_cursor":
+                widget.add_class("-actions")
+            yield widget
 
 
 class PrMonApp(App):
@@ -109,7 +128,8 @@ class PrMonApp(App):
             with Vertical():
                 yield PrTable(id="prs", cursor_type="row", zebra_stripes=True)
                 yield Static(id="details")
-        yield Footer()
+        # Only one footer key can dock right, so the palette hint gives way to Actions.
+        yield PrMonFooter(show_command_palette=False)
 
     def on_mount(self) -> None:
         tree = self.query_one("#repos", RepoTree)
@@ -238,7 +258,7 @@ class PrMonApp(App):
         elif pr is None:
             text.append("No open pull requests", style="dim")
         else:
-            text.append_text(pr_details(repo, pr))
+            text.append_text(pr_details(repo, pr, datetime.now(UTC)))
         details.update(text)
 
     def mark_current_seen(self) -> None:

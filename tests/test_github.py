@@ -204,6 +204,8 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
         await client.fetch_repo("acme/api")
         self.assertIn("autoMergeAllowed", rec.body["query"])
         self.assertIn("autoMergeRequest", rec.body["query"])
+        for field in ("committedDate", "startedAt", "createdAt"):
+            self.assertIn(field, rec.body["query"])
 
     async def test_delete_branch(self):
         client, rec = self.client_for(ok({"deleteRef": {"clientMutationId": None}}))

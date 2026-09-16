@@ -26,14 +26,15 @@ fragment PrFields on PullRequest {{
   commits(last: 1) {{
     nodes {{
       commit {{
+        committedDate
         statusCheckRollup {{
           state
           contexts(first: {CHECK_LIMIT}) {{
             totalCount
             nodes {{
               __typename
-              ... on CheckRun {{ name status conclusion }}
-              ... on StatusContext {{ context state }}
+              ... on CheckRun {{ name status conclusion startedAt }}
+              ... on StatusContext {{ context state createdAt }}
             }}
           }}
         }}

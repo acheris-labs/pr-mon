@@ -1,12 +1,23 @@
 """Builders for raw GraphQL payloads shaped like the pr-mon repository query."""
 
 
-def check_run(name, status="COMPLETED", conclusion="SUCCESS"):
-    return {"__typename": "CheckRun", "name": name, "status": status, "conclusion": conclusion}
+def check_run(name, status="COMPLETED", conclusion="SUCCESS", started_at=None):
+    return {
+        "__typename": "CheckRun",
+        "name": name,
+        "status": status,
+        "conclusion": conclusion,
+        "startedAt": started_at,
+    }
 
 
-def status_context(context, state="SUCCESS"):
-    return {"__typename": "StatusContext", "context": context, "state": state}
+def status_context(context, state="SUCCESS", created_at="2026-09-15T01:00:00Z"):
+    return {
+        "__typename": "StatusContext",
+        "context": context,
+        "state": state,
+        "createdAt": created_at,
+    }
 
 
 def raw_pr(
@@ -21,6 +32,7 @@ def raw_pr(
     checks_total=None,
     head_ref_id="REF_1",
     auto_merge=None,
+    committed_date="2026-09-15T02:00:00Z",
 ):
     checks = [] if checks is None else checks
     rollup = None
@@ -49,7 +61,9 @@ def raw_pr(
         "mergeStateStatus": merge_state,
         "reviewDecision": review_decision,
         "autoMergeRequest": auto_merge,
-        "commits": {"nodes": [{"commit": {"statusCheckRollup": rollup}}]},
+        "commits": {
+            "nodes": [{"commit": {"committedDate": committed_date, "statusCheckRollup": rollup}}]
+        },
     }
 
 

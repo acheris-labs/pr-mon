@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from textual.widgets import Checkbox, DataTable, Input, Static
+from textual.widgets import Checkbox, DataTable, Footer, Input, Static
 
 from pr_mon.app import PrMonApp, PrTable
 from pr_mon.config import Config, load_config, save_config
@@ -125,6 +125,10 @@ class LayoutTest(AppTestCase):
             self.assertIn("#1 PR 1", details)
             self.assertIn("Branch: feature-1 → main", details)
             self.assertIn("Author: alice", details)
+            self.assertIn("Opened:", details)
+            self.assertIn("Last commit:", details)
+            self.assertNotIn("Last check", details)
+            self.assertNotIn("enter", details)
 
     async def test_navigating_repos_switches_prs(self):
         app = self.make_app(
@@ -176,6 +180,18 @@ class LayoutTest(AppTestCase):
             self.assertEqual(self.tree_view(app), ["▼ ⚠ acme/ (1)", "    ⚠ api (1)"])
             self.assertEqual(self.pr_numbers(app), ["#1"])
             self.assertIn("Network error: down", text_of(app.query_one("#details", Static)))
+
+    async def test_actions_hint_only_in_pr_list(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            footer = app.query_one(Footer)
+            self.assertEqual(list(footer.query(".-actions").results()), [])
+            await pilot.press("tab")
+            await pilot.pause()
+            actions = list(footer.query(".-actions").results())
+            self.assertEqual([k.description for k in actions], ["Actions"])
+            self.assertEqual(actions[0].styles.dock, "right")
 
     async def test_truncated_title(self):
         app = self.make_app({"acme/api": make_repo("acme/api", (1, READY), total=80)})

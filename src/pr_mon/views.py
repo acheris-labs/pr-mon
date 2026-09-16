@@ -1,5 +1,7 @@
 """Pure rendering helpers: turn models into Rich text for the widgets."""
 
+from datetime import datetime
+
 from rich.text import Text
 
 from pr_mon.models import BLOCKED_STATUSES, PullRequest, RepoInfo, Status
@@ -61,7 +63,22 @@ def pr_row(pr: PullRequest, unseen: bool) -> tuple[Text, Text, Text, Text, Text]
     )
 
 
-def pr_details(repo: RepoInfo, pr: PullRequest) -> Text:
+def format_time(iso: str, now: datetime) -> str:
+    """Local timestamp plus a rough age, e.g. '2026-09-16 09:10 (2h ago)'."""
+    when = datetime.fromisoformat(iso)
+    seconds = max(0, int((now - when).total_seconds()))
+    if seconds < 60:
+        age = "just now"
+    elif seconds < 3600:
+        age = f"{seconds // 60}m ago"
+    elif seconds < 86400:
+        age = f"{seconds // 3600}h ago"
+    else:
+        age = f"{seconds // 86400}d ago"
+    return f"{when.astimezone().strftime('%Y-%m-%d %H:%M')} ({age})"
+
+
+def pr_details(repo: RepoInfo, pr: PullRequest, now: datetime) -> Text:
     icon, style = STATUS_STYLE[pr.status]
     text = Text()
     text.append(f"#{pr.number} {pr.title}\n", style="bold")
@@ -69,6 +86,15 @@ def pr_details(repo: RepoInfo, pr: PullRequest) -> Text:
     text.append(f"{pr.head_ref} → {pr.base_ref}\n", style="bold")
     text.append("Author: ", style="dim")
     text.append(f"{pr.author}\n")
+    times = [
+        ("Opened:      ", pr.created_at),
+        ("Last commit: ", pr.last_commit_at),
+        ("Last check:  ", pr.last_check_started_at),
+    ]
+    for label, iso in times:
+        if iso:
+            text.append(label, style="dim")
+            text.append(f"{format_time(iso, now)}\n")
     text.append(f"{pr.url}\n\n", style="dim underline")
     text.append(f"{icon} {pr.status}\n", style=style)
     if pr.auto_merge:
@@ -82,7 +108,6 @@ def pr_details(repo: RepoInfo, pr: PullRequest) -> Text:
             text.append(f"  {r_icon} {reason.text}\n", style=r_style)
     elif pr.status == Status.READY:
         text.append("\nReady to merge\n", style="green")
-    text.append("\nenter: actions", style="dim")
     return text
 
 
