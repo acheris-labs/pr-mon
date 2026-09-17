@@ -12,6 +12,7 @@ import (
 
 	"github.com/acheris-labs/pr-mon/internal/config"
 	"github.com/acheris-labs/pr-mon/internal/models"
+	"github.com/acheris-labs/pr-mon/internal/notify"
 	"github.com/acheris-labs/pr-mon/internal/protocol"
 	"github.com/acheris-labs/pr-mon/internal/service"
 )
@@ -376,6 +377,19 @@ func (c *Client) SendTest(repo string, settings config.NotifyConfig) error {
 
 func (c *Client) SetPollInterval(seconds int) error {
 	return c.request("set_poll_interval", map[string]any{"seconds": seconds}, nil)
+}
+
+func (c *Client) NotificationForm() (notify.Form, error) {
+	var form notify.Form
+	err := c.request("notification_form", nil, &form)
+	return form, err
+}
+
+func (c *Client) PreviewNotification(repo, message string) (notify.Preview, error) {
+	var preview notify.Preview
+	err := c.request("preview_notification",
+		map[string]any{"repo": repo, "message": message}, &preview)
+	return preview, err
 }
 
 func (c *Client) Shutdown() error { return c.request("shutdown", nil, nil) }

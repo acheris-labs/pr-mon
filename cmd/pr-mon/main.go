@@ -11,6 +11,7 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/daemon"
 	"github.com/acheris-labs/pr-mon/internal/github"
 	"github.com/acheris-labs/pr-mon/internal/state"
+	"github.com/acheris-labs/pr-mon/internal/tui"
 )
 
 // Version is stamped at build time (`-ldflags "-X main.Version=..."`).
@@ -147,6 +148,5 @@ func backendStatus(paths daemon.Paths) error {
 }
 
 func runTUI(paths daemon.Paths) error {
-	return fmt.Errorf("the dashboard is still being ported to Go; " +
-		"run `pr-mon daemon` for the backend")
+	return tui.Run(paths, Version)
 }
