@@ -66,7 +66,7 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `tab` / `shift+tab` | anywhere | Move between repo tree and PR list |
 | `enter` | PR list | Action menu |
 | `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods) |
-| `a` | action menu | Enable / disable GitHub auto-merge (asks `s`/`m`/`r` if several methods) |
+| `a` | action menu | Toggle auto-merge: GitHub's if the repo allows it, otherwise pr-mon's "merge when ready" (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
 | `space` | action menu | Toggle "delete remote branch" |
 | `N` | repo tree (on a repo) | Notification settings for that repo |
@@ -88,10 +88,23 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 
 ## Auto-merge
 
-`a` uses GitHub's built-in auto-merge, so the merge happens on GitHub even
-when pr-mon isn't running. The repo must have "Allow auto-merge" enabled.
-It's offered for PRs that aren't mergeable yet; ready PRs use `m`. The head
-branch is only deleted afterwards if the repo auto-deletes head branches.
+`a` toggles auto-merge for PRs that aren't mergeable yet (ready PRs use `m`).
+
+- **Repo allows GitHub auto-merge:** `a` uses it, so GitHub merges even when
+  pr-mon isn't running. The list shows `auto`. The head branch is only deleted
+  if the repo auto-deletes head branches.
+- **Repo doesn't:** `a` arms pr-mon's **merge when ready** (list shows
+  `auto*`). The backend merges the PR as your `gh` user once it is strictly
+  ready: mergeable, and no check failing, required or optional. New commits
+  keep it armed. A delete-branch checkbox is offered. `a` again cancels it; it's
+  also cleared when the PR is closed.
+  - Merges use GitHub's head check, so a push landing mid-merge is retried on
+    the next refresh rather than merged blindly.
+  - Any other merge failure cancels it and reports why (toast and the
+    "pr-mon auto-merge failed" notification with `{{PR_REASON}}`).
+  - It only runs while the backend does; see `pr-mon autostart enable`.
+
+Click a PR's link in the details pane to open it in the browser.
 
 ## Notifications
 
@@ -101,9 +114,13 @@ A repo without settings never notifies. The dialog has four tabs
 
 - **Message** — template with `{{PR_REPO}}`, `{{PR_NUM}}`, `{{PR_TITLE}}`,
   `{{PR_AUTHOR}}`, `{{PR_BRANCH}}`, `{{PR_TARGET}}`, `{{PR_STATE}}`,
-  `{{PR_URL}}`; a live preview uses a sample PR.
+  `{{PR_URL}}`, `{{PR_REASON}}` (why a pr-mon merge failed; empty otherwise);
+  a live preview uses a sample PR. `{{PR_STATE}}` is the new status, `NEW`,
+  `MERGED`, or `MERGE_FAILED`.
 - **Events** — notify when a PR *becomes* Ready, Failing, Conflict, Blocked,
-  Behind, Pending, or is newly opened (defaults: Ready, Failing, Conflict).
+  Behind, Pending, or is newly opened, and when pr-mon's merge when ready
+  merges a PR or fails to (defaults: Ready, Failing, Conflict, and both merge
+  results).
   Drafts are skipped unless "Include draft PRs" is ticked.
 - **Script** — a command such as `im --deliver tgram`. It runs without a shell
   (quotes and a leading `~` work; `$VARS` don't), receives the message on
