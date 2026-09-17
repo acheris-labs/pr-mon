@@ -89,6 +89,8 @@ class RemoteBackend:
     def _mark_disconnected(self, emit: bool) -> None:
         was_connected = self.status.connected
         self.status.connected = False
+        if self._writer is not None:
+            self._writer.close()
         self._writer = None
         for future in self._pending.values():
             if not future.done():

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -27,6 +28,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 class DaemonTest(unittest.TestCase):
     def setUp(self):
+        # The spawned daemon deliberately outlives its Popen handle.
+        warnings.filterwarnings("ignore", "subprocess .* is still running", ResourceWarning)
         self.tmp = tempfile.TemporaryDirectory(dir="/tmp")
         self.addCleanup(self.tmp.cleanup)
         self.dir = Path(self.tmp.name)
