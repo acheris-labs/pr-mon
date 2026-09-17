@@ -54,8 +54,8 @@ func decodeArgs[T any](raw json.RawMessage, op string) (T, error) {
 // Ops are every request the backend answers, in the order docs/protocol.md lists them.
 var Ops = []string{
 	"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-	"set_collapsed", "perform", "save_notifications", "send_test",
-	"notification_form", "preview_notification", "set_poll_interval", "shutdown",
+	"set_collapsed", "perform", "save_notifications", "send_test", "set_poll_interval",
+	"notification_form", "preview_notification", "shutdown",
 }
 
 func (s *Server) dispatch(connection net.Conn, request protocol.Request) (any, error) {

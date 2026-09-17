@@ -309,7 +309,7 @@
         {
           "id": "PR_6",
           "number": 6,
-          "title": "WIP with a line separator",
+          "title": "WIP\u2028with a line separator",
           "url": "https://github.com/acme/api/pull/6",
           "author": "alice",
           "created_at": "2026-09-15T01:28:54Z",

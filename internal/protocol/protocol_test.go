@@ -173,8 +173,8 @@ func known(op string) bool {
 // serverOps mirrors server.Ops; the server's own test checks they agree.
 var serverOps = []string{
 	"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-	"set_collapsed", "perform", "save_notifications", "send_test",
-	"notification_form", "preview_notification", "set_poll_interval", "shutdown",
+	"set_collapsed", "perform", "save_notifications", "send_test", "set_poll_interval",
+	"notification_form", "preview_notification", "shutdown",
 }
 
 func TestParseActionRejectsUnknownKinds(t *testing.T) {

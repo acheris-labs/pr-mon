@@ -1,14 +1,14 @@
 {
-  "protocol": 1,
-  "uid": 501,
   "cases": [
     {
-      "state_directory": "/Users/alice/.local/state/pr-mon",
-      "socket": "/Users/alice/.local/state/pr-mon/daemon.sock"
+      "socket": "/Users/alice/.local/state/pr-mon/daemon.sock",
+      "state_directory": "/Users/alice/.local/state/pr-mon"
     },
     {
-      "state_directory": "/Users/alice/very-long-directory-name/very-long-directory-name/very-long-directory-name/very-long-directory-name/pr-mon",
-      "socket": "/tmp/pr-mon-501/59099439a656920f.sock"
+      "socket": "/tmp/pr-mon-501/59099439a656920f.sock",
+      "state_directory": "/Users/alice/very-long-directory-name/very-long-directory-name/very-long-directory-name/very-long-directory-name/pr-mon"
     }
-  ]
+  ],
+  "protocol": 1,
+  "uid": 501
 }

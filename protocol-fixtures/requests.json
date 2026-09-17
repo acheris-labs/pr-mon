@@ -1,104 +1,102 @@
 [
   {
+    "args": {},
     "id": 1,
-    "op": "hello",
-    "args": {}
+    "op": "hello"
   },
   {
+    "args": {},
     "id": 2,
-    "op": "snapshot",
-    "args": {}
+    "op": "snapshot"
   },
   {
-    "id": 3,
-    "op": "mark_seen",
     "args": {
       "name": "acme/api",
       "number": 1
-    }
+    },
+    "id": 3,
+    "op": "mark_seen"
   },
   {
+    "args": {},
     "id": 4,
-    "op": "refresh_all",
-    "args": {}
+    "op": "refresh_all"
   },
   {
-    "id": 5,
-    "op": "perform",
     "args": {
-      "repo": "acme/api",
-      "number": 1,
       "action": {
         "kind": "merge",
         "method": "SQUASH",
         "delete_branch": true
-      }
-    }
+      },
+      "number": 1,
+      "repo": "acme/api"
+    },
+    "id": 5,
+    "op": "perform"
   },
   {
-    "id": 6,
-    "op": "perform",
     "args": {
-      "repo": "acme/api",
-      "number": 1,
       "action": {
         "kind": "arm_merge",
         "method": "MERGE",
         "delete_branch": false
-      }
-    }
+      },
+      "number": 1,
+      "repo": "acme/api"
+    },
+    "id": 6,
+    "op": "perform"
   },
   {
-    "id": 7,
-    "op": "perform",
     "args": {
-      "repo": "acme/api",
-      "number": 1,
       "action": {
         "kind": "disarm_merge",
         "method": null,
         "delete_branch": false
-      }
-    }
+      },
+      "number": 1,
+      "repo": "acme/api"
+    },
+    "id": 7,
+    "op": "perform"
   },
   {
-    "id": 8,
-    "op": "perform",
     "args": {
-      "repo": "acme/api",
-      "number": 1,
       "action": {
         "kind": "update",
         "method": null,
         "delete_branch": false
-      }
-    }
+      },
+      "number": 1,
+      "repo": "acme/api"
+    },
+    "id": 8,
+    "op": "perform"
   },
   {
+    "args": {
+      "name": "acme/web"
+    },
     "id": 9,
-    "op": "add_repo",
-    "args": {
-      "name": "acme/web"
-    }
+    "op": "add_repo"
   },
   {
+    "args": {
+      "name": "acme/web"
+    },
     "id": 10,
-    "op": "remove_repo",
-    "args": {
-      "name": "acme/web"
-    }
+    "op": "remove_repo"
   },
   {
+    "args": {
+      "collapsed": true,
+      "owner": "acme"
+    },
     "id": 11,
-    "op": "set_collapsed",
-    "args": {
-      "owner": "acme",
-      "collapsed": true
-    }
+    "op": "set_collapsed"
   },
   {
-    "id": 12,
-    "op": "save_notifications",
     "args": {
       "repo": "acme/api",
       "settings": {
@@ -115,11 +113,11 @@
         "script": "im",
         "desktop_enabled": false
       }
-    }
+    },
+    "id": 12,
+    "op": "save_notifications"
   },
   {
-    "id": 13,
-    "op": "send_test",
     "args": {
       "repo": "acme/api",
       "settings": {
@@ -136,26 +134,28 @@
         "script": "",
         "desktop_enabled": false
       }
-    }
+    },
+    "id": 13,
+    "op": "send_test"
   },
   {
+    "args": {},
     "id": 14,
-    "op": "notification_form",
-    "args": {}
+    "op": "notification_form"
   },
   {
-    "id": 15,
-    "op": "preview_notification",
     "args": {
-      "repo": "acme/api",
-      "message": "{{PR_NUM}}"
-    }
+      "message": "{{PR_NUM}}",
+      "repo": "acme/api"
+    },
+    "id": 15,
+    "op": "preview_notification"
   },
   {
-    "id": 16,
-    "op": "set_poll_interval",
     "args": {
       "seconds": 120
-    }
+    },
+    "id": 16,
+    "op": "set_poll_interval"
   }
 ]

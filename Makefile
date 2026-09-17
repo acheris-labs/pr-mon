@@ -1,37 +1,38 @@
-.PHONY: install run test lint fmt clean tool-install fixtures \
-	swift-test xcode app app-install go-test go-lint go-build
+.PHONY: build run install test lint fmt fixtures clean \
+	swift-test xcode app app-install
 
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X main.Version=$(VERSION)
+BIN := build/pr-mon
 APP_BUILD := macos/build
 APP := $(APP_BUILD)/Build/Products/Release/PrMon.app
 
-install:
-	uv sync
+build:
+	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/pr-mon
 
-run:
-	uv run pr-mon
+run: build
+	$(BIN)
+
+install:
+	go install -ldflags "$(LDFLAGS)" ./cmd/pr-mon
 
 test:
-	uv run python -m unittest discover -s tests -t . -v
-
-fixtures:
-	uv run python -m tests.protocol_fixtures
+	go test -race ./...
 
 lint:
-	uv run ruff check .
-	uv run ruff format --check .
+	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; echo "run make fmt"; exit 1; }
+	go vet ./...
 
 fmt:
-	uv run ruff format .
-	uv run ruff check --fix .
+	gofmt -w cmd internal
+
+fixtures:
+	go run ./cmd/gen-fixtures
 
 clean:
-	rm -rf .venv dist build .ruff_cache $(APP_BUILD) macos/PrMonKit/.build
-	find . -name __pycache__ -type d -prune -exec rm -rf {} +
+	rm -rf build $(APP_BUILD) macos/PrMonKit/.build
 
-tool-install:
-	uv tool install --reinstall .
-
-# ----- macOS menu bar app (macos/) -----
+# ----- macOS app (macos/) -----
 
 swift-test:
 	cd macos/PrMonKit && swift test
@@ -39,7 +40,7 @@ swift-test:
 xcode:
 	cd macos/PrMon && xcodegen generate
 
-app: xcode
+app: build xcode
 	xcodebuild -project macos/PrMon/PrMon.xcodeproj -scheme PrMon -configuration Release \
 		-destination generic/platform=macOS -derivedDataPath $(APP_BUILD) -quiet build
 	@echo "built $(APP)"
@@ -49,15 +50,3 @@ app-install: app
 	rm -rf ~/Applications/PrMon.app
 	cp -R $(APP) ~/Applications/
 	@echo "installed ~/Applications/PrMon.app"
-
-# ----- Go rewrite (in progress: cmd/, internal/) -----
-
-go-test:
-	go test -race ./...
-
-go-lint:
-	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; echo "run gofmt -w"; exit 1; }
-	go vet ./...
-
-go-build:
-	go build -o build/pr-mon ./cmd/pr-mon

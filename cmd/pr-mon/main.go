@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/acheris-labs/pr-mon/internal/autostart"
 	"github.com/acheris-labs/pr-mon/internal/config"
 	"github.com/acheris-labs/pr-mon/internal/daemon"
 	"github.com/acheris-labs/pr-mon/internal/github"
@@ -28,6 +29,7 @@ Commands:
   stop       stop the background backend
   restart    restart the backend
   status     show whether the backend is running
+  autostart  enable | disable | status: run the backend at login (macOS)
   --version  print the version
 `
 
@@ -51,6 +53,12 @@ func main() {
 		err = restartBackend(paths)
 	case "status":
 		err = backendStatus(paths)
+	case "autostart":
+		action := ""
+		if len(os.Args) > 2 {
+			action = os.Args[2]
+		}
+		err = autostartCommand(paths, action)
 	case "--version", "-v", "version":
 		fmt.Printf("pr-mon %s\n", Version)
 	case "--help", "-h", "help":
@@ -118,14 +126,42 @@ func stopBackend(paths daemon.Paths) error {
 }
 
 func restartBackend(paths daemon.Paths) error {
-	if _, err := daemon.Stop(paths, daemon.StopTimeout); err != nil {
-		return err
-	}
-	pid, err := daemon.Spawn(paths, daemon.StartTimeout)
+	pid, err := autostart.Restart(paths, nil)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("backend restarted (pid %d)\n", pid)
+	return nil
+}
+
+func autostartCommand(paths daemon.Paths, action string) error {
+	switch action {
+	case "enable":
+		lines, err := autostart.Enable(paths, nil, nil)
+		if err != nil {
+			return err
+		}
+		for _, line := range lines {
+			fmt.Println(line)
+		}
+	case "disable":
+		message, err := autostart.Disable(paths, nil)
+		if err != nil {
+			return err
+		}
+		fmt.Println(message)
+	case "status", "":
+		enabled, description, err := autostart.Describe(nil)
+		if err != nil {
+			return err
+		}
+		fmt.Println("autostart " + description)
+		if !enabled {
+			os.Exit(1)
+		}
+	default:
+		return fmt.Errorf("unknown autostart action %q (enable, disable or status)", action)
+	}
 	return nil
 }
 

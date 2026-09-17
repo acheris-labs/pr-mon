@@ -1,6 +1,6 @@
-# pr-mon in Go — one binary
+# pr-mon in Go — one binary (done)
 
-Date: 2026-09-17
+Date: 2026-09-17; completed the same day.
 
 **Goal:** replace the Python backend and TUI with a single Go binary. `pr-mon`
 opens the dashboard and starts the backend if needed; `pr-mon daemon` runs the
@@ -73,26 +73,26 @@ than another dependency.
 
 ### Task 1: Module and rules
 
-- [ ] `go.mod` (Go 1.27), `make go-test`, `make go-lint` (`gofmt -l`, `go vet`).
-- [ ] `internal/models`: Status, MergeMethod, Check, Reason, AutoMerge,
+- [x] `go.mod` (Go 1.27), `make go-test`, `make go-lint` (`gofmt -l`, `go vet`).
+- [x] `internal/models`: Status, MergeMethod, Check, Reason, AutoMerge,
       ArmedMerge, ActionOption, PullRequest, Repo, Config, NotifyConfig,
       BackendStatus, Action, with JSON tags matching the wire exactly.
-- [ ] `internal/readiness`: status, reasons, strict readiness. Port
+- [x] `internal/readiness`: status, reasons, strict readiness. Port
       `tests/test_models.py`'s Status/Reasons/StrictlyReady cases.
-- [ ] `internal/actions`: the action menu. Port `tests/test_actions.py`.
-- [ ] Decode `protocol-fixtures/snapshot-response.json` and check the computed
+- [x] `internal/actions`: the action menu. Port `tests/test_actions.py`.
+- [x] Decode `protocol-fixtures/snapshot-response.json` and check the computed
       values match the fixture's (the Python backend's own output).
 
 ### Task 2: Storage, tracking, notifications
 
-- [ ] `internal/config`: load and save, unreadable file becomes a warning,
+- [x] `internal/config`: load and save, unreadable file becomes a warning,
       notifications as `[notifications."owner/repo"]`, non-ASCII preserved.
       Port `tests/test_config.py`.
-- [ ] `internal/state`: atomic save, invalid entries dropped. Port
+- [x] `internal/state`: atomic save, invalid entries dropped. Port
       `tests/test_state.py`.
-- [ ] `internal/tracker`: NEW / READY / BLOCKED changes. Port
+- [x] `internal/tracker`: NEW / READY / BLOCKED changes. Port
       `tests/test_tracker.py`.
-- [ ] `internal/notify`: `{{VAR}}` rendering in one pass, unknown placeholders,
+- [x] `internal/notify`: `{{VAR}}` rendering in one pass, unknown placeholders,
       event selection, script delivery (no shell, message on stdin, `PR_*` in
       the environment, 30s timeout, process group killed), desktop delivery
       (terminal-notifier / osascript / notify-send), the notification form and
@@ -100,7 +100,7 @@ than another dependency.
 
 ### Task 3: GitHub client
 
-- [ ] `internal/github`: repo query, PR details in batches of 10, merge (with
+- [x] `internal/github`: repo query, PR details in batches of 10, merge (with
       `expectedHeadOid`), update branch, enable/disable auto-merge, delete
       branch, token from `gh auth token` with one retry on 401, rate-limit
       errors carrying the reset time, HTML error bodies hidden. Port
@@ -108,7 +108,7 @@ than another dependency.
 
 ### Task 4: The service
 
-- [ ] `internal/service`: polling, per-repo refresh, CHECKING retries, rate
+- [x] `internal/service`: polling, per-repo refresh, CHECKING retries, rate
       limit pause, first-load notification gate, add/remove repo, mark seen,
       collapsed groups, perform (merge, update, auto-merge on/off, arm, disarm),
       armed merges with the "was modified" retry, notifications for MERGED and
@@ -116,39 +116,39 @@ than another dependency.
 
 ### Task 5: Protocol, server, client
 
-- [ ] `internal/protocol`: requests, responses, events, snapshot; every fixture
+- [x] `internal/protocol`: requests, responses, events, snapshot; every fixture
       in `protocol-fixtures/` round-trips byte for byte.
-- [ ] `internal/server`: unix socket, concurrent requests, subscribe on
+- [x] `internal/server`: unix socket, concurrent requests, subscribe on
       snapshot, broadcast, dead-client cleanup. Port `tests/test_remote.py`'s
       server cases.
-- [ ] `internal/client`: mirror of backend state, version and protocol check,
+- [x] `internal/client`: mirror of backend state, version and protocol check,
       reconnect. Port the remote-backend cases.
-- [ ] `internal/daemon`: socket path with the `/tmp` fallback, flock,
+- [x] `internal/daemon`: socket path with the `/tmp` fallback, flock,
       spawn detached, stop, status, log file with rotation. Port
       `tests/test_daemon.py`.
-- [ ] `internal/autostart`: launchd agent, restart through launchctl. Port
+- [x] `internal/autostart`: launchd agent, restart through launchctl. Port
       `tests/test_autostart.py`.
 
 ### Task 6: The TUI
 
-- [ ] `internal/tui`: repo tree grouped by owner with badges and collapse,
+- [x] `internal/tui`: repo tree grouped by owner with badges and collapse,
       PR table, details pane, footer keys, toasts, reconnect handling.
-- [ ] Modals: action menu (m/a/u, method choice, delete-branch), add repo,
+- [x] Modals: action menu (m/a/u, method choice, delete-branch), add repo,
       confirm remove, notifications editor with live preview.
-- [ ] Keys as today: A add, D remove, N notifications, r refresh, q and ctrl+c
+- [x] Keys as today: A add, D remove, N notifications, r refresh, q and ctrl+c
       quit, enter actions, arrows and tab for navigation.
-- [ ] Tests drive `Update` with key messages and assert on the model and the
+- [x] Tests drive `Update` with key messages and assert on the model and the
       rendered view, covering what `tests/test_app.py` covers.
 
 ### Task 7: CLI and cutover
 
-- [ ] `cmd/pr-mon`: tui (default), daemon, start, stop, restart, status,
+- [x] `cmd/pr-mon`: tui (default), daemon, start, stop, restart, status,
       autostart enable/disable/status, `--version`. Port `tests/test_cli.py`.
-- [ ] Run the Go backend against the Swift app and the Python TUI, and the Go
+- [x] Run the Go backend against the Swift app and the Python TUI, and the Go
       TUI against the Python backend, before removing anything.
-- [ ] Live check against real repos: poll, statuses, notifications, and one
+- [x] Live check against real repos: poll, statuses, notifications, and one
       action end to end.
-- [ ] Remove `src/pr_mon`, `tests/`, `pyproject.toml`, `uv.lock`; move the
+- [x] Remove `src/pr_mon`, `tests/`, `pyproject.toml`, `uv.lock`; move the
       fixture generator to Go (`make fixtures`); update the Makefile, README,
       CLAUDE.md and the packaging plan.
 

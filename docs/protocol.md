@@ -7,8 +7,9 @@ out readiness, merging, and sending notifications. Clients (the TUI, a menu bar
 app, a widget) only display state and send commands. This document is enough to
 write a client in any language.
 
-`tests/test_protocol_spec.py` checks the tables below against the code, so they
-can't drift.
+`internal/protocol/spec_test.go` checks the tables below against the code, so
+they can't drift, and `protocol-fixtures/` holds sample messages every client's
+tests read.
 
 ## Transport
 
@@ -281,7 +282,7 @@ To act on an entry, send `perform` with
 
 ## Changing the protocol
 
-Bump `PROTOCOL_VERSION` in `src/pr_mon/protocol.py` and the version at the top
+Bump `Version` in `internal/protocol/protocol.go` and the version at the top
 of this document whenever a client written against the old document would
 break. Adding a field is not such a change (clients ignore unknown fields);
 removing or renaming a field, changing a type or meaning, or adding a required

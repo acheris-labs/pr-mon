@@ -276,8 +276,8 @@ func TestUnknownOp(t *testing.T) {
 func TestOpsCoverTheDocumentedRequests(t *testing.T) {
 	documented := []string{
 		"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-		"set_collapsed", "perform", "save_notifications", "send_test",
-		"notification_form", "preview_notification", "set_poll_interval", "shutdown",
+		"set_collapsed", "perform", "save_notifications", "send_test", "set_poll_interval",
+		"notification_form", "preview_notification", "shutdown",
 	}
 	if !reflect.DeepEqual(server.Ops, documented) {
 		t.Errorf("ops = %v, want %v", server.Ops, documented)

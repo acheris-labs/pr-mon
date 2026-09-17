@@ -5,13 +5,13 @@ why they can't merge, and merging them when they're ready.
 
 ## Requirements
 
-- [uv](https://docs.astral.sh/uv/)
+- [Go](https://go.dev/) 1.24+ to build
 - [GitHub CLI](https://cli.github.com/), logged in (`gh auth login`); pr-mon uses its token
 
 ## Install
 
 ```sh
-make tool-install   # uv tool install; puts `pr-mon` on your PATH
+make install   # go install; puts `pr-mon` in $(go env GOPATH)/bin
 ```
 
 Or run from the checkout with `make run`.
@@ -53,8 +53,8 @@ find `gh`), hands the backend over to launchd, waits for it to come up, and
 reports whether GitHub access works. launchd restarts the backend if it
 crashes, but not after `pr-mon stop`.
 
-Install with `make tool-install` first, so the agent points at a stable
-`~/.local/bin/pr-mon` rather than a checkout. macOS shows a "Background Items
+Install with `make install` first, so the agent points at a stable binary in
+`$(go env GOPATH)/bin` rather than a checkout. macOS shows a "Background Items
 Added" notice the first time. If `im` notifications stop working under
 autostart, use Send test in the `N` dialog and approve the Automation prompt.
 
@@ -192,7 +192,7 @@ make app-install   # builds and copies PrMon.app to ~/Applications
 
 - Needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 - The app starts the backend with `pr-mon start` through your login shell, so
-  install the CLI first (`make tool-install`), or enable `pr-mon autostart`.
+  install the CLI first (`make install`), or enable `pr-mon autostart`.
 - Like the TUI, it's only a window onto the backend: quitting it leaves the
   backend running, and it can run alongside dashboards.
 - `macos/PrMonKit` is the Swift client library (`make swift-test`);
@@ -201,14 +201,17 @@ make app-install   # builds and copies PrMon.app to ~/Applications
 ## Development
 
 ```sh
-make install   # uv sync
-make test      # unittest
-make lint      # ruff check + format check
-make fmt       # ruff format + fix
-make clean
+make build        # build/pr-mon
+make test         # go test -race ./...
+make lint         # gofmt check + go vet
+make fmt          # gofmt -w
 make fixtures     # regenerate protocol-fixtures/ after a wire change
-make swift-test   # PrMonKit tests (decodes protocol-fixtures/)
+make swift-test   # PrMonKit tests (they read protocol-fixtures/)
 make app          # build the Mac app into macos/build
+make clean
 ```
+
+The backend, the dashboard and the CLI are one Go binary; `macos/` holds the
+Swift client and the Mac app.
 
 The backend protocol is documented in [docs/protocol.md](docs/protocol.md).

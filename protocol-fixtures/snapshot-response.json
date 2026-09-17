@@ -27,6 +27,113 @@
       }
     },
     "repos": {
+      "Textualize/rich": {
+        "name": "Textualize/rich",
+        "merge_methods": [
+          "SQUASH"
+        ],
+        "delete_branch_on_merge": true,
+        "prs": [
+          {
+            "id": "PR_41",
+            "number": 41,
+            "title": "PR 41",
+            "url": "https://github.com/acme/api/pull/41",
+            "author": "alice",
+            "created_at": "2026-09-15T01:28:54Z",
+            "is_draft": false,
+            "head_ref": "feature-41",
+            "base_ref": "main",
+            "head_ref_id": "REF_1",
+            "head_repo": "acme/api",
+            "mergeable": "MERGEABLE",
+            "merge_state": "BLOCKED",
+            "review_decision": null,
+            "check_state": "PENDING",
+            "checks": [],
+            "checks_total": 0,
+            "auto_merge": null,
+            "last_commit_at": "2026-09-15T02:00:00Z",
+            "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+            "status": "PENDING",
+            "reasons": [],
+            "strictly_ready": false,
+            "last_check_started_at": null,
+            "actions": [
+              {
+                "key": "merge",
+                "kind": "merge",
+                "label": "Merge",
+                "available": false,
+                "reason": "PENDING",
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
+              },
+              {
+                "key": "auto_merge",
+                "kind": "arm_merge",
+                "label": "Merge when ready (pr-mon)",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": true,
+                "offers_delete_branch": false
+              }
+            ]
+          },
+          {
+            "id": "PR_42",
+            "number": 42,
+            "title": "PR 42",
+            "url": "https://github.com/acme/api/pull/42",
+            "author": "alice",
+            "created_at": "2026-09-15T01:28:54Z",
+            "is_draft": false,
+            "head_ref": "feature-42",
+            "base_ref": "main",
+            "head_ref_id": "REF_1",
+            "head_repo": "acme/api",
+            "mergeable": "MERGEABLE",
+            "merge_state": "BLOCKED",
+            "review_decision": null,
+            "check_state": "PENDING",
+            "checks": [],
+            "checks_total": 0,
+            "auto_merge": null,
+            "last_commit_at": "2026-09-15T02:00:00Z",
+            "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+            "status": "PENDING",
+            "reasons": [],
+            "strictly_ready": false,
+            "last_check_started_at": null,
+            "actions": [
+              {
+                "key": "merge",
+                "kind": "merge",
+                "label": "Merge",
+                "available": false,
+                "reason": "PENDING",
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
+              },
+              {
+                "key": "auto_merge",
+                "kind": "disarm_merge",
+                "label": "Cancel merge when ready (pr-mon)",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
+              }
+            ]
+          }
+        ],
+        "pr_total": 2,
+        "auto_merge_allowed": false
+      },
       "acme/api": {
         "name": "acme/api",
         "merge_methods": [
@@ -334,7 +441,7 @@
           {
             "id": "PR_6",
             "number": 6,
-            "title": "WIP with a line separator",
+            "title": "WIP\u2028with a line separator",
             "url": "https://github.com/acme/api/pull/6",
             "author": "alice",
             "created_at": "2026-09-15T01:28:54Z",
@@ -491,139 +598,32 @@
         ],
         "pr_total": 60,
         "auto_merge_allowed": true
-      },
-      "Textualize/rich": {
-        "name": "Textualize/rich",
-        "merge_methods": [
-          "SQUASH"
-        ],
-        "delete_branch_on_merge": true,
-        "prs": [
-          {
-            "id": "PR_41",
-            "number": 41,
-            "title": "PR 41",
-            "url": "https://github.com/acme/api/pull/41",
-            "author": "alice",
-            "created_at": "2026-09-15T01:28:54Z",
-            "is_draft": false,
-            "head_ref": "feature-41",
-            "base_ref": "main",
-            "head_ref_id": "REF_1",
-            "head_repo": "acme/api",
-            "mergeable": "MERGEABLE",
-            "merge_state": "BLOCKED",
-            "review_decision": null,
-            "check_state": "PENDING",
-            "checks": [],
-            "checks_total": 0,
-            "auto_merge": null,
-            "last_commit_at": "2026-09-15T02:00:00Z",
-            "head_sha": "abc1234def5678abc1234def5678abc1234def56",
-            "status": "PENDING",
-            "reasons": [],
-            "strictly_ready": false,
-            "last_check_started_at": null,
-            "actions": [
-              {
-                "key": "merge",
-                "kind": "merge",
-                "label": "Merge",
-                "available": false,
-                "reason": "PENDING",
-                "note": null,
-                "needs_method": false,
-                "offers_delete_branch": false
-              },
-              {
-                "key": "auto_merge",
-                "kind": "arm_merge",
-                "label": "Merge when ready (pr-mon)",
-                "available": true,
-                "reason": null,
-                "note": null,
-                "needs_method": true,
-                "offers_delete_branch": false
-              }
-            ]
-          },
-          {
-            "id": "PR_42",
-            "number": 42,
-            "title": "PR 42",
-            "url": "https://github.com/acme/api/pull/42",
-            "author": "alice",
-            "created_at": "2026-09-15T01:28:54Z",
-            "is_draft": false,
-            "head_ref": "feature-42",
-            "base_ref": "main",
-            "head_ref_id": "REF_1",
-            "head_repo": "acme/api",
-            "mergeable": "MERGEABLE",
-            "merge_state": "BLOCKED",
-            "review_decision": null,
-            "check_state": "PENDING",
-            "checks": [],
-            "checks_total": 0,
-            "auto_merge": null,
-            "last_commit_at": "2026-09-15T02:00:00Z",
-            "head_sha": "abc1234def5678abc1234def5678abc1234def56",
-            "status": "PENDING",
-            "reasons": [],
-            "strictly_ready": false,
-            "last_check_started_at": null,
-            "actions": [
-              {
-                "key": "merge",
-                "kind": "merge",
-                "label": "Merge",
-                "available": false,
-                "reason": "PENDING",
-                "note": null,
-                "needs_method": false,
-                "offers_delete_branch": false
-              },
-              {
-                "key": "auto_merge",
-                "kind": "disarm_merge",
-                "label": "Cancel merge when ready (pr-mon)",
-                "available": true,
-                "reason": null,
-                "note": null,
-                "needs_method": false,
-                "offers_delete_branch": false
-              }
-            ]
-          }
-        ],
-        "pr_total": 2,
-        "auto_merge_allowed": false
       }
     },
     "errors": {
       "acme/web": "Repository acme/web not found"
     },
     "unseen": {
+      "Textualize/rich": [],
       "acme/api": [
         1,
         5
       ],
-      "acme/web": [],
-      "Textualize/rich": []
+      "acme/web": []
     },
     "collapsed": [
       "textualize"
     ],
     "armed": {
-      "acme/api": {},
-      "acme/web": {},
       "Textualize/rich": {
         "42": {
           "method": "SQUASH",
           "delete_branch": true,
           "armed_at": "2026-09-17T10:00:00+00:00"
         }
-      }
+      },
+      "acme/api": {},
+      "acme/web": {}
     },
     "status": {
       "connected": true,
