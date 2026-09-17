@@ -25,6 +25,7 @@ targets:
       path: PrMon/Info.plist
       properties:
         CFBundleDisplayName: pr-mon
+        CFBundleIconFile: PrMon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.developer-tools

@@ -1,6 +1,7 @@
 .PHONY: build run install test lint fmt fixtures clean \
-	swift-test xcode app app-install
+	swift-test xcode app app-install icon
 
+DESIGN ?= dots
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X main.Version=$(VERSION)
 BIN := build/pr-mon
@@ -33,6 +34,14 @@ clean:
 	rm -rf build $(APP_BUILD) macos/PrMonKit/.build
 
 # ----- macOS app (macos/) -----
+
+# Regenerate the app icon (designs: dots, merge, pull, graph, graph-green, prompt).
+icon:
+	swift tools/gen-icon.swift macos/PrMon/PrMon.iconset $(DESIGN)
+	iconutil -c icns macos/PrMon/PrMon.iconset -o macos/PrMon/PrMon/PrMon.icns
+	rm -rf macos/PrMon/PrMon.iconset
+	@echo "wrote macos/PrMon/PrMon/PrMon.icns"
+
 
 swift-test:
 	cd macos/PrMonKit && swift test
