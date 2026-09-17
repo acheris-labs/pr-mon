@@ -2,7 +2,7 @@ import unittest
 
 from pr_mon.backend import BackendEvent, BackendStatus
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, MergeMethod
+from pr_mon.models import Action, ArmedMerge, MergeMethod
 from pr_mon.protocol import (
     ProtocolError,
     action_from_dict,
@@ -46,6 +46,8 @@ class ConversionTest(unittest.TestCase):
 
     def test_action(self):
         for action in (
+            Action("arm_merge", MergeMethod.MERGE, True),
+            Action("disarm_merge"),
             Action("merge", MergeMethod.REBASE, True),
             Action("update"),
             Action("auto_merge_off"),
@@ -84,6 +86,11 @@ class FakeBackend:
     def unseen(self, name):
         return {2, 1} if name == "acme/api" else set()
 
+    def armed(self, name):
+        if name != "acme/api":
+            return {}
+        return {2: ArmedMerge(MergeMethod.SQUASH, True, "2026-09-17T10:00:00+00:00")}
+
 
 class MessageTest(unittest.TestCase):
     def setUp(self):
@@ -96,6 +103,19 @@ class MessageTest(unittest.TestCase):
         self.assertEqual(data["errors"], {"acme/web": "down"})
         self.assertEqual(data["unseen"], {"acme/api": [1, 2], "acme/web": []})
         self.assertEqual(data["collapsed"], ["acme", "zeta"])
+        self.assertEqual(
+            data["armed"],
+            {
+                "acme/api": {
+                    "2": {
+                        "method": "SQUASH",
+                        "delete_branch": True,
+                        "armed_at": "2026-09-17T10:00:00+00:00",
+                    }
+                },
+                "acme/web": {},
+            },
+        )
         self.assertEqual(data["status"]["pid"], 3)
 
     def test_repo_event(self):
@@ -104,12 +124,19 @@ class MessageTest(unittest.TestCase):
             message,
             {
                 "event": "repo",
-                "data": {"name": "acme/web", "repo": None, "error": "down", "unseen": []},
+                "data": {
+                    "name": "acme/web",
+                    "repo": None,
+                    "error": "down",
+                    "unseen": [],
+                    "armed": {},
+                },
             },
         )
         data = event_message(self.backend, BackendEvent("repo", name="acme/api"))["data"]
         self.assertEqual(data["repo"]["name"], "acme/api")
         self.assertEqual(data["unseen"], [1, 2])
+        self.assertEqual(list(data["armed"]), ["2"])
 
     def test_other_events(self):
         self.assertEqual(
@@ -133,7 +160,7 @@ class MessageTest(unittest.TestCase):
         )
         self.assertEqual(
             set(event_message(self.backend, BackendEvent("repos"))["data"]),
-            {"config", "repos", "errors", "unseen", "collapsed", "status"},
+            {"config", "repos", "errors", "unseen", "collapsed", "armed", "status"},
         )
 
 

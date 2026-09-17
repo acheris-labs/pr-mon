@@ -10,9 +10,16 @@ from dataclasses import asdict
 
 from pr_mon.backend import BackendEvent, BackendStatus
 from pr_mon.config import Config, NotifyConfig, parse_notify_config
-from pr_mon.models import Action, MergeMethod, repo_to_dict
+from pr_mon.models import Action, MergeMethod, armed_to_dict, repo_to_dict
 
-ACTION_KINDS = ("merge", "update", "auto_merge_on", "auto_merge_off")
+ACTION_KINDS = (
+    "merge",
+    "update",
+    "auto_merge_on",
+    "auto_merge_off",
+    "arm_merge",
+    "disarm_merge",
+)
 
 
 class ProtocolError(Exception):
@@ -95,6 +102,10 @@ def _unseen(backend, name: str) -> list[int]:
     return sorted(backend.unseen(name))
 
 
+def _armed(backend, name: str) -> dict:
+    return {str(number): armed_to_dict(merge) for number, merge in backend.armed(name).items()}
+
+
 def snapshot(backend) -> dict:
     """Everything a client needs to render, from any Backend."""
     return {
@@ -103,6 +114,7 @@ def snapshot(backend) -> dict:
         "errors": dict(backend.errors),
         "unseen": {name: _unseen(backend, name) for name in backend.config.repos},
         "collapsed": sorted(backend.collapsed),
+        "armed": {name: _armed(backend, name) for name in backend.config.repos},
         "status": status_to_dict(backend.status),
     }
 
@@ -118,6 +130,7 @@ def event_message(backend, event: BackendEvent) -> dict:
             "repo": repo_to_dict(repo) if repo else None,
             "error": backend.errors.get(event.name),
             "unseen": _unseen(backend, event.name),
+            "armed": _armed(backend, event.name),
         }
     elif event.kind == "seen":
         data = {"name": event.name, "unseen": _unseen(backend, event.name)}

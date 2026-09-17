@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pr_mon.backend import BackendError, BackendEvent, BackendStatus, Listener
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, RepoInfo, repo_from_dict
+from pr_mon.models import Action, ArmedMerge, RepoInfo, armed_from_dict, repo_from_dict
 from pr_mon.protocol import (
     ProtocolError,
     action_to_dict,
@@ -36,6 +36,7 @@ class RemoteBackend:
         self.status = BackendStatus(connected=False)
         self._unseen: dict[str, set[int]] = {}
         self._collapsed: set[str] = set()
+        self._armed: dict[str, dict[int, ArmedMerge]] = {}
         self._listeners: list[Listener] = []
         self._ids = itertools.count(1)
         self._pending: dict[int, asyncio.Future] = {}
@@ -128,6 +129,7 @@ class RemoteBackend:
         self.errors = dict(data["errors"])
         self._unseen = {name: set(numbers) for name, numbers in data["unseen"].items()}
         self._collapsed = set(data["collapsed"])
+        self._armed = {name: _parse_armed(armed) for name, armed in data["armed"].items()}
         self.status = status_from_dict(data["status"])
         self.status.connected = True
 
@@ -146,6 +148,7 @@ class RemoteBackend:
             else:
                 self.errors[name] = data["error"]
             self._unseen[name] = set(data["unseen"])
+            self._armed[name] = _parse_armed(data["armed"])
         elif kind == "seen":
             self._unseen[data["name"]] = set(data["unseen"])
         elif kind == "collapsed":
@@ -169,6 +172,9 @@ class RemoteBackend:
 
     def unseen(self, name: str) -> set[int]:
         return set(self._unseen.get(name, ()))
+
+    def armed(self, name: str) -> dict[int, ArmedMerge]:
+        return dict(self._armed.get(name, {}))
 
     # ----- Backend commands -----
 
@@ -203,3 +209,7 @@ class RemoteBackend:
 
     async def shutdown(self) -> None:
         await self._request("shutdown")
+
+
+def _parse_armed(data: dict) -> dict[int, ArmedMerge]:
+    return {int(number): armed_from_dict(merge) for number, merge in data.items()}

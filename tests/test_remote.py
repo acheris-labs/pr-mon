@@ -276,6 +276,21 @@ class RemoteBackendTest(ServerTestCase):
         await backend.shutdown()
         self.assertTrue(self.monitor.shutdown_requested.is_set())
 
+    async def test_armed_merges_are_mirrored(self):
+        await self.serve({"acme/api": make_repo("acme/api", (1, {"merge_state": "BLOCKED"}))})
+        backend = await self.remote()
+        self.assertEqual(backend.armed("acme/api"), {})
+        await backend.perform("acme/api", 1, Action("arm_merge", MergeMethod.REBASE, True))
+        await self.settle()
+        armed = backend.armed("acme/api")[1]
+        self.assertEqual((armed.method, armed.delete_branch), (MergeMethod.REBASE, True))
+        self.assertEqual(backend.armed("acme/api"), self.monitor.armed("acme/api"))
+        other = await self.remote()
+        self.assertEqual(other.armed("acme/api"), self.monitor.armed("acme/api"))
+        await backend.perform("acme/api", 1, Action("disarm_merge"))
+        await self.settle()
+        self.assertEqual(backend.armed("acme/api"), {})
+
     async def test_errors_raise(self):
         await self.serve({"acme/api": make_repo("acme/api")})
         backend = await self.remote()
