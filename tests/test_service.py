@@ -443,6 +443,28 @@ class ArmedMergeTest(MonitorTestCase):
         await self.poll()
         self.assertIn(1, m.armed("acme/api"))
 
+    async def test_merging_flag(self):
+        m = await self.start_armed((1, PENDING))
+        self.assertFalse(m.merging)
+        self.client.merge_gate = asyncio.Event()
+        self.set_prs((1, READY))
+        await self.monitor.poll_once()
+        await asyncio.sleep(0.01)
+        self.assertTrue(m.merging)
+        self.client.merge_gate.set()
+        await m.wait_idle()
+        self.assertFalse(m.merging)
+
+    async def test_merging_flag_for_manual_merge(self):
+        m = await self.start({"acme/api": make_repo("acme/api", (1, READY))})
+        self.client.merge_gate = asyncio.Event()
+        task = asyncio.create_task(m.perform("acme/api", 1, Action("merge", MergeMethod.SQUASH)))
+        await asyncio.sleep(0.01)
+        self.assertTrue(m.merging)
+        self.client.merge_gate.set()
+        await task
+        self.assertFalse(m.merging)
+
     async def test_no_double_merge_while_in_flight(self):
         await self.start_armed((1, PENDING))
         self.client.merge_gate = asyncio.Event()

@@ -16,10 +16,11 @@ from pr_mon.autostart import (
     disable,
     enable,
     launch_environment,
+    restart_backend,
     wait_until_ready,
 )
 from pr_mon.backend import BackendError
-from pr_mon.daemon import DaemonPaths
+from pr_mon.daemon import DaemonError, DaemonPaths
 
 
 class FakeLaunchctl:
@@ -120,6 +121,57 @@ class LaunchAgentTest(AutostartTestCase):
         self.assertFalse(self.agent.status().loaded)
         self.agent.plist_path.write_bytes(b"not a plist")
         self.assertEqual(self.agent.status().program, None)
+
+
+class RestartTest(AutostartTestCase):
+    def test_kickstart_when_launchd_manages_it(self):
+        self.agent.install(["/bin/pr-mon", "daemon"], {}, Path("/l"))
+        infos = iter([None, {"pid": 10}, {"pid": 20}])
+        with (
+            mock.patch("pr_mon.autostart.daemon_status", return_value=10),
+            mock.patch("pr_mon.autostart.daemon_info", side_effect=lambda p: next(infos)),
+            mock.patch("pr_mon.autostart.time.sleep"),
+            mock.patch("pr_mon.autostart.stop_daemon") as stop,
+        ):
+            self.assertEqual(restart_backend(self.paths, self.agent), 20)
+        self.assertIn(["kickstart", "-k", f"gui/501/{LABEL}"], self.launchctl.calls)
+        stop.assert_not_called()
+
+    def test_stop_and_spawn_without_launchd(self):
+        with (
+            mock.patch("pr_mon.autostart.stop_daemon") as stop,
+            mock.patch("pr_mon.autostart.spawn_daemon", return_value=7) as spawn,
+        ):
+            self.assertEqual(restart_backend(self.paths, self.agent), 7)
+        stop.assert_called_once_with(self.paths)
+        spawn.assert_called_once_with(self.paths)
+        self.assertNotIn("kickstart", self.launchctl.commands())
+
+    def test_stop_and_spawn_off_macos(self):
+        self.launchctl.loaded = True
+        with (
+            mock.patch("pr_mon.autostart.sys.platform", "linux"),
+            mock.patch("pr_mon.autostart.stop_daemon"),
+            mock.patch("pr_mon.autostart.spawn_daemon", return_value=7),
+        ):
+            self.assertEqual(restart_backend(self.paths, self.agent), 7)
+
+    def test_kickstart_failures(self):
+        self.agent.install(["/bin/pr-mon", "daemon"], {}, Path("/l"))
+        self.launchctl.fail["kickstart"] = "Could not find service"
+        with (
+            mock.patch("pr_mon.autostart.daemon_status", return_value=10),
+            self.assertRaisesRegex(DaemonError, "Could not find service"),
+        ):
+            restart_backend(self.paths, self.agent)
+        del self.launchctl.fail["kickstart"]
+        with (
+            mock.patch("pr_mon.autostart.daemon_status", return_value=10),
+            mock.patch("pr_mon.autostart.daemon_info", return_value={"pid": 10}),
+            mock.patch("pr_mon.autostart.time.sleep"),
+            self.assertRaisesRegex(DaemonError, "did not restart"),
+        ):
+            restart_backend(self.paths, self.agent, timeout=0)
 
 
 class DescribeTest(AutostartTestCase):

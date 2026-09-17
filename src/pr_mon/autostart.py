@@ -12,6 +12,8 @@ from pathlib import Path
 
 from pr_mon.backend import BackendError
 from pr_mon.daemon import (
+    START_TIMEOUT,
+    DaemonError,
     DaemonPaths,
     daemon_info,
     daemon_status,
@@ -77,6 +79,12 @@ class LaunchAgent:
         result = self._launchctl("bootstrap", self.domain, str(self.plist_path))
         if result.returncode:
             raise AutostartError(f"launchctl bootstrap failed: {_output(result)}")
+
+    def kickstart(self) -> None:
+        """Restart the loaded job under launchd (kills the running backend)."""
+        result = self._launchctl("kickstart", "-k", f"{self.domain}/{LABEL}")
+        if result.returncode:
+            raise AutostartError(f"launchctl kickstart failed: {_output(result)}")
 
     def uninstall(self) -> bool:
         """Remove the agent (stopping its job); False if it wasn't there."""
@@ -211,3 +219,25 @@ def describe(agent: LaunchAgent | None = None) -> tuple[bool, str]:
     if status.loaded:
         return True, f"enabled (loaded in launchd, {runs})"
     return True, f"enabled but not loaded ({runs}); run `pr-mon autostart enable` to fix"
+
+
+def restart_backend(
+    paths: DaemonPaths, agent: LaunchAgent | None = None, timeout: float = START_TIMEOUT
+) -> int:
+    """Restart the backend, keeping it under launchd when autostart manages it."""
+    agent = agent or LaunchAgent()
+    if sys.platform != "darwin" or not agent.is_loaded():
+        stop_daemon(paths)
+        return spawn_daemon(paths)
+    old_pid = daemon_status(paths)
+    try:
+        agent.kickstart()
+    except AutostartError as e:
+        raise DaemonError(str(e)) from e
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        info = daemon_info(paths)
+        if info and info["pid"] != old_pid:
+            return info["pid"]
+        time.sleep(0.1)
+    raise DaemonError(f"launchd did not restart the backend\n{tail_log(paths)}".rstrip())

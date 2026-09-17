@@ -27,6 +27,15 @@ class BackendUnavailable(BackendError):
     """Nothing is listening on the daemon socket."""
 
 
+class BackendMismatch(BackendError):
+    """The daemon runs a different pr-mon version than this client."""
+
+    def __init__(self, version: str, merging: bool):
+        super().__init__(f"backend is running pr-mon {version}")
+        self.version = version
+        self.merging = merging
+
+
 class RemoteBackend:
     def __init__(self, socket_path: Path):
         self.socket_path = socket_path
@@ -45,7 +54,9 @@ class RemoteBackend:
 
     # ----- connection -----
 
-    async def connect(self) -> None:
+    async def connect(self, expected_version: str | None = None) -> None:
+        """Connect and load a snapshot. With `expected_version`, refuse a daemon
+        running another version before reading any of its data."""
         try:
             reader, self._writer = await asyncio.open_unix_connection(
                 str(self.socket_path), limit=LINE_LIMIT
@@ -55,8 +66,18 @@ class RemoteBackend:
         self._reader_task = asyncio.create_task(self._read_loop(reader))
         self.status.connected = True
         try:
-            await self._request("hello")
-            self._apply_snapshot(await self._request("snapshot"))
+            hello = await self._request("hello")
+            version = hello.get("version", "")
+            if expected_version is not None and version != expected_version:
+                raise BackendMismatch(version, bool(hello.get("merging")))
+            snapshot = await self._request("snapshot")
+            try:
+                self._apply_snapshot(snapshot)
+            except (KeyError, TypeError, ValueError) as e:
+                raise BackendError(
+                    "the backend sent data this pr-mon doesn't understand "
+                    f"({e!r}); run `pr-mon stop` and try again"
+                ) from e
         except BackendError:
             await self.close()
             raise

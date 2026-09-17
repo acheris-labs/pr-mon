@@ -137,6 +137,12 @@ class Monitor:
     def unseen(self, name: str) -> set[int]:
         return self.tracker.unseen(name)
 
+    @property
+    def merging(self) -> bool:
+        """A merge (manual or pr-mon's) is in flight; restarting now could lose its
+        follow-up steps."""
+        return bool(self._merging)
+
     def armed(self, name: str) -> dict[int, ArmedMerge]:
         armed = {}
         for key, data in (self.state.armed.get(name) or {}).items():
@@ -370,6 +376,10 @@ class Monitor:
             self._toast(f"Cancelled merge when ready for {label}")
             self._emit("repo", name=repo)
             return
+        key = (repo, number)
+        manual_merge = action.kind == "merge" and key not in self._merging
+        if manual_merge:
+            self._merging.add(key)
         try:
             if action.kind == "merge":
                 await self.client.merge(pr.id, action.method)
@@ -394,6 +404,9 @@ class Monitor:
         except GitHubError as e:
             what = action.kind.replace("_", " ").capitalize()
             self._toast(f"{what} failed for {label}: {e}", severity="error")
+        finally:
+            if manual_merge:
+                self._merging.discard(key)
         await self.refresh_repo(repo)
 
     async def shutdown(self) -> None:

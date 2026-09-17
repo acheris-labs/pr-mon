@@ -12,11 +12,12 @@ from textual.widgets import DataTable, Footer, Header, Static, Tree
 from textual.widgets.tree import TreeNode
 
 from pr_mon import __version__
+from pr_mon.autostart import restart_backend
 from pr_mon.backend import Backend, BackendError, BackendEvent
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.daemon import DaemonError, DaemonPaths, spawn_daemon, stop_daemon
+from pr_mon.daemon import DaemonError, DaemonPaths, spawn_daemon
 from pr_mon.models import Action, PullRequest, RepoInfo, owner_key
-from pr_mon.remote import BackendUnavailable
+from pr_mon.remote import BackendMismatch, BackendUnavailable
 from pr_mon.screens import (
     ActionMenuScreen,
     AddRepoScreen,
@@ -26,6 +27,7 @@ from pr_mon.screens import (
 from pr_mon.views import owner_label, pr_details, pr_row, pr_table_title, repo_label
 
 RECONNECT_DELAY = 5.0
+MERGE_WAIT = 3.0
 
 
 class RepoTree(Tree[str]):
@@ -187,30 +189,33 @@ class PrMonApp(App):
     # ----- daemon connection -----
 
     async def connect_backend(self, start: bool = True) -> None:
-        """Connect (starting the daemon if `start` and it isn't running); handle a
-        version mismatch."""
+        """Connect (starting the daemon if `start` and it isn't running); restart a
+        backend running another version, once it isn't in the middle of a merge."""
         try:
-            await self.backend.connect()
-        except BackendUnavailable:
-            if not start:
-                raise
-            await asyncio.to_thread(spawn_daemon, self.daemon)
-            await self.backend.connect()
-        running = self.backend.status.version
-        if running != __version__:
-            question = (
-                f"The backend is running version {running} but this is {__version__}. "
-                "Restart the backend? (No quits.)"
-            )
-            if await self.push_screen_wait(ConfirmScreen(question)):
-                await self.backend.close()
-                await asyncio.to_thread(stop_daemon, self.daemon)
+            try:
+                await self.backend.connect(__version__)
+            except BackendUnavailable:
+                if not start:
+                    raise
                 await asyncio.to_thread(spawn_daemon, self.daemon)
-                await self.backend.connect()
-            else:
-                await self.backend.close()
-                self.exit(return_code=1, message="pr-mon: backend version mismatch")
-                return
+                await self.backend.connect(__version__)
+        except BackendMismatch as mismatch:
+            old_version = mismatch.version
+            if mismatch.merging:
+                self.notify("The backend is finishing a merge; it will restart right after")
+            while mismatch.merging:
+                self.sub_title = "waiting for the backend to finish a merge…"
+                await asyncio.sleep(MERGE_WAIT)
+                try:
+                    await self.backend.connect(__version__)
+                    break  # restarted by someone else meanwhile
+                except BackendMismatch as again:
+                    mismatch = again
+            if not self.backend.status.connected:
+                self.sub_title = "restarting backend…"
+                await asyncio.to_thread(restart_backend, self.daemon)
+                await self.backend.connect(__version__)
+                self.notify(f"Backend restarted (it was running pr-mon {old_version})")
         self.render_status()
 
     @work(group="backend", exclusive=True)

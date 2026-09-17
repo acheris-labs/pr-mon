@@ -10,7 +10,7 @@ from pr_mon.backend import BackendError
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
 from pr_mon.models import Action, MergeMethod
 from pr_mon.protocol import decode, encode
-from pr_mon.remote import BackendUnavailable, RemoteBackend
+from pr_mon.remote import BackendMismatch, BackendUnavailable, RemoteBackend
 from pr_mon.server import DaemonServer
 from pr_mon.service import Monitor
 from tests.fakes import FakeClient, FakeDeliver, make_repo
@@ -113,7 +113,12 @@ class ServerTest(ServerTestCase):
             {
                 "id": 1,
                 "ok": True,
-                "result": {"version": "1.2.3", "pid": os.getpid(), "notifier": "/x/tn"},
+                "result": {
+                    "version": "1.2.3",
+                    "pid": os.getpid(),
+                    "notifier": "/x/tn",
+                    "merging": False,
+                },
             },
         )
         snap = (await client.ask("snapshot", request_id=2))["result"]
@@ -205,6 +210,45 @@ class RemoteBackendTest(ServerTestCase):
     async def test_unavailable(self):
         backend = RemoteBackend(self.dir / "missing.sock")
         with self.assertRaises(BackendUnavailable):
+            await backend.connect()
+        self.assertFalse(backend.status.connected)
+
+    async def test_expected_version_matches(self):
+        await self.serve({"acme/api": make_repo("acme/api")})
+        backend = RemoteBackend(self.socket_path)
+        self.addAsyncCleanup(backend.close)
+        await backend.connect("1.2.3")
+        self.assertEqual(list(backend.repos), ["acme/api"])
+
+    async def test_mismatch_raises_before_snapshot(self):
+        await self.serve({"acme/api": make_repo("acme/api")})
+        backend = RemoteBackend(self.socket_path)
+        with self.assertRaises(BackendMismatch) as ctx:
+            await backend.connect("9.9.9")
+        self.assertEqual((ctx.exception.version, ctx.exception.merging), ("1.2.3", False))
+        self.assertFalse(backend.status.connected)
+        self.assertEqual(backend.repos, {})
+
+    async def test_mismatch_reports_merge_in_flight(self):
+        await self.serve({"acme/api": make_repo("acme/api")})
+        self.monitor._merging.add(("acme/api", 1))
+        backend = RemoteBackend(self.socket_path)
+        with self.assertRaises(BackendMismatch) as ctx:
+            await backend.connect("9.9.9")
+        self.assertTrue(ctx.exception.merging)
+
+    async def test_unreadable_snapshot_is_an_error(self):
+        await self.serve({"acme/api": make_repo("acme/api")})
+        original = self.server._snapshot
+
+        async def old_style(*, writer):
+            data = await original(writer=writer)
+            del data["armed"]
+            return data
+
+        self.server._ops["snapshot"] = old_style
+        backend = RemoteBackend(self.socket_path)
+        with self.assertRaisesRegex(BackendError, "pr-mon stop"):
             await backend.connect()
         self.assertFalse(backend.status.connected)
 

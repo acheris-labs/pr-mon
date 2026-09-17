@@ -12,7 +12,7 @@ from pr_mon.config import Config, load_config, save_config
 from pr_mon.daemon import DaemonError, DaemonPaths
 from pr_mon.models import MergeMethod
 from pr_mon.remote import RemoteBackend
-from pr_mon.screens import ActionMenuScreen, ConfirmScreen, NotificationsScreen
+from pr_mon.screens import ActionMenuScreen, NotificationsScreen
 from pr_mon.server import DaemonServer
 from pr_mon.service import Monitor
 from tests.fakes import FakeClient, FakeDeliver, make_repo
@@ -35,9 +35,11 @@ class RemoteAppTestCase(unittest.IsolatedAsyncioTestCase):
         self.monitor = None
         self.version = __version__
         self.spawns = 0
+        self.restarts = 0
         self.spawn_error = None
         self.client = FakeClient({})
-        for name, fake in (("spawn_daemon", self.fake_spawn), ("stop_daemon", self.fake_stop)):
+        fakes = (("spawn_daemon", self.fake_spawn), ("restart_backend", self.fake_restart))
+        for name, fake in fakes:
             patcher = mock.patch(f"pr_mon.app.{name}", fake)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -53,7 +55,10 @@ class RemoteAppTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def start_server(self):
         self.monitor = Monitor(
-            self.client, self.config_path, self.dir / "state.json", version=self.version
+            self.client,
+            self.config_path,
+            self.dir / "state.json",
+            version=self.version,
         )
         await self.monitor.start()
         await self.monitor.wait_idle()
@@ -82,10 +87,11 @@ class RemoteAppTestCase(unittest.IsolatedAsyncioTestCase):
             asyncio.run_coroutine_threadsafe(self.start_server(), self.loop).result(5)
         return self.monitor.status.pid
 
-    def fake_stop(self, paths):
+    def fake_restart(self, paths):
+        self.restarts += 1
         if self.server is not None:
             asyncio.run_coroutine_threadsafe(self.stop_server(), self.loop).result(5)
-        return True
+        return self.fake_spawn(paths)
 
     def make_app(self):
         self.backend = RemoteBackend(self.paths.socket)
@@ -148,34 +154,51 @@ class ConnectTest(RemoteAppTestCase):
             await self.settle(pilot)
         self.assertEqual(app.return_code, 1)
 
-    async def test_version_mismatch_restart(self):
+    async def test_version_mismatch_restarts_automatically(self):
         self.version = "0.0.1"
         self.write_config({"acme/api": make_repo("acme/api", (1, READY))})
         await self.start_server()
         old_monitor = self.monitor
+        self.version = __version__
         app = self.make_app()
-        async with app.run_test(size=SIZE) as pilot:
-            await self.wait_for_screen(pilot, ConfirmScreen)
-            self.assertIn("version 0.0.1", str(app.screen.message))
-            self.version = __version__
-            await pilot.press("y")
+        async with app.run_test(size=SIZE, notifications=True) as pilot:
             await self.settle(pilot)
-            self.assertIsNot(self.monitor, old_monitor)
+            self.assertEqual(self.restarts, 1)
             self.assertTrue(old_monitor.shutdown_requested.is_set())
+            self.assertIsNot(self.monitor, old_monitor)
             self.assertEqual(self.backend.status.version, __version__)
             self.assertEqual(self.pr_numbers(app), ["#1"])
+            self.assertIn(
+                "Backend restarted (it was running pr-mon 0.0.1)",
+                [n.message for n in app._notifications],
+            )
+            self.assertTrue(app.sub_title.startswith("● connected"))
 
-    async def test_version_mismatch_declined_quits(self):
+    async def test_waits_for_merge_before_restarting(self):
         self.version = "0.0.1"
-        self.write_config({})
+        self.write_config({"acme/api": make_repo("acme/api", (1, READY))})
         await self.start_server()
+        old_monitor = self.monitor
+        old_monitor._merging.add(("acme/api", 1))
+        self.version = __version__
         app = self.make_app()
-        async with app.run_test(size=SIZE) as pilot:
-            await self.wait_for_screen(pilot, ConfirmScreen)
-            await pilot.press("n")
-            await self.settle(pilot)
-        self.assertEqual(app.return_code, 1)
-        self.assertFalse(self.monitor.shutdown_requested.is_set())
+        with mock.patch("pr_mon.app.MERGE_WAIT", 0.05):
+            async with app.run_test(size=SIZE, notifications=True) as pilot:
+                for _ in range(20):
+                    await asyncio.sleep(0.02)
+                    await pilot.pause()
+                self.assertEqual(self.restarts, 0)
+                self.assertFalse(old_monitor.shutdown_requested.is_set())
+                self.assertEqual(app.sub_title, "waiting for the backend to finish a merge…")
+                self.assertIn(
+                    "The backend is finishing a merge; it will restart right after",
+                    [n.message for n in app._notifications],
+                )
+                old_monitor._merging.clear()
+                await self.settle(pilot)
+                self.assertEqual(self.restarts, 1)
+                self.assertEqual(self.backend.status.version, __version__)
+                self.assertEqual(self.pr_numbers(app), ["#1"])
 
 
 class CommandsTest(RemoteAppTestCase):

@@ -65,7 +65,13 @@ class DaemonServer:
 
     async def _hello(self) -> dict:
         status = self.monitor.status
-        return {"version": status.version, "pid": status.pid, "notifier": status.notifier}
+        return {
+            "version": status.version,
+            "pid": status.pid,
+            "notifier": status.notifier,
+            # A client restarting an outdated backend waits while this is true.
+            "merging": self.monitor.merging,
+        }
 
     async def _snapshot(self, *, writer: asyncio.StreamWriter) -> dict:
         # No awaits between taking the snapshot and subscribing, so no event is missed
