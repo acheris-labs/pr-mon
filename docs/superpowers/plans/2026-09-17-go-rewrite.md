@@ -144,10 +144,12 @@ than another dependency.
 
 - [x] `cmd/pr-mon`: tui (default), daemon, start, stop, restart, status,
       autostart enable/disable/status, `--version`. Port `tests/test_cli.py`.
-- [x] Run the Go backend against the Swift app and the Python TUI, and the Go
-      TUI against the Python backend, before removing anything.
-- [x] Live check against real repos: poll, statuses, notifications, and one
-      action end to end.
+- [x] Run the Go backend against the Swift app before removing anything. (The
+      Go TUI against the Python backend was not tried; the Go CLI's `status`
+      did talk to a running Python backend.)
+- [x] Live check against real repos: polling, statuses and both clients on one
+      backend. **Not done:** a real merge, update or auto-merge, and a real
+      notification delivery — those still need a deliberate test.
 - [x] Remove `src/pr_mon`, `tests/`, `pyproject.toml`, `uv.lock`; move the
       fixture generator to Go (`make fixtures`); update the Makefile, README,
       CLAUDE.md and the packaging plan.
