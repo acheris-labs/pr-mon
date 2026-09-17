@@ -363,7 +363,7 @@ func localTime(stamp string) string {
 	return when.Local().Format("15:04:05")
 }
 
-// age is "2026-09-16 09:10 (2h ago)", as the Python details pane showed it.
+// age is a timestamp with a rough distance: "2026-09-16 09:10 (2h ago)".
 func age(stamp string, now time.Time) string {
 	when, err := time.Parse(time.RFC3339Nano, stamp)
 	if err != nil {

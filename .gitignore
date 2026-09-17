@@ -1,9 +1,5 @@
-.venv/
-__pycache__/
-*.pyc
-dist/
 build/
-.ruff_cache/
+dist/
 
 # macOS app
 .build/
@@ -12,4 +8,3 @@ macos/build/
 macos/PrMon/PrMon.xcodeproj/
 macos/PrMon/PrMon/Info.plist
 xcuserdata/
-build/

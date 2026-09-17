@@ -1,6 +1,5 @@
-// Package testfixtures builds PRs and repos for tests, with the same defaults
-// the Python test fixtures used (a clean, mergeable PR in a repo that allows
-// every merge method).
+// Package testfixtures builds PRs and repos for tests: by default a clean,
+// mergeable pull request in a repo that allows every merge method.
 package testfixtures
 
 import (
@@ -67,7 +66,7 @@ func CheckRun(name, conclusion string) models.Check {
 	return models.Check{Name: name, State: conclusion, StartedAt: models.Ptr(CheckStarted)}
 }
 
-// Common PR states, named as the Python tests named them.
+// Common PR states.
 
 func Pending(pr *models.PullRequest) {
 	pr.MergeState = "BLOCKED"

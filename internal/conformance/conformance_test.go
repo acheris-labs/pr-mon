@@ -1,5 +1,7 @@
-// Package conformance checks the Go rules against protocol-fixtures/, which the
-// Python backend generated: same status, reasons, readiness and action menus.
+// Package conformance checks the backend rules against protocol-fixtures/: it
+// strips each PR's computed fields, works them out again, and compares. The
+// fixtures are also what the Swift client's tests read, so a rule change that
+// isn't meant to happen shows up here first.
 package conformance_test
 
 import (

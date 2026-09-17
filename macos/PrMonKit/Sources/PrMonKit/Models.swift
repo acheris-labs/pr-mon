@@ -320,7 +320,7 @@ public struct Action: Encodable, Sendable, Equatable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(kind, forKey: .kind)
-        // Always present, null when there is no method (as the Python client sends it).
+        // Always present, null when there is no method.
         try container.encode(method, forKey: .method)
         try container.encode(deleteBranch, forKey: .deleteBranch)
     }

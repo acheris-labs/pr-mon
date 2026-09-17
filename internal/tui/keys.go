@@ -1,5 +1,5 @@
-// Keys, matching the Python dashboard: A add, D remove, N notifications,
-// r refresh, q quit, enter acts, arrows and tab navigate.
+// Keys: A add, D remove, N notifications, r refresh, q quit, enter acts,
+// arrows and tab navigate.
 
 package tui
 

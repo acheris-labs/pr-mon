@@ -1,4 +1,4 @@
-// Decode the messages the Python backend generates (protocol-fixtures/, `make fixtures`).
+// Decode the messages the backend generates (protocol-fixtures/, `make fixtures`).
 
 import Foundation
 import Testing
@@ -110,7 +110,7 @@ enum Fixtures {
         #expect(try Wire.decodeEvent("future", from: Data("{}".utf8)) == .unknown("future"))
     }
 
-    /// Python's NotifyConfig() defaults, as sent in the fixture requests.
+    /// The backend's default notification settings, as sent in the fixture requests.
     private func defaults(script: String = "") -> NotifyConfig {
         NotifyConfig(
             message: "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}",
@@ -135,7 +135,7 @@ enum Fixtures {
         #expect(preview == NotificationPreview(text: "acme/api#123 {{PR_OOPS}}", unknown: ["PR_OOPS"]))
     }
 
-    @Test func requestsMatchPython() throws {
+    @Test func requestsMatchTheBackend() throws {
         let expected = try JSONSerialization.jsonObject(with: Fixtures.data("requests.json"))
             as! [NSDictionary]
         let action = { (kind: String, method: MergeMethod?, delete: Bool) in
@@ -166,11 +166,11 @@ enum Fixtures {
             try Wire.encode(Request(id: 16, op: "set_poll_interval", args: SecondsArgs(seconds: 120))),
         ]
         #expect(encoded.count == expected.count)
-        for (data, python) in zip(encoded, expected) {
+        for (data, expectedRequest) in zip(encoded, expected) {
             #expect(data.last == 0x0A)
             #expect(!data.dropLast().contains(0x0A))
             let swift = try JSONSerialization.jsonObject(with: data) as! NSDictionary
-            #expect(swift == python)
+            #expect(swift == expectedRequest)
         }
     }
 

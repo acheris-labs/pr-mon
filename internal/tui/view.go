@@ -28,7 +28,7 @@ var (
 	selected = lipgloss.NewStyle().Reverse(true)
 )
 
-// statusStyle is the icon and colour for each status, as the Python views used.
+// statusStyle is the icon and colour for each status.
 func statusStyle(status models.Status) (string, lipgloss.Style) {
 	switch status {
 	case models.StatusReady:
