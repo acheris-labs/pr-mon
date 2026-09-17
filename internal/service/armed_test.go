@@ -36,6 +36,17 @@ func mergeEvents() map[string]config.NotifyConfig {
 	return map[string]config.NotifyConfig{"acme/api": settings}
 }
 
+// sentState reports whether a notification went out for this state, with the
+// given reason when one is expected.
+func sentState(h *harness, state, reason string) bool {
+	for _, variables := range h.sent() {
+		if variables["PR_STATE"] == state && (reason == "" || variables["PR_REASON"] == reason) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestArmAndDisarm(t *testing.T) {
 	client := newFakeGitHub(repoWith("acme/api", testfixtures.PR(1, testfixtures.Pending)))
 	h := start(t, client, []string{"acme/api"}, nil)
@@ -91,9 +102,10 @@ func TestMergesWhenStrictlyReady(t *testing.T) {
 	if !h.hasToast("Merged acme/api#1 (pr-mon auto-merge, squash)") {
 		t.Errorf("toasts = %v", h.toasts())
 	}
-	sent := h.sent()
-	if len(sent) == 0 || sent[len(sent)-1]["PR_STATE"] != "MERGED" {
-		t.Errorf("sent = %v, want a MERGED notification", sent)
+	// Deliveries run concurrently, and the refresh after the merge can notify
+	// too, so look for the one that matters rather than assuming an order.
+	if !sentState(h, "MERGED", "") {
+		t.Errorf("sent = %v, want a MERGED notification", h.sent())
 	}
 }
 
@@ -156,13 +168,8 @@ func TestOtherMergeErrorDisarmsAndReports(t *testing.T) {
 	if !h.hasToast("pr-mon auto-merge failed for acme/api#1: Pull request is not mergeable") {
 		t.Errorf("toasts = %v", h.toasts())
 	}
-	sent := h.sent()
-	if len(sent) == 0 {
-		t.Fatal("a MERGE_FAILED notification should be sent")
-	}
-	last := sent[len(sent)-1]
-	if last["PR_STATE"] != "MERGE_FAILED" || last["PR_REASON"] != "Pull request is not mergeable" {
-		t.Errorf("sent = %v", last)
+	if !sentState(h, "MERGE_FAILED", "Pull request is not mergeable") {
+		t.Errorf("sent = %v, want MERGE_FAILED with the reason", h.sent())
 	}
 }
 
