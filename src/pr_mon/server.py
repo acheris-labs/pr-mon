@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import logging
 import os
+from dataclasses import asdict
 from pathlib import Path
 
 from pr_mon.backend import BackendError, BackendEvent
@@ -42,6 +43,8 @@ class DaemonServer:
             "perform": self._perform,
             "save_notifications": self._save_notifications,
             "send_test": self._send_test,
+            "notification_form": self._notification_form,
+            "preview_notification": self._preview_notification,
             "shutdown": monitor.shutdown,
         }
 
@@ -89,6 +92,12 @@ class DaemonServer:
 
     async def _send_test(self, repo: str, settings: dict) -> None:
         await self.monitor.send_test(repo, settings_from_dict(settings))
+
+    async def _notification_form(self) -> dict:
+        return asdict(await self.monitor.notification_form())
+
+    async def _preview_notification(self, repo: str, message: str) -> dict:
+        return asdict(await self.monitor.preview_notification(repo, message))
 
     # ----- connections -----
 

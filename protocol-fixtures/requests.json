@@ -73,5 +73,82 @@
         "delete_branch": false
       }
     }
+  },
+  {
+    "id": 9,
+    "op": "add_repo",
+    "args": {
+      "name": "acme/web"
+    }
+  },
+  {
+    "id": 10,
+    "op": "remove_repo",
+    "args": {
+      "name": "acme/web"
+    }
+  },
+  {
+    "id": 11,
+    "op": "set_collapsed",
+    "args": {
+      "owner": "acme",
+      "collapsed": true
+    }
+  },
+  {
+    "id": 12,
+    "op": "save_notifications",
+    "args": {
+      "repo": "acme/api",
+      "settings": {
+        "message": "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}",
+        "events": [
+          "READY",
+          "FAILING",
+          "CONFLICT",
+          "MERGED",
+          "MERGE_FAILED"
+        ],
+        "include_drafts": false,
+        "script_enabled": false,
+        "script": "im",
+        "desktop_enabled": false
+      }
+    }
+  },
+  {
+    "id": 13,
+    "op": "send_test",
+    "args": {
+      "repo": "acme/api",
+      "settings": {
+        "message": "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}",
+        "events": [
+          "READY",
+          "FAILING",
+          "CONFLICT",
+          "MERGED",
+          "MERGE_FAILED"
+        ],
+        "include_drafts": false,
+        "script_enabled": false,
+        "script": "",
+        "desktop_enabled": false
+      }
+    }
+  },
+  {
+    "id": 14,
+    "op": "notification_form",
+    "args": {}
+  },
+  {
+    "id": 15,
+    "op": "preview_notification",
+    "args": {
+      "repo": "acme/api",
+      "message": "{{PR_NUM}}"
+    }
   }
 ]

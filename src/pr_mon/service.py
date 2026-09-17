@@ -17,6 +17,8 @@ from pr_mon.github import GitHubError, RateLimitError
 from pr_mon.models import (
     Action,
     ArmedMerge,
+    NotificationForm,
+    NotificationPreview,
     PullRequest,
     RepoInfo,
     Status,
@@ -24,7 +26,14 @@ from pr_mon.models import (
     armed_to_dict,
     owner_key,
 )
-from pr_mon.notify import deliver, pr_variables, sample_variables, select_notifications
+from pr_mon.notify import (
+    deliver,
+    notification_form,
+    pr_variables,
+    preview,
+    sample_variables,
+    select_notifications,
+)
 from pr_mon.state import AppState, load_state, save_state
 from pr_mon.tracker import Tracker
 
@@ -311,6 +320,12 @@ class Monitor:
 
     async def send_test(self, repo: str, settings: NotifyConfig) -> None:
         self._spawn(self._send(settings, sample_variables(repo), is_test=True))
+
+    async def notification_form(self) -> NotificationForm:
+        return notification_form()
+
+    async def preview_notification(self, repo: str, message: str) -> NotificationPreview:
+        return preview(repo, message)
 
     # ----- commands -----
 

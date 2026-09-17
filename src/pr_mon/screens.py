@@ -20,9 +20,15 @@ from textual.widgets import (
     Tabs,
 )
 
-from pr_mon.config import EVENT_NAMES, NotifyConfig
-from pr_mon.models import Action, MergeMethod, PullRequest, RepoInfo
-from pr_mon.notify import VARIABLE_NAMES, render, sample_variables, unknown_placeholders
+from pr_mon.config import NotifyConfig
+from pr_mon.models import (
+    Action,
+    MergeMethod,
+    NotificationForm,
+    NotificationPreview,
+    PullRequest,
+    RepoInfo,
+)
 
 MODAL_CSS = """
 {name} {{
@@ -217,24 +223,6 @@ class ActionMenuScreen(ModalScreen[Action | None]):
         self.dismiss(None)
 
 
-EVENT_LABELS = {
-    "READY": "Ready (mergeable)",
-    "FAILING": "Failing (checks failed)",
-    "CONFLICT": "Conflict (merge conflicts)",
-    "BLOCKED": "Blocked (reviews / branch protection)",
-    "BEHIND": "Behind base branch",
-    "PENDING": "Pending (checks running)",
-    "NEW": "New PR opened",
-    "MERGED": "Merged by pr-mon",
-    "MERGE_FAILED": "pr-mon auto-merge failed",
-}
-
-SCRIPT_HELP = (
-    "The message is sent on stdin. PR_* variables are also set in the environment.\n"
-    "Runs without a shell: use full paths or ~ (no $VARS)."
-)
-
-
 class NotificationsScreen(ModalScreen[NotifyConfig | None]):
     """Edit one repo's notification settings; `send_test` fires the unsaved settings."""
 
@@ -276,12 +264,17 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
         repo: str,
         settings: NotifyConfig,
         notifier: str | None,
+        form: NotificationForm,
+        preview: Callable[[str], Awaitable[NotificationPreview]],
         send_test: Callable[[NotifyConfig], None],
     ):
+        """`form` and `preview` come from the backend, which owns the notification rules."""
         super().__init__()
         self.repo = repo
         self.settings = settings
         self.notifier = notifier
+        self.form = form
+        self.preview = preview
         self.send_test = send_test
 
     def compose(self) -> ComposeResult:
@@ -293,7 +286,7 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
                     yield Label("Template")
                     yield Input(value=s.message, id="message")
                     yield Static(
-                        "Variables: " + " ".join(f"{{{{{v}}}}}" for v in VARIABLE_NAMES),
+                        "Variables: " + " ".join(f"{{{{{v}}}}}" for v in self.form.variables),
                         classes="hint",
                         markup=False,
                     )
@@ -301,15 +294,19 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
                     yield Static("", id="unknown", classes="error", markup=False)
                 with TabPane("Events", id="tab-events"):
                     yield Label("Notify when a PR becomes:")
-                    for name in EVENT_NAMES:
+                    for event in self.form.events:
                         yield Checkbox(
-                            EVENT_LABELS[name], value=name in s.events, id=f"event-{name.lower()}"
+                            event.label,
+                            value=event.name in s.events,
+                            id=f"event-{event.name.lower()}",
                         )
                     yield Checkbox("Include draft PRs", value=s.include_drafts, id="include-drafts")
                 with TabPane("Script", id="tab-script"):
                     yield Checkbox("Run script", value=s.script_enabled, id="script-enabled")
                     yield Input(value=s.script, placeholder="e.g. im --deliver tgram", id="script")
-                    yield Static(SCRIPT_HELP, id="script-help", classes="hint", markup=False)
+                    yield Static(
+                        self.form.script_help, id="script-help", classes="hint", markup=False
+                    )
                 with TabPane("Desktop", id="tab-desktop"):
                     yield Checkbox(
                         "Show desktop notification",
@@ -350,12 +347,19 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
         self.call_after_refresh(enter_pane)
 
     @on(Input.Changed, "#message")
-    def update_preview(self) -> None:
+    def message_changed(self) -> None:
+        self.update_preview()
+
+    @work(exclusive=True, group="preview")
+    async def update_preview(self) -> None:
         template = self.query_one("#message", Input).value
-        self.query_one("#preview", Static).update(
-            "Preview: " + render(template, sample_variables(self.repo))
-        )
-        unknown = unknown_placeholders(template)
+        try:
+            preview = await self.preview(template)
+        except Exception as e:  # noqa: BLE001 - shown in place of the preview
+            self.query_one("#preview", Static).update(f"Preview unavailable: {e}")
+            return
+        self.query_one("#preview", Static).update("Preview: " + preview.text)
+        unknown = preview.unknown
         self.query_one("#unknown", Static).update(
             f"Unknown placeholders: {', '.join(unknown)}" if unknown else ""
         )
@@ -367,7 +371,7 @@ class NotificationsScreen(ModalScreen[NotifyConfig | None]):
         desktop = checked("desktop-enabled") if self.notifier else self.settings.desktop_enabled
         return NotifyConfig(
             message=self.query_one("#message", Input).value,
-            events=[name for name in EVENT_NAMES if checked(f"event-{name.lower()}")],
+            events=[e.name for e in self.form.events if checked(f"event-{e.name.lower()}")],
             include_drafts=checked("include-drafts"),
             script_enabled=checked("script-enabled"),
             script=self.query_one("#script", Input).value,

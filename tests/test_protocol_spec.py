@@ -15,7 +15,10 @@ from pr_mon.models import (
     ArmedMerge,
     AutoMerge,
     Check,
+    EventOption,
     MergeMethod,
+    NotificationForm,
+    NotificationPreview,
     Reason,
     Status,
     repo_to_dict,
@@ -100,6 +103,9 @@ class ProtocolSpecTest(unittest.TestCase):
             ("ArmedMerge", ArmedMerge),
             ("Action", Action),
             ("ActionOption", ActionOption),
+            ("NotificationForm", NotificationForm),
+            ("EventOption", EventOption),
+            ("NotificationPreview", NotificationPreview),
         ):
             with self.subTest(name=name):
                 self.assertEqual(self.object_fields(name), [f.name for f in fields(cls)])

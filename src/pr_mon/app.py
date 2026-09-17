@@ -489,6 +489,15 @@ class PrMonApp(App):
         if name is None:
             self.notify("Select a repository to configure its notifications", severity="warning")
             return
+        self.open_notifications(name)
+
+    @work(group="commands")
+    async def open_notifications(self, name: str) -> None:
+        try:
+            form = await self.backend.notification_form()
+        except BackendError as e:
+            self.notify(str(e), severity="error")
+            return
 
         def saved(settings: NotifyConfig | None) -> None:
             if settings is not None:
@@ -499,7 +508,12 @@ class PrMonApp(App):
 
         current = self.config.notifications.get(name, NotifyConfig())
         notifier = self.backend.status.notifier
-        self.push_screen(NotificationsScreen(name, current, notifier, send_test), saved)
+
+        def preview(message: str):
+            return self.backend.preview_notification(name, message)
+
+        screen = NotificationsScreen(name, current, notifier, form, preview, send_test)
+        self.push_screen(screen, saved)
 
     def action_add_repo(self) -> None:
         def added(name: str | None) -> None:

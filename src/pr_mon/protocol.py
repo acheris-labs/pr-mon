@@ -12,7 +12,15 @@ from dataclasses import asdict
 
 from pr_mon.backend import BackendEvent, BackendStatus
 from pr_mon.config import Config, NotifyConfig, parse_notify_config
-from pr_mon.models import Action, MergeMethod, armed_to_dict, repo_to_dict
+from pr_mon.models import (
+    Action,
+    EventOption,
+    MergeMethod,
+    NotificationForm,
+    NotificationPreview,
+    armed_to_dict,
+    repo_to_dict,
+)
 
 # Bump when the wire format changes (see CLAUDE.md); clients refuse other versions.
 PROTOCOL_VERSION = 1
@@ -73,6 +81,18 @@ def action_from_dict(data: dict) -> Action:
         return Action(data["kind"], method, bool(data.get("delete_branch", False)))
     except (KeyError, ValueError, TypeError) as e:
         raise ProtocolError(f"invalid action: {e}") from e
+
+
+def form_from_dict(data: dict) -> NotificationForm:
+    return NotificationForm(
+        events=tuple(EventOption(**event) for event in data["events"]),
+        variables=tuple(data["variables"]),
+        script_help=data["script_help"],
+    )
+
+
+def preview_from_dict(data: dict) -> NotificationPreview:
+    return NotificationPreview(data["text"], tuple(data["unknown"]))
 
 
 def status_to_dict(status: BackendStatus) -> dict:

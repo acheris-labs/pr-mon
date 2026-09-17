@@ -1,0 +1,10 @@
+{
+  "id": 5,
+  "ok": true,
+  "result": {
+    "text": "acme/api#123 {{PR_OOPS}}",
+    "unknown": [
+      "PR_OOPS"
+    ]
+  }
+}

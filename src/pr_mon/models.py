@@ -94,6 +94,27 @@ class ActionOption:
 
 
 @dataclass(frozen=True)
+class EventOption:
+    name: str  # a NotifyConfig event
+    label: str
+
+
+@dataclass(frozen=True)
+class NotificationForm:
+    """What the notification settings editor offers, as the backend defines it."""
+
+    events: tuple[EventOption, ...]
+    variables: tuple[str, ...]  # placeholder names for {{NAME}}
+    script_help: str
+
+
+@dataclass(frozen=True)
+class NotificationPreview:
+    text: str  # the template rendered with sample values
+    unknown: tuple[str, ...]  # placeholders the backend doesn't know
+
+
+@dataclass(frozen=True)
 class Reason:
     text: str
     level: str  # "error" | "warning" | "info"

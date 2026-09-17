@@ -66,6 +66,8 @@ can't drift.
 | `perform` | `repo`, `number`, `action`: `Action` | `null` | GitHub failures are reported as `toast` events, not errors. |
 | `save_notifications` | `repo`, `settings`: `NotifyConfig` | `null` | |
 | `send_test` | `repo`, `settings`: `NotifyConfig` | `null` | Sends a sample notification with these unsaved settings. |
+| `notification_form` | none | `NotificationForm` | What a notification settings editor should offer. |
+| `preview_notification` | `repo`, `message`: string | `NotificationPreview` | Renders a template with sample values. |
 | `shutdown` | none | `null` | Stops the backend. |
 
 Errors (`ok: false`) carry a message meant for the user, for example
@@ -140,6 +142,28 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `script_enabled` | bool | |
 | `script` | string | Command run with the message on stdin. |
 | `desktop_enabled` | bool | |
+
+### Object: `NotificationForm`
+
+| Field | Type | Meaning |
+|:------|:-----|:--------|
+| `events` | [`EventOption`] | Events to offer, in display order. |
+| `variables` | [string] | Placeholder names usable as `{{NAME}}`. |
+| `script_help` | string | Help text for the script command. |
+
+### Object: `EventOption`
+
+| Field | Type | Meaning |
+|:------|:-----|:--------|
+| `name` | string | Value for `NotifyConfig.events`. |
+| `label` | string | Text to show. |
+
+### Object: `NotificationPreview`
+
+| Field | Type | Meaning |
+|:------|:-----|:--------|
+| `text` | string | The template rendered with sample values. |
+| `unknown` | [string] | Placeholders in the template the backend doesn't know. |
 
 ### Object: `Repo`
 

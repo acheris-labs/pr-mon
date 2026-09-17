@@ -5,7 +5,7 @@ Regenerate with `make fixtures`; tests/test_protocol_fixtures.py fails when they
 
 import asyncio
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from unittest import mock
 
@@ -14,7 +14,15 @@ from pr_mon.backend import BackendEvent, BackendStatus
 from pr_mon.config import Config, NotifyConfig
 from pr_mon.daemon import DaemonPaths
 from pr_mon.models import Action, ArmedMerge, MergeMethod, RepoInfo
-from pr_mon.protocol import EVENT_KINDS, PROTOCOL_VERSION, action_to_dict, event_message, snapshot
+from pr_mon.notify import notification_form, preview
+from pr_mon.protocol import (
+    EVENT_KINDS,
+    PROTOCOL_VERSION,
+    action_to_dict,
+    event_message,
+    settings_to_dict,
+    snapshot,
+)
 from pr_mon.server import DaemonServer
 from tests.fakes import make_repo
 from tests.fixtures import auto_merge, check_run, status_context
@@ -115,30 +123,67 @@ def build() -> dict[str, object]:
         "hello-response.json": {"id": 1, "ok": True, "result": hello},
         "snapshot-response.json": {"id": 2, "ok": True, "result": snapshot(backend)},
         "error-response.json": {"id": 3, "ok": False, "error": "acme/api#99 is not an open PR"},
+        "notification-form-response.json": {
+            "id": 4,
+            "ok": True,
+            "result": asdict(notification_form()),
+        },
+        "preview-notification-response.json": {
+            "id": 5,
+            "ok": True,
+            "result": asdict(preview("acme/api", "{{PR_REPO}}#{{PR_NUM}} {{PR_OOPS}}")),
+        },
     }
     for kind in EVENT_KINDS:
         event = BackendEvent(kind, name="acme/api", message="Merged acme/api#1 (squash)")
         files[f"event-{kind}.json"] = event_message(backend, event)
-    files["requests.json"] = [
-        {"id": 1, "op": "hello", "args": {}},
-        {"id": 2, "op": "snapshot", "args": {}},
-        {"id": 3, "op": "mark_seen", "args": {"name": "acme/api", "number": 1}},
-        {"id": 4, "op": "refresh_all", "args": {}},
-    ] + [
-        {
-            "id": 5 + i,
-            "op": "perform",
-            "args": {"repo": "acme/api", "number": 1, "action": action_to_dict(action)},
-        }
-        for i, action in enumerate(
-            (
-                Action("merge", MergeMethod.SQUASH, True),
-                Action("arm_merge", MergeMethod.MERGE, False),
-                Action("disarm_merge"),
-                Action("update"),
+    files["requests.json"] = (
+        [
+            {"id": 1, "op": "hello", "args": {}},
+            {"id": 2, "op": "snapshot", "args": {}},
+            {"id": 3, "op": "mark_seen", "args": {"name": "acme/api", "number": 1}},
+            {"id": 4, "op": "refresh_all", "args": {}},
+        ]
+        + [
+            {
+                "id": 5 + i,
+                "op": "perform",
+                "args": {"repo": "acme/api", "number": 1, "action": action_to_dict(action)},
+            }
+            for i, action in enumerate(
+                (
+                    Action("merge", MergeMethod.SQUASH, True),
+                    Action("arm_merge", MergeMethod.MERGE, False),
+                    Action("disarm_merge"),
+                    Action("update"),
+                )
             )
-        )
-    ]
+        ]
+        + [
+            {"id": 9, "op": "add_repo", "args": {"name": "acme/web"}},
+            {"id": 10, "op": "remove_repo", "args": {"name": "acme/web"}},
+            {"id": 11, "op": "set_collapsed", "args": {"owner": "acme", "collapsed": True}},
+            {
+                "id": 12,
+                "op": "save_notifications",
+                "args": {
+                    "repo": "acme/api",
+                    "settings": settings_to_dict(NotifyConfig(script="im")),
+                },
+            },
+            {
+                "id": 13,
+                "op": "send_test",
+                "args": {"repo": "acme/api", "settings": settings_to_dict(NotifyConfig())},
+            },
+            {"id": 14, "op": "notification_form", "args": {}},
+            {
+                "id": 15,
+                "op": "preview_notification",
+                "args": {"repo": "acme/api", "message": "{{PR_NUM}}"},
+            },
+        ]
+    )
     with mock.patch("os.getuid", return_value=UID):
         files["socket-paths.json"] = {
             "protocol": PROTOCOL_VERSION,

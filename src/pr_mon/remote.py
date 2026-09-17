@@ -7,7 +7,15 @@ from pathlib import Path
 
 from pr_mon.backend import BackendError, BackendEvent, BackendStatus, Listener
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, ArmedMerge, RepoInfo, armed_from_dict, repo_from_dict
+from pr_mon.models import (
+    Action,
+    ArmedMerge,
+    NotificationForm,
+    NotificationPreview,
+    RepoInfo,
+    armed_from_dict,
+    repo_from_dict,
+)
 from pr_mon.protocol import (
     PROTOCOL_VERSION,
     ProtocolError,
@@ -15,6 +23,8 @@ from pr_mon.protocol import (
     config_from_dict,
     decode,
     encode,
+    form_from_dict,
+    preview_from_dict,
     settings_to_dict,
     status_from_dict,
 )
@@ -234,6 +244,14 @@ class RemoteBackend:
 
     async def send_test(self, repo: str, settings: NotifyConfig) -> None:
         await self._request("send_test", repo=repo, settings=settings_to_dict(settings))
+
+    async def notification_form(self) -> NotificationForm:
+        return form_from_dict(await self._request("notification_form"))
+
+    async def preview_notification(self, repo: str, message: str) -> NotificationPreview:
+        return preview_from_dict(
+            await self._request("preview_notification", repo=repo, message=message)
+        )
 
     async def shutdown(self) -> None:
         await self._request("shutdown")

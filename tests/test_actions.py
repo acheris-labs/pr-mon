@@ -83,7 +83,7 @@ class ActionsTest(unittest.TestCase):
 class ThinClientTest(unittest.TestCase):
     """The TUI only displays what the backend decided."""
 
-    BACKEND_ONLY = ("actions", "readiness", "github", "service", "server", "tracker")
+    BACKEND_ONLY = ("actions", "readiness", "github", "service", "server", "tracker", "notify")
     CLIENT_MODULES = ("app", "views", "screens", "remote")
 
     def test_client_modules_do_not_import_backend_rules(self):

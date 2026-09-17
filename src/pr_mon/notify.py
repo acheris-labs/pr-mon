@@ -10,8 +10,14 @@ import signal
 from dataclasses import dataclass
 from pathlib import Path
 
-from pr_mon.config import NotifyConfig
-from pr_mon.models import PullRequest, RepoInfo
+from pr_mon.config import EVENT_NAMES, NotifyConfig
+from pr_mon.models import (
+    EventOption,
+    NotificationForm,
+    NotificationPreview,
+    PullRequest,
+    RepoInfo,
+)
 from pr_mon.tracker import Change
 
 APP_TITLE = "pr-mon"
@@ -40,6 +46,21 @@ SAMPLE_VARIABLES = {
     "PR_REASON": "",
 }
 PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
+EVENT_LABELS = {
+    "READY": "Ready (mergeable)",
+    "FAILING": "Failing (checks failed)",
+    "CONFLICT": "Conflict (merge conflicts)",
+    "BLOCKED": "Blocked (reviews / branch protection)",
+    "BEHIND": "Behind base branch",
+    "PENDING": "Pending (checks running)",
+    "NEW": "New PR opened",
+    "MERGED": "Merged by pr-mon",
+    "MERGE_FAILED": "pr-mon auto-merge failed",
+}
+SCRIPT_HELP = (
+    "The message is sent on stdin. PR_* variables are also set in the environment.\n"
+    "Runs without a shell: use full paths or ~ (no $VARS)."
+)
 
 
 @dataclass(frozen=True)
@@ -61,6 +82,20 @@ def sample_variables(repo_name: str) -> dict[str, str]:
 def render(template: str, variables: dict[str, str]) -> str:
     # One pass: substituted values are never scanned for placeholders.
     return PLACEHOLDER.sub(lambda m: variables.get(m.group(1), m.group(0)), template)
+
+
+def notification_form() -> NotificationForm:
+    return NotificationForm(
+        events=tuple(EventOption(name, EVENT_LABELS[name]) for name in EVENT_NAMES),
+        variables=VARIABLE_NAMES,
+        script_help=SCRIPT_HELP,
+    )
+
+
+def preview(repo_name: str, template: str) -> NotificationPreview:
+    return NotificationPreview(
+        render(template, sample_variables(repo_name)), tuple(unknown_placeholders(template))
+    )
 
 
 def unknown_placeholders(template: str) -> list[str]:

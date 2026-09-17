@@ -1,6 +1,8 @@
 import unittest
+from unittest import mock
 
 from pr_mon.models import repo_from_dict
+from pr_mon.server import DaemonServer
 from tests.protocol_fixtures import DIRECTORY, build, render
 
 
@@ -17,6 +19,10 @@ class ProtocolFixturesTest(unittest.TestCase):
                 self.assertEqual(
                     (DIRECTORY / name).read_text(), render(content), "run `make fixtures`"
                 )
+
+    def test_requests_cover_every_op_but_shutdown(self):
+        ops = {request["op"] for request in build()["requests.json"]}
+        self.assertEqual(ops, set(DaemonServer(mock.Mock(), DIRECTORY)._ops) - {"shutdown"})
 
     def test_snapshot_covers_every_status_and_action(self):
         repos = build()["snapshot-response.json"]["result"]["repos"]

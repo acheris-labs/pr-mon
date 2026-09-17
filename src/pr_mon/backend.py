@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, ArmedMerge, RepoInfo
+from pr_mon.models import Action, ArmedMerge, NotificationForm, NotificationPreview, RepoInfo
 
 
 class BackendError(Exception):
@@ -67,5 +67,9 @@ class Backend(Protocol):
     async def save_notifications(self, repo: str, settings: NotifyConfig) -> None: ...
 
     async def send_test(self, repo: str, settings: NotifyConfig) -> None: ...
+
+    async def notification_form(self) -> NotificationForm: ...
+
+    async def preview_notification(self, repo: str, message: str) -> NotificationPreview: ...
 
     async def shutdown(self) -> None: ...

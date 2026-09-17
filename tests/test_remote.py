@@ -238,6 +238,16 @@ class RemoteBackendTest(ServerTestCase):
             await backend.connect("9.9.9")
         self.assertTrue(ctx.exception.merging)
 
+    async def test_notification_form_and_preview(self):
+        await self.serve({"acme/api": make_repo("acme/api")})
+        backend = await self.remote()
+        form = await backend.notification_form()
+        self.assertEqual(form.events[0].name, "READY")
+        self.assertIn("PR_REASON", form.variables)
+        self.assertIn("stdin", form.script_help)
+        preview = await backend.preview_notification("acme/api", "{{PR_REPO}} {{NOPE}}")
+        self.assertEqual((preview.text, preview.unknown), ("acme/api {{NOPE}}", ("NOPE",)))
+
     async def test_protocol_mismatch_raises_before_snapshot(self):
         await self.serve({"acme/api": make_repo("acme/api")})
         original = self.server._hello

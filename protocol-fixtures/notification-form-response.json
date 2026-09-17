@@ -1,0 +1,56 @@
+{
+  "id": 4,
+  "ok": true,
+  "result": {
+    "events": [
+      {
+        "name": "READY",
+        "label": "Ready (mergeable)"
+      },
+      {
+        "name": "FAILING",
+        "label": "Failing (checks failed)"
+      },
+      {
+        "name": "CONFLICT",
+        "label": "Conflict (merge conflicts)"
+      },
+      {
+        "name": "BLOCKED",
+        "label": "Blocked (reviews / branch protection)"
+      },
+      {
+        "name": "BEHIND",
+        "label": "Behind base branch"
+      },
+      {
+        "name": "PENDING",
+        "label": "Pending (checks running)"
+      },
+      {
+        "name": "NEW",
+        "label": "New PR opened"
+      },
+      {
+        "name": "MERGED",
+        "label": "Merged by pr-mon"
+      },
+      {
+        "name": "MERGE_FAILED",
+        "label": "pr-mon auto-merge failed"
+      }
+    ],
+    "variables": [
+      "PR_REPO",
+      "PR_NUM",
+      "PR_TITLE",
+      "PR_AUTHOR",
+      "PR_BRANCH",
+      "PR_TARGET",
+      "PR_STATE",
+      "PR_URL",
+      "PR_REASON"
+    ],
+    "script_help": "The message is sent on stdin. PR_* variables are also set in the environment.\nRuns without a shell: use full paths or ~ (no $VARS)."
+  }
+}
