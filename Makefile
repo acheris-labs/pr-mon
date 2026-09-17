@@ -1,5 +1,5 @@
 .PHONY: install run test lint fmt clean tool-install fixtures \
-	swift-test xcode app app-install
+	swift-test xcode app app-install go-test go-lint go-build
 
 APP_BUILD := macos/build
 APP := $(APP_BUILD)/Build/Products/Release/PrMon.app
@@ -49,3 +49,15 @@ app-install: app
 	rm -rf ~/Applications/PrMon.app
 	cp -R $(APP) ~/Applications/
 	@echo "installed ~/Applications/PrMon.app"
+
+# ----- Go rewrite (in progress: cmd/, internal/) -----
+
+go-test:
+	go test ./...
+
+go-lint:
+	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; echo "run gofmt -w"; exit 1; }
+	go vet ./...
+
+go-build:
+	go build -o build/pr-mon ./cmd/pr-mon

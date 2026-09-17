@@ -12,3 +12,4 @@ macos/build/
 macos/PrMon/PrMon.xcodeproj/
 macos/PrMon/PrMon/Info.plist
 xcuserdata/
+build/
