@@ -21,6 +21,12 @@ CHECKING = {"mergeable": "UNKNOWN", "merge_state": "UNKNOWN"}
 ON = NotifyConfig(script_enabled=True, script="im")
 
 
+def auto_kind(monitor):
+    """The kind the first PR's `a` menu entry would send."""
+    pr = monitor.repos["acme/api"].prs[0]
+    return next(o.kind for o in pr.actions if o.key == "auto_merge")
+
+
 class MonitorTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -345,7 +351,10 @@ class ArmedMergeTest(MonitorTestCase):
             self.toasts(),
         )
         self.assertEqual(self.kinds()[-2:], ["toast", "repo"])
+        self.assertEqual(auto_kind(m), "disarm_merge")
         await m.perform("acme/api", 1, Action("disarm_merge"))
+        # This repo allows GitHub's own auto-merge, so that's what `a` offers again.
+        self.assertEqual(auto_kind(m), "auto_merge_on")
         self.assertEqual(m.armed("acme/api"), {})
         self.assertEqual(load_state(self.state_path)[0].armed, {})
         self.assertIn(("information", "Cancelled merge when ready for acme/api#1"), self.toasts())

@@ -1,0 +1,29 @@
+{
+  "event": "config",
+  "data": {
+    "config": {
+      "repos": [
+        "acme/api",
+        "acme/web",
+        "Textualize/rich"
+      ],
+      "poll_interval": 60,
+      "notifications": {
+        "acme/api": {
+          "message": "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}",
+          "events": [
+            "READY",
+            "FAILING",
+            "CONFLICT",
+            "MERGED",
+            "MERGE_FAILED"
+          ],
+          "include_drafts": false,
+          "script_enabled": true,
+          "script": "~/bin/im",
+          "desktop_enabled": false
+        }
+      }
+    }
+  }
+}

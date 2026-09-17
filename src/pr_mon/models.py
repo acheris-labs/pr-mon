@@ -25,29 +25,11 @@ class MergeMethod(StrEnum):
     REBASE = "REBASE"
 
 
-FAILED_CHECK_STATES = frozenset(
-    {"FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"}
-)
-PENDING_CHECK_STATES = frozenset(
-    {"PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"}
-)
-READY_MERGE_STATES = frozenset({"CLEAN", "HAS_HOOKS", "UNSTABLE"})
-KNOWN_MERGE_STATES = READY_MERGE_STATES | {"BEHIND", "BLOCKED", "DIRTY", "DRAFT", "UNKNOWN"}
-
-
 @dataclass(frozen=True)
 class Check:
     name: str
     state: str
     started_at: str | None = None
-
-    @property
-    def failed(self) -> bool:
-        return self.state in FAILED_CHECK_STATES
-
-    @property
-    def pending(self) -> bool:
-        return self.state in PENDING_CHECK_STATES
 
 
 @dataclass(frozen=True)
@@ -98,6 +80,20 @@ class AutoMerge:
 
 
 @dataclass(frozen=True)
+class ActionOption:
+    """One entry of a PR's action menu, as the backend decides it."""
+
+    key: str  # "merge" | "auto_merge" | "update": the menu slot
+    kind: str  # the Action kind to send
+    label: str
+    available: bool
+    reason: str | None = None  # why it is unavailable
+    note: str | None = None
+    needs_method: bool = False  # ask which MergeMethod (from the repo's merge_methods)
+    offers_delete_branch: bool = False  # offer deleting the head branch (default on)
+
+
+@dataclass(frozen=True)
 class Reason:
     text: str
     level: str  # "error" | "warning" | "info"
@@ -125,72 +121,12 @@ class PullRequest:
     auto_merge: AutoMerge | None = None
     last_commit_at: str | None = None
     head_sha: str | None = None
-
-    @property
-    def last_check_started_at(self) -> str | None:
-        # ISO-8601 UTC timestamps from GitHub sort correctly as strings.
-        return max((c.started_at for c in self.checks if c.started_at), default=None)
-
-    @property
-    def strictly_ready(self) -> bool:
-        """Safe to merge unattended: mergeable and no check failing, required or not."""
-        return (
-            self.status == Status.READY
-            and self.merge_state in ("CLEAN", "HAS_HOOKS")
-            and self.check_state not in ("FAILURE", "ERROR")
-            and not any(check.failed for check in self.checks)
-        )
-
-    @property
-    def status(self) -> Status:
-        if self.is_draft:
-            return Status.DRAFT
-        if self.mergeable == "UNKNOWN" or self.merge_state == "UNKNOWN":
-            return Status.CHECKING
-        if self.mergeable == "CONFLICTING" or self.merge_state == "DIRTY":
-            return Status.CONFLICT
-        if self.check_state in ("FAILURE", "ERROR") and self.merge_state != "UNSTABLE":
-            return Status.FAILING
-        if self.check_state in ("PENDING", "EXPECTED"):
-            return Status.PENDING
-        if self.merge_state == "BEHIND":
-            return Status.BEHIND
-        if self.merge_state in READY_MERGE_STATES:
-            return Status.READY
-        return Status.BLOCKED
-
-    @property
-    def reasons(self) -> list[Reason]:
-        reasons = []
-        if self.is_draft:
-            reasons.append(Reason("Draft", "info"))
-        if self.mergeable == "UNKNOWN" or self.merge_state == "UNKNOWN":
-            reasons.append(Reason("GitHub is still computing mergeability", "info"))
-        if self.mergeable == "CONFLICTING" or self.merge_state == "DIRTY":
-            reasons.append(Reason("Merge conflicts", "error"))
-        check_level = "warning" if self.merge_state == "UNSTABLE" else "error"
-        for check in self.checks:
-            if check.failed:
-                reasons.append(Reason(f"Check failed: {check.name}", check_level))
-        hidden = self.checks_total - len(self.checks)
-        if hidden > 0:
-            reasons.append(Reason(f"+{hidden} more checks not shown", "info"))
-        pending = sum(1 for check in self.checks if check.pending)
-        if pending:
-            reasons.append(Reason(f"{pending} checks pending", "warning"))
-        if self.review_decision == "CHANGES_REQUESTED":
-            reasons.append(Reason("Changes requested", "error"))
-        elif self.review_decision == "REVIEW_REQUIRED":
-            reasons.append(Reason("Review required", "warning"))
-        if self.merge_state == "BEHIND":
-            reasons.append(Reason("Behind base branch", "warning"))
-        if self.merge_state not in KNOWN_MERGE_STATES:
-            reasons.append(Reason(f"Merge state: {self.merge_state}", "warning"))
-        elif self.status == Status.BLOCKED and not any(
-            r.level in ("error", "warning") for r in reasons
-        ):
-            reasons.append(Reason("Blocked by branch protection", "error"))
-        return reasons
+    # Filled in by the backend (readiness.py, actions.py); clients only display them.
+    status: Status = Status.CHECKING
+    reasons: tuple[Reason, ...] = ()
+    strictly_ready: bool = False
+    last_check_started_at: str | None = None
+    actions: tuple[ActionOption, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -201,66 +137,6 @@ class RepoInfo:
     prs: tuple[PullRequest, ...]
     pr_total: int
     auto_merge_allowed: bool = False
-
-
-def _parse_check(node: dict) -> Check:
-    if node.get("__typename") == "StatusContext":
-        return Check(node["context"], node["state"], node.get("createdAt"))
-    started_at = node.get("startedAt")
-    if node.get("status") != "COMPLETED":
-        return Check(node["name"], "PENDING", started_at)
-    return Check(node["name"], node.get("conclusion") or "PENDING", started_at)
-
-
-def _parse_pr(node: dict) -> PullRequest:
-    commits = node["commits"]["nodes"]
-    commit = commits[0]["commit"] if commits else {}
-    rollup = commit.get("statusCheckRollup")
-    contexts = rollup["contexts"] if rollup else {"nodes": [], "totalCount": 0}
-    auto = node.get("autoMergeRequest")
-    return PullRequest(
-        id=node["id"],
-        number=node["number"],
-        title=node["title"],
-        url=node["url"],
-        author=(node.get("author") or {}).get("login", "ghost"),
-        created_at=node["createdAt"],
-        is_draft=node["isDraft"],
-        head_ref=node["headRefName"],
-        base_ref=node["baseRefName"],
-        head_ref_id=(node.get("headRef") or {}).get("id"),
-        head_repo=(node.get("headRepository") or {}).get("nameWithOwner"),
-        mergeable=node["mergeable"],
-        merge_state=node["mergeStateStatus"],
-        review_decision=node.get("reviewDecision"),
-        check_state=rollup["state"] if rollup else None,
-        checks=tuple(_parse_check(c) for c in contexts["nodes"] if c),
-        checks_total=contexts["totalCount"],
-        auto_merge=AutoMerge(
-            MergeMethod(auto["mergeMethod"]), (auto.get("enabledBy") or {}).get("login", "ghost")
-        )
-        if auto
-        else None,
-        last_commit_at=commit.get("committedDate"),
-        head_sha=commit.get("oid"),
-    )
-
-
-def parse_repo(data: dict) -> RepoInfo:
-    allowed = {
-        MergeMethod.SQUASH: data["squashMergeAllowed"],
-        MergeMethod.MERGE: data["mergeCommitAllowed"],
-        MergeMethod.REBASE: data["rebaseMergeAllowed"],
-    }
-    prs = data["pullRequests"]
-    return RepoInfo(
-        name=data["nameWithOwner"],
-        merge_methods=tuple(method for method, ok in allowed.items() if ok),
-        delete_branch_on_merge=data["deleteBranchOnMerge"],
-        prs=tuple(_parse_pr(node) for node in prs["nodes"]),
-        pr_total=prs["totalCount"],
-        auto_merge_allowed=data.get("autoMergeAllowed", False),
-    )
 
 
 def repo_to_dict(repo: RepoInfo) -> dict:
@@ -274,6 +150,9 @@ def repo_from_dict(data: dict) -> RepoInfo:
         return PullRequest(
             **{
                 **pr,
+                "status": Status(pr["status"]),
+                "reasons": tuple(Reason(**r) for r in pr["reasons"]),
+                "actions": tuple(ActionOption(**a) for a in pr["actions"]),
                 "checks": tuple(Check(**c) for c in pr["checks"]),
                 "auto_merge": AutoMerge(MergeMethod(auto["method"]), auto["enabled_by"])
                 if auto

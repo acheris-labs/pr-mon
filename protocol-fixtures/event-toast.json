@@ -1,0 +1,7 @@
+{
+  "event": "toast",
+  "data": {
+    "message": "Merged acme/api#1 (squash)",
+    "severity": "information"
+  }
+}

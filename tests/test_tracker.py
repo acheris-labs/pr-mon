@@ -1,7 +1,8 @@
 import copy
 import unittest
 
-from pr_mon.models import Status, parse_repo
+from pr_mon.github import parse_repo
+from pr_mon.models import Status
 from pr_mon.tracker import Change, Event, EventKind, Tracker
 from tests.fixtures import raw_pr, raw_repo
 

@@ -1,0 +1,477 @@
+{
+  "event": "repo",
+  "data": {
+    "name": "acme/api",
+    "repo": {
+      "name": "acme/api",
+      "merge_methods": [
+        "SQUASH",
+        "MERGE",
+        "REBASE"
+      ],
+      "delete_branch_on_merge": false,
+      "prs": [
+        {
+          "id": "PR_1",
+          "number": 1,
+          "title": "Ready to go 🚀",
+          "url": "https://github.com/acme/api/pull/1",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": false,
+          "head_ref": "feature-1",
+          "base_ref": "main",
+          "head_ref_id": "REF_1",
+          "head_repo": "acme/api",
+          "mergeable": "MERGEABLE",
+          "merge_state": "CLEAN",
+          "review_decision": null,
+          "check_state": "SUCCESS",
+          "checks": [],
+          "checks_total": 0,
+          "auto_merge": null,
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "READY",
+          "reasons": [],
+          "strictly_ready": true,
+          "last_check_started_at": null,
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": true,
+              "reason": null,
+              "note": null,
+              "needs_method": true,
+              "offers_delete_branch": true
+            },
+            {
+              "key": "auto_merge",
+              "kind": "auto_merge_on",
+              "label": "Auto-merge",
+              "available": false,
+              "reason": "already mergeable — use m",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            }
+          ]
+        },
+        {
+          "id": "PR_2",
+          "number": 2,
+          "title": "PR 2",
+          "url": "https://github.com/acme/api/pull/2",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": false,
+          "head_ref": "feature-2",
+          "base_ref": "main",
+          "head_ref_id": "REF_1",
+          "head_repo": "acme/api",
+          "mergeable": "MERGEABLE",
+          "merge_state": "BLOCKED",
+          "review_decision": null,
+          "check_state": "PENDING",
+          "checks": [
+            {
+              "name": "ci",
+              "state": "PENDING",
+              "started_at": "2026-09-15T01:30:00Z"
+            }
+          ],
+          "checks_total": 1,
+          "auto_merge": null,
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "PENDING",
+          "reasons": [
+            {
+              "text": "1 checks pending",
+              "level": "warning"
+            }
+          ],
+          "strictly_ready": false,
+          "last_check_started_at": "2026-09-15T01:30:00Z",
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": false,
+              "reason": "PENDING: 1 checks pending",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "auto_merge",
+              "kind": "auto_merge_on",
+              "label": "Enable auto-merge",
+              "available": true,
+              "reason": null,
+              "note": "branch won't be deleted: repo doesn't auto-delete",
+              "needs_method": true,
+              "offers_delete_branch": false
+            }
+          ]
+        },
+        {
+          "id": "PR_3",
+          "number": 3,
+          "title": "PR 3",
+          "url": "https://github.com/acme/api/pull/3",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": false,
+          "head_ref": "feature-3",
+          "base_ref": "main",
+          "head_ref_id": "REF_1",
+          "head_repo": "acme/api",
+          "mergeable": "MERGEABLE",
+          "merge_state": "BLOCKED",
+          "review_decision": null,
+          "check_state": "FAILURE",
+          "checks": [
+            {
+              "name": "lint",
+              "state": "FAILURE",
+              "started_at": "2026-09-15T01:30:00Z"
+            },
+            {
+              "name": "deploy",
+              "state": "SUCCESS",
+              "started_at": "2026-09-15T01:00:00Z"
+            }
+          ],
+          "checks_total": 5,
+          "auto_merge": null,
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "FAILING",
+          "reasons": [
+            {
+              "text": "Check failed: lint",
+              "level": "error"
+            },
+            {
+              "text": "+3 more checks not shown",
+              "level": "info"
+            }
+          ],
+          "strictly_ready": false,
+          "last_check_started_at": "2026-09-15T01:30:00Z",
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": false,
+              "reason": "FAILING: Check failed: lint",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "auto_merge",
+              "kind": "auto_merge_on",
+              "label": "Enable auto-merge",
+              "available": true,
+              "reason": null,
+              "note": "branch won't be deleted: repo doesn't auto-delete",
+              "needs_method": true,
+              "offers_delete_branch": false
+            }
+          ]
+        },
+        {
+          "id": "PR_4",
+          "number": 4,
+          "title": "PR 4",
+          "url": "https://github.com/acme/api/pull/4",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": false,
+          "head_ref": "feature-4",
+          "base_ref": "main",
+          "head_ref_id": "REF_1",
+          "head_repo": "acme/api",
+          "mergeable": "CONFLICTING",
+          "merge_state": "DIRTY",
+          "review_decision": null,
+          "check_state": "SUCCESS",
+          "checks": [],
+          "checks_total": 0,
+          "auto_merge": null,
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "CONFLICT",
+          "reasons": [
+            {
+              "text": "Merge conflicts",
+              "level": "error"
+            }
+          ],
+          "strictly_ready": false,
+          "last_check_started_at": null,
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": false,
+              "reason": "CONFLICT: Merge conflicts",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "auto_merge",
+              "kind": "auto_merge_on",
+              "label": "Enable auto-merge",
+              "available": true,
+              "reason": null,
+              "note": "branch won't be deleted: repo doesn't auto-delete",
+              "needs_method": true,
+              "offers_delete_branch": false
+            }
+          ]
+        },
+        {
+          "id": "PR_5",
+          "number": 5,
+          "title": "PR 5",
+          "url": "https://github.com/acme/api/pull/5",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": false,
+          "head_ref": "feature-5",
+          "base_ref": "main",
+          "head_ref_id": "REF_1",
+          "head_repo": "acme/api",
+          "mergeable": "MERGEABLE",
+          "merge_state": "BEHIND",
+          "review_decision": "REVIEW_REQUIRED",
+          "check_state": "SUCCESS",
+          "checks": [],
+          "checks_total": 0,
+          "auto_merge": null,
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "BEHIND",
+          "reasons": [
+            {
+              "text": "Review required",
+              "level": "warning"
+            },
+            {
+              "text": "Behind base branch",
+              "level": "warning"
+            }
+          ],
+          "strictly_ready": false,
+          "last_check_started_at": null,
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": false,
+              "reason": "BEHIND: Review required, Behind base branch",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "auto_merge",
+              "kind": "auto_merge_on",
+              "label": "Enable auto-merge",
+              "available": true,
+              "reason": null,
+              "note": "branch won't be deleted: repo doesn't auto-delete",
+              "needs_method": true,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "update",
+              "kind": "update",
+              "label": "Update branch",
+              "available": true,
+              "reason": null,
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            }
+          ]
+        },
+        {
+          "id": "PR_6",
+          "number": 6,
+          "title": "WIP with a line separator",
+          "url": "https://github.com/acme/api/pull/6",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": true,
+          "head_ref": "feature-6",
+          "base_ref": "main",
+          "head_ref_id": "REF_1",
+          "head_repo": "acme/api",
+          "mergeable": "MERGEABLE",
+          "merge_state": "DRAFT",
+          "review_decision": null,
+          "check_state": "SUCCESS",
+          "checks": [],
+          "checks_total": 0,
+          "auto_merge": null,
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "DRAFT",
+          "reasons": [
+            {
+              "text": "Draft",
+              "level": "info"
+            }
+          ],
+          "strictly_ready": false,
+          "last_check_started_at": null,
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": false,
+              "reason": "DRAFT",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "auto_merge",
+              "kind": "auto_merge_on",
+              "label": "Auto-merge",
+              "available": false,
+              "reason": "draft PR",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            }
+          ]
+        },
+        {
+          "id": "PR_7",
+          "number": 7,
+          "title": "PR 7",
+          "url": "https://github.com/acme/api/pull/7",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": false,
+          "head_ref": "feature-7",
+          "base_ref": "main",
+          "head_ref_id": "REF_1",
+          "head_repo": "acme/api",
+          "mergeable": "UNKNOWN",
+          "merge_state": "UNKNOWN",
+          "review_decision": null,
+          "check_state": null,
+          "checks": [],
+          "checks_total": 0,
+          "auto_merge": null,
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "CHECKING",
+          "reasons": [
+            {
+              "text": "GitHub is still computing mergeability",
+              "level": "info"
+            }
+          ],
+          "strictly_ready": false,
+          "last_check_started_at": null,
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": false,
+              "reason": "CHECKING",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "auto_merge",
+              "kind": "auto_merge_on",
+              "label": "Enable auto-merge",
+              "available": true,
+              "reason": null,
+              "note": "branch won't be deleted: repo doesn't auto-delete",
+              "needs_method": true,
+              "offers_delete_branch": false
+            }
+          ]
+        },
+        {
+          "id": "PR_8",
+          "number": 8,
+          "title": "PR 8",
+          "url": "https://github.com/acme/api/pull/8",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": false,
+          "head_ref": "feature-8",
+          "base_ref": "main",
+          "head_ref_id": null,
+          "head_repo": "acme/api",
+          "mergeable": "MERGEABLE",
+          "merge_state": "BLOCKED",
+          "review_decision": null,
+          "check_state": "PENDING",
+          "checks": [],
+          "checks_total": 0,
+          "auto_merge": {
+            "method": "REBASE",
+            "enabled_by": "carol"
+          },
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "PENDING",
+          "reasons": [],
+          "strictly_ready": false,
+          "last_check_started_at": null,
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": false,
+              "reason": "PENDING",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "auto_merge",
+              "kind": "auto_merge_off",
+              "label": "Disable auto-merge",
+              "available": true,
+              "reason": null,
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            }
+          ]
+        }
+      ],
+      "pr_total": 60,
+      "auto_merge_allowed": true
+    },
+    "error": null,
+    "unseen": [
+      1,
+      5
+    ],
+    "armed": {}
+  }
+}

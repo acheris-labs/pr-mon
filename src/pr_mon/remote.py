@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pr_mon.backend import BackendError, BackendEvent, BackendStatus, Listener
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, ArmedMerge, RepoInfo, armed_from_dict
+from pr_mon.models import Action, ArmedMerge, RepoInfo, armed_from_dict, repo_from_dict
 from pr_mon.protocol import (
     PROTOCOL_VERSION,
     ProtocolError,
@@ -15,7 +15,6 @@ from pr_mon.protocol import (
     config_from_dict,
     decode,
     encode,
-    repo_from_wire,
     settings_to_dict,
     status_from_dict,
 )
@@ -154,7 +153,7 @@ class RemoteBackend:
 
     def _apply_snapshot(self, data: dict) -> None:
         self.config = config_from_dict(data["config"])
-        self.repos = {name: repo_from_wire(repo) for name, repo in data["repos"].items()}
+        self.repos = {name: repo_from_dict(repo) for name, repo in data["repos"].items()}
         self.errors = dict(data["errors"])
         self._unseen = {name: set(numbers) for name, numbers in data["unseen"].items()}
         self._collapsed = set(data["collapsed"])
@@ -171,7 +170,7 @@ class RemoteBackend:
             if data["repo"] is None:
                 self.repos.pop(name, None)
             else:
-                self.repos[name] = repo_from_wire(data["repo"])
+                self.repos[name] = repo_from_dict(data["repo"])
             if data["error"] is None:
                 self.errors.pop(name, None)
             else:

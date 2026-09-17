@@ -1,7 +1,6 @@
 """Test doubles shared by service and TUI tests."""
 
-from pr_mon.github import NotFoundError
-from pr_mon.models import parse_repo
+from pr_mon.github import NotFoundError, parse_repo
 from tests.fixtures import raw_pr, raw_repo
 
 

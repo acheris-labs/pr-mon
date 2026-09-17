@@ -1,0 +1,10 @@
+{
+  "event": "seen",
+  "data": {
+    "name": "acme/api",
+    "unseen": [
+      1,
+      5
+    ]
+  }
+}

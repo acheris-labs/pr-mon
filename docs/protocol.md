@@ -154,8 +154,8 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 
 ### Object: `PullRequest`
 
-The backend computes the last four fields; clients should display them rather
-than reimplement the rules.
+The backend computes the last five fields; clients display them rather than
+reimplement the rules.
 
 | Field | Type | Meaning |
 |:------|:-----|:--------|
@@ -183,6 +183,7 @@ than reimplement the rules.
 | `reasons` | [`Reason`] | Why it is (or isn't) mergeable, in display order. |
 | `strictly_ready` | bool | Safe to merge unattended (what merge when ready waits for). |
 | `last_check_started_at` | timestamp or null | |
+| `actions` | [`ActionOption`] | The PR's action menu, in display order. |
 
 ### Object: `Check`
 
@@ -205,6 +206,25 @@ than reimplement the rules.
 |:------|:-----|:--------|
 | `text` | string | Shown to the user. |
 | `level` | string | `error`, `warning` or `info`. |
+
+### Object: `ActionOption`
+
+One entry of a PR's action menu. Show every entry; an unavailable one is shown
+disabled with its `reason`.
+
+| Field | Type | Meaning |
+|:------|:-----|:--------|
+| `key` | string | Menu slot: `merge`, `auto_merge` or `update` (the TUI's `m`, `a`, `u`). |
+| `kind` | string | The `Action` kind to send when chosen. |
+| `label` | string | Text to show. |
+| `available` | bool | False: show it disabled. |
+| `reason` | string or null | Why it is unavailable. |
+| `note` | string or null | Extra detail to show next to the label. |
+| `needs_method` | bool | Ask for a `MergeMethod` from the repo's `merge_methods` (skip asking when there's only one). |
+| `offers_delete_branch` | bool | Offer deleting the head branch (default on); send the choice as `delete_branch`. |
+
+To act on an entry, send `perform` with
+`{"kind": kind, "method": <chosen or null>, "delete_branch": <choice or false>}`.
 
 ### Object: `ArmedMerge`
 

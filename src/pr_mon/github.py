@@ -7,7 +7,8 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
-from pr_mon.models import MergeMethod, RepoInfo, parse_repo
+from pr_mon.models import AutoMerge, Check, MergeMethod, PullRequest, RepoInfo
+from pr_mon.readiness import assess
 
 API_URL = "https://api.github.com/graphql"
 PR_LIMIT = 50
@@ -256,3 +257,64 @@ class GitHubClient:
 
     async def delete_branch(self, ref_id: str) -> None:
         await self._graphql(DELETE_REF_MUTATION, {"id": ref_id})
+
+
+def _parse_check(node: dict) -> Check:
+    if node.get("__typename") == "StatusContext":
+        return Check(node["context"], node["state"], node.get("createdAt"))
+    started_at = node.get("startedAt")
+    if node.get("status") != "COMPLETED":
+        return Check(node["name"], "PENDING", started_at)
+    return Check(node["name"], node.get("conclusion") or "PENDING", started_at)
+
+
+def _parse_pr(node: dict) -> PullRequest:
+    commits = node["commits"]["nodes"]
+    commit = commits[0]["commit"] if commits else {}
+    rollup = commit.get("statusCheckRollup")
+    contexts = rollup["contexts"] if rollup else {"nodes": [], "totalCount": 0}
+    auto = node.get("autoMergeRequest")
+    pr = PullRequest(
+        id=node["id"],
+        number=node["number"],
+        title=node["title"],
+        url=node["url"],
+        author=(node.get("author") or {}).get("login", "ghost"),
+        created_at=node["createdAt"],
+        is_draft=node["isDraft"],
+        head_ref=node["headRefName"],
+        base_ref=node["baseRefName"],
+        head_ref_id=(node.get("headRef") or {}).get("id"),
+        head_repo=(node.get("headRepository") or {}).get("nameWithOwner"),
+        mergeable=node["mergeable"],
+        merge_state=node["mergeStateStatus"],
+        review_decision=node.get("reviewDecision"),
+        check_state=rollup["state"] if rollup else None,
+        checks=tuple(_parse_check(c) for c in contexts["nodes"] if c),
+        checks_total=contexts["totalCount"],
+        auto_merge=AutoMerge(
+            MergeMethod(auto["mergeMethod"]), (auto.get("enabledBy") or {}).get("login", "ghost")
+        )
+        if auto
+        else None,
+        last_commit_at=commit.get("committedDate"),
+        head_sha=commit.get("oid"),
+    )
+    return assess(pr)
+
+
+def parse_repo(data: dict) -> RepoInfo:
+    allowed = {
+        MergeMethod.SQUASH: data["squashMergeAllowed"],
+        MergeMethod.MERGE: data["mergeCommitAllowed"],
+        MergeMethod.REBASE: data["rebaseMergeAllowed"],
+    }
+    prs = data["pullRequests"]
+    return RepoInfo(
+        name=data["nameWithOwner"],
+        merge_methods=tuple(method for method, ok in allowed.items() if ok),
+        delete_branch_on_merge=data["deleteBranchOnMerge"],
+        prs=tuple(_parse_pr(node) for node in prs["nodes"]),
+        pr_total=prs["totalCount"],
+        auto_merge_allowed=data.get("autoMergeAllowed", False),
+    )

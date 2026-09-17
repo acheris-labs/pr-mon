@@ -473,8 +473,7 @@ class PrMonApp(App):
             if action is not None:
                 self.run_command(self.backend.perform(name, pr.number, action))
 
-        armed = self.backend.armed(name).get(pr.number)
-        self.push_screen(ActionMenuScreen(repo, pr, armed), chosen)
+        self.push_screen(ActionMenuScreen(repo, pr), chosen)
 
     # ----- commands -----
 

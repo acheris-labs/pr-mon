@@ -9,13 +9,22 @@ from unittest import mock
 
 from pr_mon.backend import BackendEvent, BackendStatus
 from pr_mon.config import EVENT_NAMES, Config, NotifyConfig
-from pr_mon.models import Action, ArmedMerge, AutoMerge, Check, MergeMethod, Reason, Status
+from pr_mon.models import (
+    Action,
+    ActionOption,
+    ArmedMerge,
+    AutoMerge,
+    Check,
+    MergeMethod,
+    Reason,
+    Status,
+    repo_to_dict,
+)
 from pr_mon.protocol import (
     ACTION_KINDS,
     EVENT_KINDS,
     PROTOCOL_VERSION,
     event_message,
-    repo_to_wire,
     snapshot,
 )
 from pr_mon.server import DaemonServer
@@ -90,12 +99,13 @@ class ProtocolSpecTest(unittest.TestCase):
             ("Reason", Reason),
             ("ArmedMerge", ArmedMerge),
             ("Action", Action),
+            ("ActionOption", ActionOption),
         ):
             with self.subTest(name=name):
                 self.assertEqual(self.object_fields(name), [f.name for f in fields(cls)])
 
     def test_repo_and_pr_fields(self):
-        wire = repo_to_wire(make_repo("acme/api", (1, {})))
+        wire = repo_to_dict(make_repo("acme/api", (1, {})))
         self.assertEqual(self.object_fields("Repo"), list(wire))
         self.assertEqual(self.object_fields("PullRequest"), list(wire["prs"][0]))
 

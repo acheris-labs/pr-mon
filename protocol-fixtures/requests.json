@@ -1,0 +1,77 @@
+[
+  {
+    "id": 1,
+    "op": "hello",
+    "args": {}
+  },
+  {
+    "id": 2,
+    "op": "snapshot",
+    "args": {}
+  },
+  {
+    "id": 3,
+    "op": "mark_seen",
+    "args": {
+      "name": "acme/api",
+      "number": 1
+    }
+  },
+  {
+    "id": 4,
+    "op": "refresh_all",
+    "args": {}
+  },
+  {
+    "id": 5,
+    "op": "perform",
+    "args": {
+      "repo": "acme/api",
+      "number": 1,
+      "action": {
+        "kind": "merge",
+        "method": "SQUASH",
+        "delete_branch": true
+      }
+    }
+  },
+  {
+    "id": 6,
+    "op": "perform",
+    "args": {
+      "repo": "acme/api",
+      "number": 1,
+      "action": {
+        "kind": "arm_merge",
+        "method": "MERGE",
+        "delete_branch": false
+      }
+    }
+  },
+  {
+    "id": 7,
+    "op": "perform",
+    "args": {
+      "repo": "acme/api",
+      "number": 1,
+      "action": {
+        "kind": "disarm_merge",
+        "method": null,
+        "delete_branch": false
+      }
+    }
+  },
+  {
+    "id": 8,
+    "op": "perform",
+    "args": {
+      "repo": "acme/api",
+      "number": 1,
+      "action": {
+        "kind": "update",
+        "method": null,
+        "delete_branch": false
+      }
+    }
+  }
+]

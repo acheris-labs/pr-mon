@@ -1,0 +1,11 @@
+{
+  "id": 1,
+  "ok": true,
+  "result": {
+    "protocol": 1,
+    "version": "0.0.0-fixture",
+    "pid": 4242,
+    "notifier": "/opt/homebrew/bin/terminal-notifier",
+    "merging": false
+  }
+}

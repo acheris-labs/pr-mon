@@ -8,7 +8,8 @@ from pathlib import Path
 from unittest import mock
 
 from pr_mon.config import NotifyConfig
-from pr_mon.models import Status, parse_repo
+from pr_mon.github import parse_repo
+from pr_mon.models import Status
 from pr_mon.notify import (
     SAMPLE_VARIABLES,
     Notification,

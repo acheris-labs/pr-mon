@@ -10,6 +10,7 @@ from collections.abc import Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pr_mon.actions import with_actions
 from pr_mon.backend import BackendError, BackendEvent, BackendStatus, Listener
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
 from pr_mon.github import GitHubError, RateLimitError
@@ -192,6 +193,7 @@ class Monitor:
     def apply(self, name: str, repo: RepoInfo) -> None:
         if name not in self.config.repos:
             return
+        repo = with_actions(repo, self.armed(name))
         self.repos[name] = repo
         changes = self.tracker.changes(repo)
         settings = self.config.notifications.get(name)
@@ -237,6 +239,12 @@ class Monitor:
         if not entries:
             self.state.armed.pop(name, None)
         self._save_state()
+        self._update_actions(name)
+
+    def _update_actions(self, name: str) -> None:
+        """Rebuild a repo's action menus after its armed merges changed."""
+        if name in self.repos:
+            self.repos[name] = with_actions(self.repos[name], self.armed(name))
 
     async def _auto_merge(self, name: str, pr: PullRequest, merge: ArmedMerge) -> None:
         label = f"{name}#{pr.number}"
@@ -367,6 +375,7 @@ class Monitor:
             merge = ArmedMerge(action.method, action.delete_branch, _now_iso())
             self.state.armed.setdefault(repo, {})[str(number)] = armed_to_dict(merge)
             self._save_state()
+            self._update_actions(repo)
             self._toast(f"pr-mon will merge {label} when it's ready ({action.method.lower()})")
             self._emit("repo", name=repo)
             self._check_armed(repo, info)

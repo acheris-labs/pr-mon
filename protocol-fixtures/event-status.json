@@ -1,0 +1,16 @@
+{
+  "event": "status",
+  "data": {
+    "status": {
+      "connected": true,
+      "pid": 4242,
+      "version": "0.0.0-fixture",
+      "notifier": "/opt/homebrew/bin/terminal-notifier",
+      "last_update": "2026-09-17T12:00:00+00:00",
+      "rate_limited_until": null,
+      "warnings": [
+        "Ignoring unreadable config: example"
+      ]
+    }
+  }
+}

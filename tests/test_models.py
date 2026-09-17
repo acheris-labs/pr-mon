@@ -1,6 +1,7 @@
 import json
 import unittest
 
+from pr_mon.github import parse_repo
 from pr_mon.models import (
     ArmedMerge,
     AutoMerge,
@@ -8,7 +9,6 @@ from pr_mon.models import (
     Status,
     armed_from_dict,
     armed_to_dict,
-    parse_repo,
     repo_from_dict,
     repo_to_dict,
 )
@@ -78,7 +78,7 @@ class StatusTest(unittest.TestCase):
 
 class ReasonsTest(unittest.TestCase):
     def test_ready_has_no_reasons(self):
-        self.assertEqual(pr().reasons, [])
+        self.assertEqual(pr().reasons, ())
 
     def test_draft_reason(self):
         self.assertIn("Draft", texts(pr(is_draft=True)))
@@ -144,7 +144,7 @@ class ReasonsTest(unittest.TestCase):
         self.assertEqual(texts(pr(merge_state="BLOCKED")), ["Blocked by branch protection"])
 
     def test_approved_adds_nothing(self):
-        self.assertEqual(pr(review_decision="APPROVED").reasons, [])
+        self.assertEqual(pr(review_decision="APPROVED").reasons, ())
 
 
 class ParseTest(unittest.TestCase):

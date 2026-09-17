@@ -1,4 +1,4 @@
-.PHONY: install run test lint fmt clean tool-install
+.PHONY: install run test lint fmt clean tool-install fixtures
 
 install:
 	uv sync
@@ -8,6 +8,9 @@ run:
 
 test:
 	uv run python -m unittest discover -s tests -t . -v
+
+fixtures:
+	uv run python -m tests.protocol_fixtures
 
 lint:
 	uv run ruff check .

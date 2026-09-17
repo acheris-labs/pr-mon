@@ -12,20 +12,11 @@ from dataclasses import asdict
 
 from pr_mon.backend import BackendEvent, BackendStatus
 from pr_mon.config import Config, NotifyConfig, parse_notify_config
-from pr_mon.models import (
-    Action,
-    MergeMethod,
-    RepoInfo,
-    armed_to_dict,
-    repo_from_dict,
-    repo_to_dict,
-)
+from pr_mon.models import Action, MergeMethod, armed_to_dict, repo_to_dict
 
 # Bump when the wire format changes (see CLAUDE.md); clients refuse other versions.
 PROTOCOL_VERSION = 1
 EVENT_KINDS = ("repos", "repo", "seen", "collapsed", "config", "status", "toast")
-# Derived PR fields the backend sends so clients don't reimplement the readiness rules.
-COMPUTED_PR_FIELDS = ("status", "reasons", "strictly_ready", "last_check_started_at")
 ACTION_KINDS = (
     "merge",
     "update",
@@ -112,24 +103,6 @@ def config_from_dict(data: dict) -> Config:
     )
 
 
-def repo_to_wire(repo: RepoInfo) -> dict:
-    data = repo_to_dict(repo)
-    for pr, wire in zip(repo.prs, data["prs"], strict=True):
-        wire["status"] = str(pr.status)
-        wire["reasons"] = [asdict(reason) for reason in pr.reasons]
-        wire["strictly_ready"] = pr.strictly_ready
-        wire["last_check_started_at"] = pr.last_check_started_at
-    return data
-
-
-def repo_from_wire(data: dict) -> RepoInfo:
-    prs = [
-        {key: value for key, value in pr.items() if key not in COMPUTED_PR_FIELDS}
-        for pr in data["prs"]
-    ]
-    return repo_from_dict({**data, "prs": prs})
-
-
 def _unseen(backend, name: str) -> list[int]:
     return sorted(backend.unseen(name))
 
@@ -142,7 +115,7 @@ def snapshot(backend) -> dict:
     """Everything a client needs to render, from any Backend."""
     return {
         "config": config_to_dict(backend.config),
-        "repos": {name: repo_to_wire(repo) for name, repo in backend.repos.items()},
+        "repos": {name: repo_to_dict(repo) for name, repo in backend.repos.items()},
         "errors": dict(backend.errors),
         "unseen": {name: _unseen(backend, name) for name in backend.config.repos},
         "collapsed": sorted(backend.collapsed),
@@ -159,7 +132,7 @@ def event_message(backend, event: BackendEvent) -> dict:
         repo = backend.repos.get(event.name)
         data = {
             "name": event.name,
-            "repo": repo_to_wire(repo) if repo else None,
+            "repo": repo_to_dict(repo) if repo else None,
             "error": backend.errors.get(event.name),
             "unseen": _unseen(backend, event.name),
             "armed": _armed(backend, event.name),

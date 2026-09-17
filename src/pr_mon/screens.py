@@ -21,7 +21,7 @@ from textual.widgets import (
 )
 
 from pr_mon.config import EVENT_NAMES, NotifyConfig
-from pr_mon.models import Action, ArmedMerge, MergeMethod, PullRequest, RepoInfo, Status
+from pr_mon.models import Action, MergeMethod, PullRequest, RepoInfo
 from pr_mon.notify import VARIABLE_NAMES, render, sample_variables, unknown_placeholders
 
 MODAL_CSS = """
@@ -140,6 +140,10 @@ class MergeMethodScreen(ModalScreen[MergeMethod | None]):
         self.dismiss(None)
 
 
+# (option key, shortcut, widget id) in display order.
+MENU_SLOTS = (("merge", "m", "merge"), ("auto_merge", "a", "auto"), ("update", "u", "update"))
+
+
 class ActionMenuScreen(ModalScreen[Action | None]):
     DEFAULT_CSS = MODAL_CSS.format(name="ActionMenuScreen")
     BINDINGS = [
@@ -149,128 +153,65 @@ class ActionMenuScreen(ModalScreen[Action | None]):
         Binding("escape", "cancel", "Close"),
     ]
 
-    def __init__(self, repo: RepoInfo, pr: PullRequest, armed: ArmedMerge | None = None):
+    def __init__(self, repo: RepoInfo, pr: PullRequest):
         super().__init__()
         self.repo = repo
         self.pr = pr
-        self.armed = armed
-
-    @property
-    def can_merge(self) -> bool:
-        return self.pr.status == Status.READY and bool(self.repo.merge_methods)
-
-    @property
-    def can_update(self) -> bool:
-        return self.pr.merge_state == "BEHIND"
-
-    @property
-    def native_auto_merge(self) -> bool:
-        """GitHub's auto-merge; otherwise `a` arms pr-mon's merge-when-ready."""
-        return self.repo.auto_merge_allowed
-
-    @property
-    def can_arm(self) -> bool:
-        return (
-            not self.native_auto_merge
-            and self.armed is None
-            and not self.pr.auto_merge
-            and self.auto_merge_blocker is None
-        )
-
-    @property
-    def auto_merge_blocker(self) -> str | None:
-        """Why auto-merge can't be enabled, or None if it can."""
-        if not self.repo.merge_methods:
-            return "no merge methods allowed"
-        if self.pr.is_draft:
-            return "draft PR"
-        if self.pr.status == Status.READY:
-            return "already mergeable — use m"
-        return None
-
-    def auto_merge_line(self) -> Static:
-        if self.pr.auto_merge:
-            return Static("[b]\\[a][/b] Disable auto-merge", id="auto")
-        if self.armed:
-            return Static("[b]\\[a][/b] Cancel merge when ready (pr-mon)", id="auto")
-        name = "Auto-merge" if self.native_auto_merge else "Merge when ready"
-        blocker = self.auto_merge_blocker
-        if blocker:
-            return Static(Text(f"[a] {name} — unavailable ({blocker})", style="dim"), id="auto")
-        if not self.native_auto_merge:
-            return Static("[b]\\[a][/b] Merge when ready (pr-mon)", id="auto")
-        note = (
-            ""
-            if self.repo.delete_branch_on_merge
-            else " [dim](branch won't be deleted: repo doesn't auto-delete)[/dim]"
-        )
-        return Static(f"[b]\\[a][/b] Enable auto-merge{note}", id="auto")
+        # The backend decides what the menu offers; this screen only shows it.
+        self.options = {option.key: option for option in pr.actions}
 
     @property
     def offers_delete(self) -> bool:
-        return (
-            (self.can_merge or self.can_arm)
-            and not self.repo.delete_branch_on_merge
-            and bool(self.pr.head_ref_id)
-        )
+        return any(option.offers_delete_branch for option in self.options.values())
+
+    def option_line(self, key: str, shortcut: str, widget_id: str) -> Static:
+        option = self.options[key]
+        if not option.available:
+            return Static(
+                Text(f"[{shortcut}] {option.label} — unavailable ({option.reason})", style="dim"),
+                id=widget_id,
+            )
+        note = f" [dim]({option.note})[/dim]" if option.note else ""
+        return Static(f"[b]\\[{shortcut}][/b] {option.label}{note}", id=widget_id)
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(Text(f"#{self.pr.number} {self.pr.title}", style="bold"))
-            if self.can_merge:
-                yield Static("[b]\\[m][/b] Merge", id="merge")
-            else:
-                why = [r.text for r in self.pr.reasons if r.level != "info"]
-                if not self.repo.merge_methods:
-                    why.append("no merge methods allowed")
-                detail = f"{self.pr.status}: {', '.join(why)}" if why else str(self.pr.status)
-                yield Static(Text(f"[m] Merge — unavailable ({detail})", style="dim"), id="merge")
-            yield self.auto_merge_line()
-            if self.can_update:
-                yield Static("[b]\\[u][/b] Update branch", id="update")
+            for key, shortcut, widget_id in MENU_SLOTS:
+                if key in self.options:
+                    yield self.option_line(key, shortcut, widget_id)
             if self.offers_delete:
                 yield Checkbox(f"Delete remote branch {self.pr.head_ref}", value=True, id="delete")
             yield Static("esc: close", classes="hint")
 
-    def _delete_branch(self) -> bool:
-        return self.offers_delete and self.query_one("#delete", Checkbox).value
-
-    def _dismiss_with_method(self, kind: str, delete_branch: bool = False) -> None:
-        """Dismiss with `kind`, asking for a merge method if the repo allows several."""
+    def choose(self, key: str) -> None:
+        option = self.options.get(key)
+        if option is None or not option.available:
+            self.app.bell()
+            return
+        delete_branch = option.offers_delete_branch and self.query_one("#delete", Checkbox).value
+        if not option.needs_method:
+            self.dismiss(Action(option.kind, None, delete_branch))
+            return
         methods = self.repo.merge_methods
         if len(methods) == 1:
-            self.dismiss(Action(kind, methods[0], delete_branch))
+            self.dismiss(Action(option.kind, methods[0], delete_branch))
             return
 
         def chosen(method: MergeMethod | None) -> None:
             if method is not None:
-                self.dismiss(Action(kind, method, delete_branch))
+                self.dismiss(Action(option.kind, method, delete_branch))
 
         self.app.push_screen(MergeMethodScreen(methods), chosen)
 
     def action_merge(self) -> None:
-        if not self.can_merge:
-            self.app.bell()
-            return
-        self._dismiss_with_method("merge", self._delete_branch())
+        self.choose("merge")
 
     def action_auto_merge(self) -> None:
-        if self.pr.auto_merge:
-            self.dismiss(Action("auto_merge_off"))
-        elif self.armed:
-            self.dismiss(Action("disarm_merge"))
-        elif self.auto_merge_blocker:
-            self.app.bell()
-        elif self.native_auto_merge:
-            self._dismiss_with_method("auto_merge_on")
-        else:
-            self._dismiss_with_method("arm_merge", self._delete_branch())
+        self.choose("auto_merge")
 
     def action_update(self) -> None:
-        if not self.can_update:
-            self.app.bell()
-            return
-        self.dismiss(Action("update"))
+        self.choose("update")
 
     def action_cancel(self) -> None:
         self.dismiss(None)

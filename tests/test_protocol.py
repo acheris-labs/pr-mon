@@ -3,7 +3,7 @@ import unittest
 
 from pr_mon.backend import BackendEvent, BackendStatus
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, ArmedMerge, MergeMethod, Status
+from pr_mon.models import Action, ArmedMerge, MergeMethod, Status, repo_from_dict, repo_to_dict
 from pr_mon.protocol import (
     ProtocolError,
     action_from_dict,
@@ -13,8 +13,6 @@ from pr_mon.protocol import (
     decode,
     encode,
     event_message,
-    repo_from_wire,
-    repo_to_wire,
     settings_from_dict,
     settings_to_dict,
     snapshot,
@@ -80,7 +78,7 @@ class ConversionTest(unittest.TestCase):
             ),
             (2, {}),
         )
-        wire = repo_to_wire(repo)
+        wire = repo_to_dict(repo)
         failing, ready = wire["prs"]
         self.assertEqual(failing["status"], "FAILING")
         self.assertEqual(failing["reasons"], [{"text": "Check failed: ci", "level": "error"}])
@@ -89,7 +87,7 @@ class ConversionTest(unittest.TestCase):
         self.assertTrue(ready["strictly_ready"])
         self.assertEqual(failing["last_check_started_at"], STARTED)
         self.assertIsNone(ready["last_check_started_at"])
-        self.assertEqual(repo_from_wire(json.loads(json.dumps(wire))), repo)
+        self.assertEqual(repo_from_dict(json.loads(json.dumps(wire))), repo)
 
     def test_status(self):
         status = BackendStatus(
