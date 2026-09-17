@@ -61,7 +61,7 @@ def _parse_notifications(data: object) -> tuple[dict[str, NotifyConfig], list[st
     found = {}
     problems = []
     for repo, table in data.items():
-        settings = _parse_repo_notifications(table) if isinstance(table, dict) else None
+        settings = parse_notify_config(table) if isinstance(table, dict) else None
         if settings is None:
             problems.append(f"ignoring invalid notification settings for {repo}")
         else:
@@ -69,7 +69,7 @@ def _parse_notifications(data: object) -> tuple[dict[str, NotifyConfig], list[st
     return found, problems
 
 
-def _parse_repo_notifications(data: dict) -> NotifyConfig | None:
+def parse_notify_config(data: dict) -> NotifyConfig | None:
     """Build NotifyConfig from a TOML table; None if anything is the wrong type."""
     values = {}
     for f in fields(NotifyConfig):
