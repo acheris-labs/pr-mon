@@ -1,8 +1,9 @@
+import json
 import unittest
 
 from pr_mon.backend import BackendEvent, BackendStatus
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, ArmedMerge, MergeMethod
+from pr_mon.models import Action, ArmedMerge, MergeMethod, Status
 from pr_mon.protocol import (
     ProtocolError,
     action_from_dict,
@@ -12,6 +13,8 @@ from pr_mon.protocol import (
     decode,
     encode,
     event_message,
+    repo_from_wire,
+    repo_to_wire,
     settings_from_dict,
     settings_to_dict,
     snapshot,
@@ -19,6 +22,9 @@ from pr_mon.protocol import (
     status_to_dict,
 )
 from tests.fakes import make_repo
+from tests.fixtures import check_run
+
+STARTED = "2026-09-17T10:00:00Z"
 
 
 class FramingTest(unittest.TestCase):
@@ -61,6 +67,29 @@ class ConversionTest(unittest.TestCase):
         )
         with self.assertRaises(ProtocolError):
             action_from_dict({"kind": "explode"})
+
+    def test_repo_wire_carries_computed_fields(self):
+        repo = make_repo(
+            "acme/api",
+            (
+                1,
+                {
+                    "check_state": "FAILURE",
+                    "checks": [check_run("ci", conclusion="FAILURE", started_at=STARTED)],
+                },
+            ),
+            (2, {}),
+        )
+        wire = repo_to_wire(repo)
+        failing, ready = wire["prs"]
+        self.assertEqual(failing["status"], "FAILING")
+        self.assertEqual(failing["reasons"], [{"text": "Check failed: ci", "level": "error"}])
+        self.assertFalse(failing["strictly_ready"])
+        self.assertEqual(ready["status"], Status.READY)
+        self.assertTrue(ready["strictly_ready"])
+        self.assertEqual(failing["last_check_started_at"], STARTED)
+        self.assertIsNone(ready["last_check_started_at"])
+        self.assertEqual(repo_from_wire(json.loads(json.dumps(wire))), repo)
 
     def test_status(self):
         status = BackendStatus(

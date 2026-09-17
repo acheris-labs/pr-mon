@@ -9,7 +9,7 @@ from unittest import mock
 from pr_mon.backend import BackendError
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
 from pr_mon.models import Action, MergeMethod
-from pr_mon.protocol import decode, encode
+from pr_mon.protocol import PROTOCOL_VERSION, decode, encode
 from pr_mon.remote import BackendMismatch, BackendUnavailable, RemoteBackend
 from pr_mon.server import DaemonServer
 from pr_mon.service import Monitor
@@ -114,6 +114,7 @@ class ServerTest(ServerTestCase):
                 "id": 1,
                 "ok": True,
                 "result": {
+                    "protocol": PROTOCOL_VERSION,
                     "version": "1.2.3",
                     "pid": os.getpid(),
                     "notifier": "/x/tn",
@@ -236,6 +237,35 @@ class RemoteBackendTest(ServerTestCase):
         with self.assertRaises(BackendMismatch) as ctx:
             await backend.connect("9.9.9")
         self.assertTrue(ctx.exception.merging)
+
+    async def test_protocol_mismatch_raises_before_snapshot(self):
+        await self.serve({"acme/api": make_repo("acme/api")})
+        original = self.server._hello
+
+        async def other_protocol():
+            return {**await original(), "protocol": 99}
+
+        self.server._ops["hello"] = other_protocol
+        backend = RemoteBackend(self.socket_path)
+        with self.assertRaises(BackendMismatch) as ctx:
+            await backend.connect("1.2.3")
+        self.assertEqual((ctx.exception.version, ctx.exception.protocol), ("1.2.3", 99))
+        self.assertEqual(backend.repos, {})
+
+    async def test_backend_without_protocol_is_a_mismatch(self):
+        await self.serve({"acme/api": make_repo("acme/api")})
+        original = self.server._hello
+
+        async def unversioned():
+            hello = await original()
+            del hello["protocol"]
+            return hello
+
+        self.server._ops["hello"] = unversioned
+        backend = RemoteBackend(self.socket_path)
+        with self.assertRaises(BackendMismatch) as ctx:
+            await backend.connect()
+        self.assertEqual(ctx.exception.protocol, 0)
 
     async def test_unreadable_snapshot_is_an_error(self):
         await self.serve({"acme/api": make_repo("acme/api")})

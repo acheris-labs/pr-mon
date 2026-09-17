@@ -28,6 +28,9 @@ window onto it, so notifications keep coming after you close the window.
 - The header shows `● connected` or `○ disconnected`. If the backend goes
   away, the dashboard says so, keeps the last data on screen, and reconnects
   on its own once the backend is back.
+- Several dashboards can be open at once; they all show the same state.
+- Other clients (e.g. a menu bar app) can use the same socket; the protocol is
+  documented in [docs/protocol.md](docs/protocol.md).
 
 | Command | What it does |
 |---------|--------------|
@@ -165,7 +168,8 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
 - `pr-mon status` — is the backend up, and which version?
 - `~/.local/state/pr-mon/daemon.log` — backend errors, including GitHub auth
   problems (`gh auth login` fixes those; the backend picks up the new token).
-- After upgrading pr-mon, the dashboard offers to restart an older backend.
+- After upgrading pr-mon, the dashboard restarts an older backend by itself
+  (after any merge it is in the middle of).
 
 ## Development
 

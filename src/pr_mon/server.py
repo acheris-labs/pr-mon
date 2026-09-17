@@ -9,6 +9,7 @@ from pathlib import Path
 from pr_mon.backend import BackendError, BackendEvent
 from pr_mon.github import GitHubError
 from pr_mon.protocol import (
+    PROTOCOL_VERSION,
     ProtocolError,
     action_from_dict,
     decode,
@@ -66,6 +67,7 @@ class DaemonServer:
     async def _hello(self) -> dict:
         status = self.monitor.status
         return {
+            "protocol": PROTOCOL_VERSION,
             "version": status.version,
             "pid": status.pid,
             "notifier": status.notifier,

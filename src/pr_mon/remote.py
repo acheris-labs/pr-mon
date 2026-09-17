@@ -7,13 +7,15 @@ from pathlib import Path
 
 from pr_mon.backend import BackendError, BackendEvent, BackendStatus, Listener
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, ArmedMerge, RepoInfo, armed_from_dict, repo_from_dict
+from pr_mon.models import Action, ArmedMerge, RepoInfo, armed_from_dict
 from pr_mon.protocol import (
+    PROTOCOL_VERSION,
     ProtocolError,
     action_to_dict,
     config_from_dict,
     decode,
     encode,
+    repo_from_wire,
     settings_to_dict,
     status_from_dict,
 )
@@ -28,12 +30,13 @@ class BackendUnavailable(BackendError):
 
 
 class BackendMismatch(BackendError):
-    """The daemon runs a different pr-mon version than this client."""
+    """The daemon runs a different pr-mon or protocol version than this client."""
 
-    def __init__(self, version: str, merging: bool):
-        super().__init__(f"backend is running pr-mon {version}")
+    def __init__(self, version: str, merging: bool, protocol: object = PROTOCOL_VERSION):
+        super().__init__(f"backend is running pr-mon {version} (protocol {protocol})")
         self.version = version
         self.merging = merging
+        self.protocol = protocol
 
 
 class RemoteBackend:
@@ -55,8 +58,9 @@ class RemoteBackend:
     # ----- connection -----
 
     async def connect(self, expected_version: str | None = None) -> None:
-        """Connect and load a snapshot. With `expected_version`, refuse a daemon
-        running another version before reading any of its data."""
+        """Connect and load a snapshot. Refuse a daemon speaking another protocol
+        version (or, with `expected_version`, running another pr-mon version)
+        before reading any of its data."""
         try:
             reader, self._writer = await asyncio.open_unix_connection(
                 str(self.socket_path), limit=LINE_LIMIT
@@ -68,8 +72,12 @@ class RemoteBackend:
         try:
             hello = await self._request("hello")
             version = hello.get("version", "")
-            if expected_version is not None and version != expected_version:
-                raise BackendMismatch(version, bool(hello.get("merging")))
+            # Backends older than protocol versioning don't send one.
+            protocol = hello.get("protocol", 0)
+            if protocol != PROTOCOL_VERSION or (
+                expected_version is not None and version != expected_version
+            ):
+                raise BackendMismatch(version, bool(hello.get("merging")), protocol)
             snapshot = await self._request("snapshot")
             try:
                 self._apply_snapshot(snapshot)
@@ -146,7 +154,7 @@ class RemoteBackend:
 
     def _apply_snapshot(self, data: dict) -> None:
         self.config = config_from_dict(data["config"])
-        self.repos = {name: repo_from_dict(repo) for name, repo in data["repos"].items()}
+        self.repos = {name: repo_from_wire(repo) for name, repo in data["repos"].items()}
         self.errors = dict(data["errors"])
         self._unseen = {name: set(numbers) for name, numbers in data["unseen"].items()}
         self._collapsed = set(data["collapsed"])
@@ -163,7 +171,7 @@ class RemoteBackend:
             if data["repo"] is None:
                 self.repos.pop(name, None)
             else:
-                self.repos[name] = repo_from_dict(data["repo"])
+                self.repos[name] = repo_from_wire(data["repo"])
             if data["error"] is None:
                 self.errors.pop(name, None)
             else:
