@@ -209,18 +209,27 @@ func Spawn(paths Paths, timeout time.Duration) (int, error) {
 	if err := command.Start(); err != nil {
 		return 0, err
 	}
-	go command.Wait() // reap it if it exits while we're waiting
+	// Reap it in the background and report through a channel: reading
+	// command.ProcessState while Wait is running is a race.
+	exited := make(chan error, 1)
+	go func() { exited <- command.Wait() }()
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if hello := Info(paths); hello != nil && hello.PID != nil {
 			return *hello.PID, nil
 		}
-		if command.ProcessState != nil {
+		select {
+		case err := <-exited:
+			code := 0
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
+				code = exit.ExitCode()
+			}
 			return 0, fmt.Errorf("backend exited with code %d\n%s",
-				command.ProcessState.ExitCode(), TailLog(paths))
+				code, TailLog(paths))
+		case <-time.After(50 * time.Millisecond):
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
 	return 0, fmt.Errorf("backend did not start within %s\n%s", timeout, TailLog(paths))
 }
