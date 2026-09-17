@@ -51,15 +51,15 @@ METHOD_KEYS = {
 }
 
 
-class AddRepoScreen(ModalScreen[RepoInfo | None]):
-    """Prompt for owner/name; `validate` returns the repo or raises with a message."""
+class AddRepoScreen(ModalScreen[str | None]):
+    """Prompt for owner/name; `add` returns the canonical name or raises with a message."""
 
     DEFAULT_CSS = MODAL_CSS.format(name="AddRepoScreen")
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, validate: Callable[[str], Awaitable[RepoInfo]]):
+    def __init__(self, add: Callable[[str], Awaitable[str]]):
         super().__init__()
-        self.validate = validate
+        self.add = add
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -80,11 +80,11 @@ class AddRepoScreen(ModalScreen[RepoInfo | None]):
     @work(exclusive=True)
     async def check(self, name: str) -> None:
         try:
-            repo = await self.validate(name)
+            added = await self.add(name)
         except Exception as e:  # noqa: BLE001 - any failure is shown to the user
             self.query_one("#error", Static).update(str(e))
             return
-        self.dismiss(repo)
+        self.dismiss(added)
 
     def action_cancel(self) -> None:
         self.dismiss(None)

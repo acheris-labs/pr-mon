@@ -1,7 +1,6 @@
-"""The pr-mon Textual application."""
+"""The pr-mon Textual application: a view onto a Backend."""
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 from rich.text import Text
 from textual import on, work
@@ -11,26 +10,16 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Footer, Header, Static, Tree
 from textual.widgets.tree import TreeNode
 
-from pr_mon.config import Config, NotifyConfig, load_config, save_config
-from pr_mon.github import GitHubError, RateLimitError
-from pr_mon.models import Action, PullRequest, RepoInfo, Status
-from pr_mon.notify import deliver, pr_variables, sample_variables, select_notifications
+from pr_mon.backend import Backend, BackendError, BackendEvent
+from pr_mon.config import Config, NotifyConfig
+from pr_mon.models import Action, PullRequest, RepoInfo, owner_key
 from pr_mon.screens import (
     ActionMenuScreen,
     AddRepoScreen,
     ConfirmScreen,
     NotificationsScreen,
 )
-from pr_mon.state import AppState, load_state, save_state
-from pr_mon.tracker import Tracker
 from pr_mon.views import owner_label, pr_details, pr_row, pr_table_title, repo_label
-
-CHECKING_RETRY_DELAY = 5
-CHECKING_RETRIES = 3
-
-
-def owner_key(repo: str) -> str:
-    return repo.partition("/")[0].lower()
 
 
 class RepoTree(Tree[str]):
@@ -113,23 +102,26 @@ class PrMonApp(App):
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, client, config_path: Path, state_path: Path, notifier: str | None = None):
+    def __init__(self, backend: Backend, owns_backend: bool = False):
+        """`owns_backend`: start and stop an in-process backend with the app."""
         super().__init__()
-        self.client = client
-        self.notifier = notifier
-        # Repos whose first load finished this session; only they can notify.
-        self.loaded_repos: set[str] = set()
-        self.config_path = config_path
-        self.state_path = state_path
-        self.config = Config()
-        self.state = AppState()
-        self.tracker = Tracker(self.state.prs)
-        self.repos: dict[str, RepoInfo] = {}
-        self.errors: dict[str, str] = {}
-        self.paused_until: datetime | None = None
+        self.backend = backend
+        self.owns_backend = owns_backend
         self.shown_repo: str | None = None
         self.repo_nodes: dict[str, TreeNode[str]] = {}
         self.owner_nodes: dict[str, TreeNode[str]] = {}
+
+    @property
+    def config(self) -> Config:
+        return self.backend.config
+
+    @property
+    def repos(self) -> dict[str, RepoInfo]:
+        return self.backend.repos
+
+    @property
+    def errors(self) -> dict[str, str]:
+        return self.backend.errors
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -141,26 +133,57 @@ class PrMonApp(App):
         # Only one footer key can dock right, so the palette hint gives way to Actions.
         yield PrMonFooter(show_command_palette=False)
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         tree = self.query_one("#repos", RepoTree)
         tree.border_title = "Repos"
         tree.show_root = False
         self.query_one("#details").border_title = "Details"
         table = self.query_one("#prs", PrTable)
         table.add_columns("", "#", "Status", "Author", "Title")
-        self.config, config_warning = load_config(self.config_path)
-        self.state, state_warning = load_state(self.state_path)
-        self.tracker = Tracker(self.state.prs)
-        for warning in (config_warning, state_warning):
-            if warning:
-                self.notify(warning, severity="warning", timeout=15)
+        self.backend.add_listener(self.on_backend_event)
+        if self.owns_backend:
+            await self.backend.start()
+        for warning in self.backend.status.warnings:
+            self.notify(warning, severity="warning", timeout=15)
         self.render_repo_tree()
         self.render_prs()
-        self.action_refresh_all()
-        self.set_interval(self.config.poll_interval, self.action_refresh_all)
+        self.render_status()
 
     async def on_unmount(self) -> None:
-        await self.client.aclose()
+        if self.owns_backend:
+            await self.backend.stop()
+
+    # ----- backend events -----
+
+    def on_backend_event(self, event: BackendEvent) -> None:
+        if event.kind == "repos":
+            self.render_repo_tree()
+            self.render_prs()
+        elif event.kind == "repo":
+            self.render_repo_label(event.name)
+            if event.name == self.selected_repo:
+                self.render_prs()
+                if self.query_one("#prs", PrTable).has_focus:
+                    self.mark_current_seen()
+        elif event.kind == "seen":
+            self.render_repo_label(event.name)
+        elif event.kind == "collapsed":
+            self.sync_collapsed()
+        elif event.kind == "status":
+            self.render_status()
+        elif event.kind == "toast":
+            self.notify(event.message, severity=event.severity)
+
+    def run_command(self, command) -> None:
+        """Run a backend coroutine in the background; show BackendError as a toast."""
+
+        async def runner() -> None:
+            try:
+                await command
+            except BackendError as e:
+                self.notify(str(e), severity="error")
+
+        self.run_worker(runner(), group="commands")
 
     # ----- selection helpers -----
 
@@ -169,10 +192,9 @@ class PrMonApp(App):
         node = self.query_one("#repos", RepoTree).cursor_node
         if node is None or node.data is None or "/" not in node.data:
             return None
+        if node.data not in self.config.repos:
+            return None
         return node.data
-
-    def save_state(self) -> None:
-        save_state(self.state_path, self.state)
 
     @property
     def selected_pr(self) -> PullRequest | None:
@@ -184,9 +206,18 @@ class PrMonApp(App):
 
     # ----- rendering -----
 
+    def render_status(self) -> None:
+        status = self.backend.status
+        if status.rate_limited_until:
+            local = datetime.fromisoformat(status.rate_limited_until).astimezone()
+            self.sub_title = f"Rate limited until {local.strftime('%H:%M:%S')}"
+        elif status.last_update:
+            local = datetime.fromisoformat(status.last_update).astimezone()
+            self.sub_title = f"Updated {local.strftime('%H:%M:%S')}"
+
     def unseen_prs(self, name: str) -> list[PullRequest]:
         repo = self.repos.get(name)
-        unseen = self.tracker.unseen(name)
+        unseen = self.backend.unseen(name)
         return [pr for pr in repo.prs if pr.number in unseen] if repo else []
 
     def repo_node_label(self, name: str) -> Text:
@@ -204,6 +235,7 @@ class PrMonApp(App):
         tree = self.query_one("#repos", RepoTree)
         current = tree.cursor_node.data if tree.cursor_node else None
         target = select or current
+        collapsed = self.backend.collapsed
         tree.clear()
         self.repo_nodes.clear()
         self.owner_nodes.clear()
@@ -211,9 +243,7 @@ class PrMonApp(App):
             key = owner_key(name)
             if key not in self.owner_nodes:
                 self.owner_nodes[key] = tree.root.add(
-                    self.owner_node_label(key),
-                    data=key,
-                    expand=key not in self.state.collapsed,
+                    self.owner_node_label(key), data=key, expand=key not in collapsed
                 )
             self.repo_nodes[name] = self.owner_nodes[key].add_leaf(
                 self.repo_node_label(name), data=name
@@ -229,9 +259,17 @@ class PrMonApp(App):
                 node.parent.expand()
             self.call_after_refresh(tree.move_cursor, node)
 
+    def sync_collapsed(self) -> None:
+        collapsed = self.backend.collapsed
+        for key, node in self.owner_nodes.items():
+            if key in collapsed and node.is_expanded:
+                node.collapse()
+            elif key not in collapsed and node.is_collapsed:
+                node.expand()
+
     def render_repo_label(self, name: str) -> None:
         node = self.repo_nodes.get(name)
-        if node is not None:
+        if node is not None and name in self.config.repos:
             node.set_label(self.repo_node_label(name))
             key = owner_key(name)
             self.owner_nodes[key].set_label(self.owner_node_label(key))
@@ -244,7 +282,7 @@ class PrMonApp(App):
         table.clear()
         table.border_title = pr_table_title(repo)
         if repo:
-            unseen = self.tracker.unseen(repo.name)
+            unseen = self.backend.unseen(repo.name)
             for pr in repo.prs:
                 table.add_row(*pr_row(pr, pr.number in unseen), key=str(pr.number))
             if repo.prs:
@@ -273,14 +311,13 @@ class PrMonApp(App):
 
     def mark_current_seen(self) -> None:
         name, pr = self.selected_repo, self.selected_pr
-        if name and pr and self.tracker.mark_seen(name, pr.number):
-            self.save_state()
-            self.render_repo_label(name)
+        if name and pr and pr.number in self.backend.unseen(name):
             table = self.query_one("#prs", PrTable)
             for column, cell in enumerate(pr_row(pr, False)):
                 table.update_cell_at((table.cursor_row, column), cell)
+            self.run_command(self.backend.mark_seen(name, pr.number))
 
-    # ----- events -----
+    # ----- UI events -----
 
     @on(Tree.NodeHighlighted, "#repos")
     def repo_highlighted(self) -> None:
@@ -302,14 +339,9 @@ class PrMonApp(App):
         key = event.node.data
         if key is None or "/" in key:
             return
-        collapsed = set(self.state.collapsed)
-        if event.node.is_collapsed:
-            collapsed.add(key)
-        else:
-            collapsed.discard(key)
-        if collapsed != set(self.state.collapsed):
-            self.state.collapsed = sorted(collapsed)
-            self.save_state()
+        collapsed = event.node.is_collapsed
+        if collapsed != (key in self.backend.collapsed):
+            self.run_command(self.backend.set_collapsed(key, collapsed))
 
     @on(DataTable.RowHighlighted, "#prs")
     def pr_highlighted(self) -> None:
@@ -326,81 +358,14 @@ class PrMonApp(App):
 
         def chosen(action: Action | None) -> None:
             if action is not None:
-                self.perform(repo, pr, action)
+                self.run_command(self.backend.perform(name, pr.number, action))
 
         self.push_screen(ActionMenuScreen(repo, pr), chosen)
 
-    # ----- polling -----
+    # ----- commands -----
 
     def action_refresh_all(self) -> None:
-        if self.paused_until and datetime.now(UTC) < self.paused_until:
-            return
-        self.paused_until = None
-        for name in self.config.repos:
-            self.refresh_repo(name)
-
-    def refresh_repo(self, name: str, attempt: int = 0) -> None:
-        self.run_worker(self._refresh(name, attempt), group=f"repo:{name}", exclusive=True)
-
-    async def _refresh(self, name: str, attempt: int = 0) -> None:
-        try:
-            repo = await self.client.fetch_repo(name)
-        except RateLimitError as e:
-            self.paused_until = e.reset_at
-            local = e.reset_at.astimezone().strftime("%H:%M:%S")
-            self.sub_title = f"Rate limited until {local}"
-            return
-        except GitHubError as e:
-            self.errors[name] = str(e)
-        else:
-            self.errors.pop(name, None)
-            self.apply(name, repo)
-            if attempt < CHECKING_RETRIES and any(pr.status == Status.CHECKING for pr in repo.prs):
-                self.set_timer(CHECKING_RETRY_DELAY, lambda: self.refresh_repo(name, attempt + 1))
-            self.sub_title = f"Updated {datetime.now().strftime('%H:%M:%S')}"
-        self.render_repo_label(name)
-        if name == self.selected_repo:
-            self.render_details()
-
-    def apply(self, name: str, repo: RepoInfo) -> None:
-        if name not in self.config.repos:
-            return
-        self.repos[name] = repo
-        changes = self.tracker.changes(repo)
-        settings = self.config.notifications.get(name)
-        if settings is not None and name in self.loaded_repos:
-            for found in select_notifications(repo, changes, settings):
-                variables = pr_variables(found.repo, found.pr, found.state)
-                self.send_notification(settings, variables)
-        self.loaded_repos.add(name)
-        if self.tracker.update(repo):
-            owner = self.owner_nodes.get(owner_key(name))
-            if owner is not None and owner.is_collapsed:
-                owner.expand()
-        self.save_state()
-        if name == self.selected_repo:
-            self.render_prs()
-            if self.query_one("#prs", PrTable).has_focus:
-                self.mark_current_seen()
-
-    # ----- notifications -----
-
-    @work(group="notifications")
-    async def send_notification(
-        self, settings: NotifyConfig, variables: dict[str, str], is_test: bool = False
-    ) -> None:
-        results = await deliver(settings, self.notifier, variables)
-        for channel, error in results:
-            if error:
-                self.notify(
-                    f"{channel.capitalize()} notification failed: {error}", severity="warning"
-                )
-            elif is_test:
-                self.notify(f"Test {channel} notification sent")
-        if is_test and not results:
-            self.notify(
-                "Nothing to send: enable Script or Desktop notifications", severity="warning"
-            )
+        self.run_command(self.backend.refresh_all())
 
     def action_notifications(self) -> None:
         name = self.selected_repo
@@ -410,64 +375,21 @@ class PrMonApp(App):
 
         def saved(settings: NotifyConfig | None) -> None:
             if settings is not None:
-                self.config.notifications[name] = settings
-                save_config(self.config_path, self.config)
-                self.notify(f"Notification settings saved for {name}")
+                self.run_command(self.backend.save_notifications(name, settings))
 
         def send_test(settings: NotifyConfig) -> None:
-            self.send_notification(settings, sample_variables(name), is_test=True)
+            self.run_command(self.backend.send_test(name, settings))
 
         current = self.config.notifications.get(name, NotifyConfig())
-        screen = NotificationsScreen(name, current, self.notifier, send_test)
-        self.push_screen(screen, saved)
-
-    # ----- actions -----
-
-    @work(group="actions")
-    async def perform(self, repo: RepoInfo, pr: PullRequest, action: Action) -> None:
-        label = f"{repo.name}#{pr.number}"
-        try:
-            if action.kind == "merge":
-                await self.client.merge(pr.id, action.method)
-                self.notify(f"Merged {label} ({action.method.lower()})")
-                if action.delete_branch and pr.head_ref_id:
-                    try:
-                        await self.client.delete_branch(pr.head_ref_id)
-                    except GitHubError as e:
-                        self.notify(
-                            f"Merged {label}, but couldn't delete {pr.head_ref}: {e}",
-                            severity="warning",
-                        )
-            elif action.kind == "auto_merge_on":
-                await self.client.enable_auto_merge(pr.id, action.method)
-                self.notify(f"Auto-merge enabled for {label} ({action.method.lower()})")
-            elif action.kind == "auto_merge_off":
-                await self.client.disable_auto_merge(pr.id)
-                self.notify(f"Auto-merge disabled for {label}")
-            else:
-                await self.client.update_branch(pr.id)
-                self.notify(f"Updated branch for {label}")
-        except GitHubError as e:
-            what = action.kind.replace("_", " ").capitalize()
-            self.notify(f"{what} failed for {label}: {e}", severity="error")
-        await self._refresh(repo.name)
+        notifier = self.backend.status.notifier
+        self.push_screen(NotificationsScreen(name, current, notifier, send_test), saved)
 
     def action_add_repo(self) -> None:
-        async def validate(name: str) -> RepoInfo:
-            if name.lower() in (r.lower() for r in self.config.repos):
-                raise ValueError(f"{name} is already being monitored")
-            return await self.client.fetch_repo(name)
+        def added(name: str | None) -> None:
+            if name is not None:
+                self.render_repo_tree(select=name)
 
-        def added(repo: RepoInfo | None) -> None:
-            if repo is None:
-                return
-            self.config.repos.append(repo.name)
-            save_config(self.config_path, self.config)
-            self.render_repo_tree(select=repo.name)
-            self.apply(repo.name, repo)
-            self.render_repo_label(repo.name)
-
-        self.push_screen(AddRepoScreen(validate), added)
+        self.push_screen(AddRepoScreen(self.backend.add_repo), added)
 
     def action_remove_repo(self) -> None:
         name = self.selected_repo
@@ -480,15 +402,16 @@ class PrMonApp(App):
             ordered = list(self.repo_nodes)
             index = ordered.index(name)
             neighbors = ordered[index + 1 :] + ordered[:index][::-1]
-            self.config.repos.remove(name)
-            self.config.notifications.pop(name, None)
-            self.repos.pop(name, None)
-            self.errors.pop(name, None)
-            self.loaded_repos.discard(name)
-            self.tracker.forget(name)
-            save_config(self.config_path, self.config)
-            self.save_state()
-            self.render_repo_tree(select=neighbors[0] if neighbors else None)
-            self.render_prs()
+            self.remove_repo(name, neighbors[0] if neighbors else None)
 
         self.push_screen(ConfirmScreen(f"Stop monitoring {name}?"), confirmed)
+
+    @work(group="commands")
+    async def remove_repo(self, name: str, select: str | None) -> None:
+        try:
+            await self.backend.remove_repo(name)
+        except BackendError as e:
+            self.notify(str(e), severity="error")
+            return
+        self.render_repo_tree(select=select)
+        self.render_prs()

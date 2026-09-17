@@ -27,6 +27,7 @@ from pr_mon.screens import (
     MergeMethodScreen,
     NotificationsScreen,
 )
+from pr_mon.service import Monitor
 from pr_mon.state import AppState, save_state
 from tests.fakes import FakeClient, FakeDeliver, make_repo
 from tests.fixtures import auto_merge
@@ -52,14 +53,18 @@ class AppTestCase(unittest.IsolatedAsyncioTestCase):
         per_repo = {name: notifications for name in names} if notifications else {}
         config = Config(repos=names, notifications=per_repo)
         save_config(self.config_path, config)
+        return self.make_app_from_files(repos, notifier)
+
+    def make_app_from_files(self, repos, notifier=None):
         self.client = FakeClient(repos)
-        return PrMonApp(self.client, self.config_path, self.state_path, notifier=notifier)
+        self.monitor = Monitor(self.client, self.config_path, self.state_path, notifier=notifier)
+        return PrMonApp(self.monitor, owns_backend=True)
 
     async def settle(self, pilot):
-        await pilot.app.workers.wait_for_complete()
-        await pilot.pause()
-        await pilot.app.workers.wait_for_complete()
-        await pilot.pause()
+        for _ in range(2):
+            await pilot.app.workers.wait_for_complete()
+            await self.monitor.wait_idle()
+            await pilot.pause()
 
     def tree_view(self, app):
         """Visible repo tree lines: '▼'/'▶' + owner label, repos indented."""
@@ -660,7 +665,7 @@ class NotificationDispatchTest(AppTestCase):
     def setUp(self):
         super().setUp()
         self.deliver = FakeDeliver()
-        patcher = mock.patch("pr_mon.app.deliver", self.deliver)
+        patcher = mock.patch("pr_mon.service.deliver", self.deliver)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -766,13 +771,12 @@ class NotificationDispatchTest(AppTestCase):
             self.config_path,
             Config(repos=["acme/api", "acme/web"], notifications={"acme/web": ON}),
         )
-        self.client = FakeClient(
+        app = self.make_app_from_files(
             {
                 "acme/api": make_repo("acme/api", (1, PENDING)),
                 "acme/web": make_repo("acme/web", (2, PENDING)),
             }
         )
-        app = PrMonApp(self.client, self.config_path, self.state_path)
         async with app.run_test(size=(120, 30)) as pilot:
             await self.settle(pilot)
             self.client.repos["acme/api"] = make_repo("acme/api", (1, READY))
@@ -789,13 +793,13 @@ class NotificationDispatchTest(AppTestCase):
                 repos=["acme/api", "acme/web"], notifications={"acme/api": api, "acme/web": web}
             ),
         )
-        self.client = FakeClient(
+        app = self.make_app_from_files(
             {
                 "acme/api": make_repo("acme/api", (1, PENDING)),
                 "acme/web": make_repo("acme/web", (2, PENDING)),
-            }
+            },
+            notifier="/x/tn",
         )
-        app = PrMonApp(self.client, self.config_path, self.state_path, notifier="/x/tn")
         async with app.run_test(size=(120, 30)) as pilot:
             await self.settle(pilot)
             self.client.repos["acme/api"] = make_repo("acme/api", (1, FAILING))
@@ -824,7 +828,7 @@ class NotificationsScreenTest(AppTestCase):
     def setUp(self):
         super().setUp()
         self.deliver = FakeDeliver()
-        patcher = mock.patch("pr_mon.app.deliver", self.deliver)
+        patcher = mock.patch("pr_mon.service.deliver", self.deliver)
         patcher.start()
         self.addCleanup(patcher.stop)
 

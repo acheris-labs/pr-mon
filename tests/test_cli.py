@@ -18,14 +18,16 @@ class CliTest(unittest.TestCase):
         with (
             mock.patch("pr_mon.cli.get_token", return_value="tok"),
             mock.patch("pr_mon.cli.PrMonApp") as app_cls,
+            mock.patch("pr_mon.cli.Monitor") as monitor_cls,
             mock.patch("pr_mon.cli.default_config_path", return_value="cfg"),
             mock.patch("pr_mon.cli.default_state_path", return_value="st"),
             mock.patch("pr_mon.cli.detect_desktop_notifier", return_value="/bin/tn"),
         ):
             cli.main()
-        _, config_path, state_path = app_cls.call_args.args
+        _, config_path, state_path = monitor_cls.call_args.args
         self.assertEqual((config_path, state_path), ("cfg", "st"))
-        self.assertEqual(app_cls.call_args.kwargs, {"notifier": "/bin/tn"})
+        self.assertEqual(monitor_cls.call_args.kwargs, {"notifier": "/bin/tn"})
+        app_cls.assert_called_once_with(monitor_cls.return_value, owns_backend=True)
         app_cls.return_value.run.assert_called_once_with()
 
 
