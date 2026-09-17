@@ -71,6 +71,10 @@ struct SettingsArgs: Encodable, Sendable {
     var settings: NotifyConfig
 }
 
+struct SecondsArgs: Encodable, Sendable {
+    var seconds: Int
+}
+
 struct PreviewArgs: Encodable, Sendable {
     var repo: String
     var message: String

@@ -194,6 +194,18 @@ class NotificationTest(MonitorTestCase):
         with self.assertRaises(BackendError):
             await m.save_notifications("gone/repo", ON)
 
+    async def test_set_poll_interval(self):
+        m = await self.start({"acme/api": make_repo("acme/api")})
+        await m.set_poll_interval(120)
+        self.assertEqual(m.config.poll_interval, 120)
+        self.assertEqual(load_config(self.config_path)[0].poll_interval, 120)
+        self.assertIn("config", self.kinds())
+        self.assertIn(("information", "Checking GitHub every 120s"), self.toasts())
+        for bad in (5, 4000):
+            with self.subTest(seconds=bad), self.assertRaises(BackendError):
+                await m.set_poll_interval(bad)
+        self.assertEqual(load_config(self.config_path)[0].poll_interval, 120)
+
 
 class RepoCommandTest(MonitorTestCase):
     async def test_add_repo(self):

@@ -43,6 +43,7 @@ class DaemonServer:
             "perform": self._perform,
             "save_notifications": self._save_notifications,
             "send_test": self._send_test,
+            "set_poll_interval": monitor.set_poll_interval,
             "notification_form": self._notification_form,
             "preview_notification": self._preview_notification,
             "shutdown": monitor.shutdown,

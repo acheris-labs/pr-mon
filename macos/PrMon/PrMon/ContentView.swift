@@ -1,11 +1,14 @@
 // The main window: repositories | pull requests | details, like Mail.
 
+import AppKit
 import PrMonKit
 import SwiftUI
 
 struct ContentView: View {
     let store: PrMonStore
     let selection: AppSelection
+    @Environment(\.openSettings) private var openSettings
+    @AppStorage("appearance") private var appearance = Appearance.system
     @State private var repoName: String?
     @State private var prID: PullRequest.ID?
     @State private var request: ActionRequest?
@@ -26,7 +29,10 @@ struct ContentView: View {
         Group {
             if let state {
                 NavigationSplitView(columnVisibility: $columns) {
-                    Sidebar(store: store, state: state, selection: $repoName)
+                    Sidebar(
+                        store: store, state: state, selection: $repoName,
+                        openRepoSettings: openRepoSettings
+                    )
                         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 360)
                 } content: {
                     PRList(
@@ -70,12 +76,23 @@ struct ContentView: View {
             }
         }
         .onChange(of: state?.snapshot.config.repos) { keepSelectionValid() }
-        .onAppear { keepSelectionValid() }
+        .onChange(of: appearance) { NSApp.appearance = appearance.nsAppearance }
+        .onAppear {
+            keepSelectionValid()
+            NSApp.appearance = appearance.nsAppearance
+        }
     }
 
     private var focusedContext: PullRequestContext? {
         guard let repo = entry?.repo, let pr = selectedPR else { return nil }
         return PullRequestContext(repo: repo, pr: pr) { option in act(on: pr, option) }
+    }
+
+    /// Open Settings on one repo's notifications.
+    private func openRepoSettings(_ name: String?) {
+        if let name { selection.repo = name }
+        selection.settingsTab = .repositories
+        openSettings()
     }
 
     private func keepSelectionValid() {
@@ -103,6 +120,7 @@ private struct Sidebar: View {
     let store: PrMonStore
     let state: BackendState
     @Binding var selection: String?
+    let openRepoSettings: (String?) -> Void
 
     var body: some View {
         List(selection: $selection) {
@@ -115,7 +133,7 @@ private struct Sidebar: View {
                                 Button("Open on GitHub") {
                                     Browser.open("https://github.com/\(entry.name)/pulls")
                                 }
-                                SettingsLink { Text("Notification Settings…") }
+                                Button("Notification Settings…") { openRepoSettings(entry.name) }
                             }
                     }
                 } header: {
@@ -131,7 +149,7 @@ private struct Sidebar: View {
                 } description: {
                     Text("Add repositories to monitor in Settings.")
                 } actions: {
-                    SettingsLink { Text("Open Settings…") }
+                    Button("Open Settings…") { openRepoSettings(nil) }
                 }
             }
         }

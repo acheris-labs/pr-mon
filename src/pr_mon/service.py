@@ -37,6 +37,8 @@ from pr_mon.notify import (
 from pr_mon.state import AppState, load_state, save_state
 from pr_mon.tracker import Tracker
 
+MIN_POLL_INTERVAL = 10
+MAX_POLL_INTERVAL = 3600
 CHECKING_RETRY_DELAY = 5
 CHECKING_RETRIES = 3
 # GitHub's wording when the head or base moves under a merge ("Head branch was
@@ -320,6 +322,18 @@ class Monitor:
 
     async def send_test(self, repo: str, settings: NotifyConfig) -> None:
         self._spawn(self._send(settings, sample_variables(repo), is_test=True))
+
+    async def set_poll_interval(self, seconds: int) -> None:
+        if not MIN_POLL_INTERVAL <= seconds <= MAX_POLL_INTERVAL:
+            raise BackendError(
+                f"poll interval must be between {MIN_POLL_INTERVAL} and {MAX_POLL_INTERVAL} seconds"
+            )
+        if seconds == self.config.poll_interval:
+            return
+        self.config.poll_interval = seconds
+        save_config(self.config_path, self.config)
+        self._emit("config")
+        self._toast(f"Checking GitHub every {seconds}s")
 
     async def notification_form(self) -> NotificationForm:
         return notification_form()

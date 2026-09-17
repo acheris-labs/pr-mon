@@ -27,6 +27,7 @@ COMMANDS = {
     "daemon": "run the backend in the foreground",
     "start": "start the backend in the background",
     "stop": "stop the background backend",
+    "restart": "restart the backend (through launchd when autostart runs it)",
     "status": "show whether the backend is running",
 }
 
@@ -59,6 +60,7 @@ def main(argv: list[str] | None = None) -> None:
         "daemon": run_backend,
         "start": start_backend,
         "stop": stop_backend,
+        "restart": restart_backend_command,
         "status": backend_status,
     }
     handlers[args.command or "tui"](paths)
@@ -110,6 +112,14 @@ def stop_backend(paths: DaemonPaths) -> None:
     except DaemonError as e:
         sys.exit(f"pr-mon: {e}")
     print("backend stopped" if stopped else "backend not running")
+
+
+def restart_backend_command(paths: DaemonPaths) -> None:
+    try:
+        pid = autostart.restart_backend(paths)
+    except DaemonError as e:
+        sys.exit(f"pr-mon: {e}")
+    print(f"backend restarted (pid {pid})")
 
 
 def backend_status(paths: DaemonPaths) -> None:

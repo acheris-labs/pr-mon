@@ -1,6 +1,7 @@
-// Settings (⌘,): which repos to monitor and how each one notifies.
+// Settings (⌘,): appearance and startup, repositories and their notifications, backend control.
 
 import PrMonKit
+import ServiceManagement
 import SwiftUI
 
 /// UI state shared by the main window and Settings.
@@ -9,9 +10,276 @@ import SwiftUI
 final class AppSelection {
     /// The repo selected in the main window; Settings opens on it.
     var repo: String?
+    /// The tab Settings opens on.
+    var settingsTab: SettingsTab = .general
+}
+
+enum SettingsTab: String {
+    case general, repositories, backend
+}
+
+enum Appearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
 }
 
 struct SettingsView: View {
+    let store: PrMonStore
+    let selection: AppSelection
+
+    var body: some View {
+        TabView(selection: Bindable(selection).settingsTab) {
+            GeneralSettings(store: store)
+                .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(SettingsTab.general)
+            RepositorySettings(store: store, selection: selection)
+                .tabItem { Label("Repositories", systemImage: "shippingbox") }
+                .tag(SettingsTab.repositories)
+            BackendSettings(store: store)
+                .tabItem { Label("Backend", systemImage: "bolt.horizontal") }
+                .tag(SettingsTab.backend)
+        }
+        .frame(width: 800, height: 560)
+    }
+}
+
+// MARK: - general
+
+struct GeneralSettings: View {
+    let store: PrMonStore
+    @AppStorage("appearance") private var appearance = Appearance.system
+    @State private var openAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var backendAtLogin = Launcher.AutostartState.disabled
+    @State private var error: String?
+
+    private static let intervals = [30, 60, 120, 300, 600, 1800]
+
+    private var pollInterval: Int { store.state?.snapshot.config.pollInterval ?? 60 }
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Appearance:", selection: $appearance) {
+                    ForEach(Appearance.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Section {
+                Picker("Check GitHub:", selection: Binding(
+                    get: { pollInterval },
+                    set: { store.setPollInterval($0) }
+                )) {
+                    ForEach(intervals, id: \.self) { Text("Every \(label(for: $0))").tag($0) }
+                    if !Self.intervals.contains(pollInterval) {
+                        Text("Every \(label(for: pollInterval))").tag(pollInterval)
+                    }
+                }
+                .disabled(!store.isConnected)
+            } footer: {
+                Text("The backend polls this often; it also refreshes right after you act on a PR.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Open pr-mon at login", isOn: Binding(
+                    get: { openAtLogin },
+                    set: { setOpenAtLogin($0) }
+                ))
+                Toggle("Start the backend at login", isOn: Binding(
+                    get: { backendAtLogin == .enabled },
+                    set: { setBackendAtLogin($0) }
+                ))
+                .disabled(backendAtLogin == .unavailable)
+                if let error {
+                    Text(error).foregroundStyle(.red).font(.callout)
+                }
+            } header: {
+                Text("Startup")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("The backend keeps polling and notifying with no window open; "
+                        + "at login it starts through launchd (`pr-mon autostart`).")
+                    if backendAtLogin == .unavailable {
+                        Label("Install the pr-mon command line (`make tool-install`) to change this.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .task { backendAtLogin = await Launcher.autostartState() }
+    }
+
+    private var intervals: [Int] { Self.intervals }
+
+    private func label(for seconds: Int) -> String {
+        Duration.seconds(seconds).formatted(.units(allowed: [.minutes, .seconds], width: .wide))
+    }
+
+    private func setOpenAtLogin(_ on: Bool) {
+        do {
+            if on {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            openAtLogin = SMAppService.mainApp.status == .enabled
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func setBackendAtLogin(_ on: Bool) {
+        let previous = backendAtLogin
+        backendAtLogin = on ? .enabled : .disabled
+        Task {
+            do {
+                try await Launcher.setAutostart(on)
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+                backendAtLogin = previous
+            }
+            backendAtLogin = await Launcher.autostartState()
+        }
+    }
+}
+
+// MARK: - backend
+
+struct BackendSettings: View {
+    let store: PrMonStore
+    @State private var busy = false
+    @State private var message: String?
+    @State private var confirmingStop = false
+    @State private var commandAvailable = true
+
+    private var status: BackendStatus? { store.state?.snapshot.status }
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Status", value: statusText)
+                if let status {
+                    LabeledContent("Version", value: status.version)
+                    if let pid = status.pid {
+                        LabeledContent("Process", value: String(pid))
+                    }
+                    LabeledContent("Desktop notifier", value: status.notifier ?? "none found")
+                }
+                LabeledContent("Socket") {
+                    Text(store.socketPath).textSelection(.enabled).foregroundStyle(.secondary)
+                }
+                LabeledContent("Log") {
+                    HStack {
+                        Text(logPath).textSelection(.enabled).foregroundStyle(.secondary)
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting(
+                                [URL(fileURLWithPath: logPath)])
+                        }
+                    }
+                }
+            }
+
+            if let warnings = status?.warnings, !warnings.isEmpty {
+                Section("Warnings") {
+                    ForEach(warnings, id: \.self) { warning in
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+
+            Section {
+                HStack {
+                    Button("Refresh Now") { store.refreshAll() }
+                        .disabled(!store.isConnected || busy)
+                    Button("Restart Backend") { control("restarted", Launcher.restartBackend) }
+                        .disabled(busy || !commandAvailable)
+                    Button("Stop Backend") { confirmingStop = true }
+                        .disabled(!store.isConnected || busy || !commandAvailable)
+                    if busy { ProgressView().controlSize(.small) }
+                }
+                if let message {
+                    Text(message).font(.callout).foregroundStyle(.secondary)
+                }
+            } footer: {
+                if commandAvailable {
+                    Text("Restart and stop run the pr-mon command line.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label("The pr-mon command line isn't installed (`make tool-install`).",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .task { commandAvailable = await Launcher.commandAvailable() }
+        .confirmationDialog("Stop the pr-mon backend?", isPresented: $confirmingStop) {
+            Button("Stop Backend", role: .destructive) { control("stopped", Launcher.stopBackend) }
+        } message: {
+            Text("Polling, notifications and merge-when-ready stop until it runs again.")
+        }
+    }
+
+    private var logPath: String {
+        (SocketPath.stateDirectory() as NSString).appendingPathComponent("daemon.log")
+    }
+
+    private var statusText: String {
+        switch store.phase {
+        case .connected: "Connected"
+        case .connecting: "Connecting…"
+        case .startingBackend: "Starting…"
+        case let .disconnected(reason): reason
+        case let .incompatible(reason): reason
+        }
+    }
+
+    private func control(_ done: String, _ action: @escaping () async throws -> Void) {
+        busy = true
+        message = nil
+        Task {
+            do {
+                try await action()
+                message = "Backend \(done)."
+                store.retryNow()
+            } catch {
+                message = error.localizedDescription
+            }
+            busy = false
+        }
+    }
+}
+
+// MARK: - repositories
+
+struct RepositorySettings: View {
     let store: PrMonStore
     let selection: AppSelection
     @State private var selected: String?
@@ -19,20 +287,17 @@ struct SettingsView: View {
     @State private var confirmingRemoval = false
 
     private var repos: [String] {
-        (store.state?.snapshot.config.repos ?? []).sorted {
-            ($0.lowercased()) < ($1.lowercased())
-        }
+        (store.state?.snapshot.config.repos ?? []).sorted { $0.lowercased() < $1.lowercased() }
     }
 
     var body: some View {
         HStack(spacing: 0) {
             repoList
-                .frame(width: 250)
+                .frame(width: 230)
             Divider()
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 780, minHeight: 540)
         .onAppear { selected = selection.repo ?? repos.first }
         .onChange(of: repos) {
             if let current = selected, !repos.contains(current) { selected = repos.first }
@@ -119,7 +384,7 @@ private struct RepoListRow: View {
             Spacer()
             if entry?.error != nil {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(.orange)
                     .help(entry?.error ?? "")
             } else if entry?.repo == nil {
                 ProgressView().controlSize(.mini)
@@ -145,26 +410,27 @@ private struct AddRepoSheet: View {
     }
 
     var body: some View {
-        Form {
-            TextField("Repository:", text: $name, prompt: Text("owner/name"))
-                .onSubmit(submit)
-                .disabled(checking)
-            if let error {
-                Text(error).foregroundStyle(.red)
+        VStack(alignment: .leading, spacing: 16) {
+            Form {
+                TextField("Repository:", text: $name, prompt: Text("owner/name"))
+                    .onSubmit(submit)
+                    .disabled(checking)
+                if let error {
+                    Text(error).foregroundStyle(.red)
+                }
             }
-        }
-        .formStyle(.columns)
-        .padding(20)
-        .frame(width: 420)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
+            .formStyle(.columns)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Button(checking ? "Checking…" : "Add", action: submit)
+                    .keyboardShortcut(.defaultAction)
                     .disabled(!valid || checking)
             }
         }
+        .padding(20)
+        .frame(width: 440)
     }
 
     private func submit() {

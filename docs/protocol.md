@@ -66,6 +66,7 @@ can't drift.
 | `perform` | `repo`, `number`, `action`: `Action` | `null` | GitHub failures are reported as `toast` events, not errors. |
 | `save_notifications` | `repo`, `settings`: `NotifyConfig` | `null` | |
 | `send_test` | `repo`, `settings`: `NotifyConfig` | `null` | Sends a sample notification with these unsaved settings. |
+| `set_poll_interval` | `seconds`: int | `null` | How often the backend checks GitHub (10–3600). |
 | `notification_form` | none | `NotificationForm` | What a notification settings editor should offer. |
 | `preview_notification` | `repo`, `message`: string | `NotificationPreview` | Renders a template with sample values. |
 | `shutdown` | none | `null` | Stops the backend. |

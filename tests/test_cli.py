@@ -140,6 +140,17 @@ class ControlCommandTest(CliTestCase):
             code, _, _ = self.run_cli("stop")
         self.assertEqual(code, "pr-mon: stuck")
 
+    def test_restart(self):
+        with mock.patch("pr_mon.autostart.restart_backend", return_value=91) as restart:
+            code, out, _ = self.run_cli("restart")
+        restart.assert_called_once_with(PATHS)
+        self.assertEqual((code, out), (0, "backend restarted (pid 91)\n"))
+
+    def test_restart_failure(self):
+        with mock.patch("pr_mon.autostart.restart_backend", side_effect=DaemonError("no luck")):
+            code, _, _ = self.run_cli("restart")
+        self.assertEqual(code, "pr-mon: no luck")
+
     def test_status(self):
         with mock.patch("pr_mon.cli.daemon_info", return_value={"pid": 5, "version": "1.0"}):
             code, out, _ = self.run_cli("status")
@@ -182,6 +193,17 @@ class AutostartCommandTest(CliTestCase):
         with mock.patch("pr_mon.cli.autostart.disable", side_effect=DaemonError("nope")):
             code, _, _ = self.run_cli("autostart", "disable")
         self.assertEqual(code, "pr-mon: nope")
+
+    def test_restart(self):
+        with mock.patch("pr_mon.autostart.restart_backend", return_value=91) as restart:
+            code, out, _ = self.run_cli("restart")
+        restart.assert_called_once_with(PATHS)
+        self.assertEqual((code, out), (0, "backend restarted (pid 91)\n"))
+
+    def test_restart_failure(self):
+        with mock.patch("pr_mon.autostart.restart_backend", side_effect=DaemonError("no luck")):
+            code, _, _ = self.run_cli("restart")
+        self.assertEqual(code, "pr-mon: no luck")
 
     def test_status(self):
         with mock.patch("pr_mon.cli.autostart.describe", return_value=(True, "enabled (x)")):

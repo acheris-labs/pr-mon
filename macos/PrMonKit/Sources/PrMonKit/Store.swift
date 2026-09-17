@@ -179,6 +179,10 @@ public final class PrMonStore {
         run { try await $0.perform(repo: repo, number: number, action: action) }
     }
 
+    public func setPollInterval(_ seconds: Int) {
+        run { try await $0.setPollInterval(seconds) }
+    }
+
     public func saveNotifications(repo: String, settings: NotifyConfig) {
         run { try await $0.saveNotifications(repo: repo, settings: settings) }
     }

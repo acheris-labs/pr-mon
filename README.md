@@ -37,6 +37,7 @@ window onto it, so notifications keep coming after you close the window.
 | `pr-mon` | Open the dashboard (starts the backend if needed) |
 | `pr-mon start` | Start the backend in the background |
 | `pr-mon stop` | Stop the backend |
+| `pr-mon restart` | Restart the backend (through launchd when autostart runs it) |
 | `pr-mon status` | Show whether it's running (exit code 0 if running) |
 | `pr-mon daemon` | Run the backend in the foreground (for debugging) |
 | `pr-mon autostart enable` | macOS: run the backend at every login, starting it now |
@@ -175,8 +176,15 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
 
 `macos/` holds a native Mac app for the same backend: repositories in a
 sidebar, pull requests, and details, with merges and auto-merge from the
-toolbar, the Pull Request menu, or a right-click. Repositories and
-notifications are managed in Settings (⌘,).
+toolbar, the Pull Request menu, or a right-click.
+
+Settings (⌘,) has three tabs:
+
+- **General** — appearance (System/Light/Dark), how often the backend checks
+  GitHub, opening the app at login, and starting the backend at login.
+- **Repositories** — add and remove repos, and edit each one's notifications.
+- **Backend** — version, process, socket and log paths, the desktop notifier
+  found, and buttons to refresh, restart or stop the backend.
 
 ```sh
 make app-install   # builds and copies PrMon.app to ~/Applications

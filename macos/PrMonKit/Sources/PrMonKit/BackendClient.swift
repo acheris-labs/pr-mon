@@ -110,6 +110,11 @@ public actor BackendClient {
         try await command("send_test", SettingsArgs(repo: repo, settings: settings))
     }
 
+    /// How often the backend polls GitHub (10–3600 seconds).
+    public func setPollInterval(_ seconds: Int) async throws {
+        try await command("set_poll_interval", SecondsArgs(seconds: seconds))
+    }
+
     public func notificationForm() async throws -> NotificationForm {
         try await request("notification_form", NoArgs())
     }

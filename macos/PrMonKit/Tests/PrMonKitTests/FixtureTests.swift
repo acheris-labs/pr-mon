@@ -163,6 +163,7 @@ enum Fixtures {
             try Wire.encode(Request(id: 14, op: "notification_form", args: NoArgs())),
             try Wire.encode(Request(id: 15, op: "preview_notification",
                                     args: PreviewArgs(repo: "acme/api", message: "{{PR_NUM}}"))),
+            try Wire.encode(Request(id: 16, op: "set_poll_interval", args: SecondsArgs(seconds: 120))),
         ]
         #expect(encoded.count == expected.count)
         for (data, python) in zip(encoded, expected) {

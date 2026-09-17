@@ -245,6 +245,9 @@ class RemoteBackend:
     async def send_test(self, repo: str, settings: NotifyConfig) -> None:
         await self._request("send_test", repo=repo, settings=settings_to_dict(settings))
 
+    async def set_poll_interval(self, seconds: int) -> None:
+        await self._request("set_poll_interval", seconds=seconds)
+
     async def notification_form(self) -> NotificationForm:
         return form_from_dict(await self._request("notification_form"))
 

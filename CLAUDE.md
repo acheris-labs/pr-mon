@@ -42,5 +42,8 @@ Commit the bumped `pyproject.toml` and `uv.lock` together with the change.
 - `macos/PrMonKit`: Swift package (client, models, state); tests use Swift Testing.
 - `macos/PrMon`: SwiftUI app; `project.yml` is the XcodeGen spec, the generated
   `.xcodeproj` isn't committed. Build with `make app`.
-- The app should look like a standard Mac app, not a port of the TUI.
+- The app should look like a standard Mac app, not a port of the TUI: system
+  fonts and colours, standard Settings tabs, no key-hint bars.
+- Backend control the app can't reach over the socket (autostart, restart,
+  stop) runs the `pr-mon` command line through the user's login shell.
 - Wire changes also need the Swift models (`Models.swift`) updated.

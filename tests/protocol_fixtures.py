@@ -182,6 +182,7 @@ def build() -> dict[str, object]:
                 "op": "preview_notification",
                 "args": {"repo": "acme/api", "message": "{{PR_NUM}}"},
             },
+            {"id": 16, "op": "set_poll_interval", "args": {"seconds": 120}},
         ]
     )
     with mock.patch("os.getuid", return_value=UID):
