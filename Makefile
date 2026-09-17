@@ -53,7 +53,7 @@ app-install: app
 # ----- Go rewrite (in progress: cmd/, internal/) -----
 
 go-test:
-	go test ./...
+	go test -race ./...
 
 go-lint:
 	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; echo "run gofmt -w"; exit 1; }
