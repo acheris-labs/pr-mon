@@ -3,11 +3,13 @@
 import asyncio
 import contextlib
 import fcntl
+import hashlib
 import logging
 import logging.handlers
 import os
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -26,6 +28,9 @@ START_TIMEOUT = 5.0
 STOP_TIMEOUT = 5.0
 LOG_BYTES = 1_000_000
 LOG_BACKUPS = 3
+# macOS limits Unix socket paths to 104 bytes (including the terminator).
+SOCKET_PATH_LIMIT = 100
+SHORT_SOCKET_ROOT = Path("/tmp")
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +45,12 @@ class DaemonPaths:
 
     @property
     def socket(self) -> Path:
-        return self.directory / "daemon.sock"
+        path = self.directory / "daemon.sock"
+        if len(os.fsencode(path)) <= SOCKET_PATH_LIMIT:
+            return path
+        # Too long to bind: use a private per-user directory, one socket per state dir.
+        digest = hashlib.sha256(os.fsencode(self.directory)).hexdigest()[:16]
+        return SHORT_SOCKET_ROOT / f"pr-mon-{os.getuid()}" / f"{digest}.sock"
 
     @property
     def lock(self) -> Path:
@@ -59,6 +69,17 @@ class AlreadyRunning(Exception):
 
 class DaemonError(Exception):
     """The daemon could not be started or stopped; the message is for the user."""
+
+
+def ensure_socket_dir(paths: DaemonPaths) -> None:
+    """Create the socket's directory; refuse a shared one outside the state directory."""
+    parent = paths.socket.parent
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if parent == paths.directory:
+        return
+    info = parent.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        raise DaemonError(f"socket directory {parent} is not private; remove it and retry")
 
 
 def _read_pid(handle: TextIO) -> int:
@@ -138,6 +159,8 @@ def _setup_logging(paths: DaemonPaths, to_stderr: bool) -> None:
         handlers=handlers,
         force=True,
     )
+    # One line per GitHub request is noise; keep warnings and errors.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 async def run_daemon(
@@ -151,6 +174,11 @@ async def run_daemon(
 ) -> None:
     """Serve until asked to shut down (shutdown request, SIGTERM, or SIGINT)."""
     lock = acquire_lock(paths)
+    try:
+        ensure_socket_dir(paths)
+    except DaemonError:
+        lock.close()
+        raise
     _setup_logging(paths, log_to_stderr)
     monitor = Monitor(client, config_path, state_path, notifier=notifier, version=version)
     server = DaemonServer(monitor, paths.socket)

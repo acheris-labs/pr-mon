@@ -1,6 +1,6 @@
 import io
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -51,28 +51,43 @@ class TuiTest(CliTestCase):
 
 
 class DaemonCommandTest(CliTestCase):
-    def test_runs_daemon(self):
-        with (
-            mock.patch("pr_mon.cli.GitHubClient") as client_cls,
-            mock.patch("pr_mon.cli.run_daemon", new=mock.MagicMock()) as run,
-            mock.patch("pr_mon.cli.asyncio.run") as asyncio_run,
-            mock.patch("pr_mon.cli.detect_desktop_notifier", return_value="/bin/tn"),
-            mock.patch("pr_mon.cli.default_config_path", return_value="cfg"),
-            mock.patch("pr_mon.cli.default_state_path", return_value="st"),
+    def daemon_patches(self, stack):
+        self.client_cls = stack.enter_context(mock.patch("pr_mon.cli.GitHubClient"))
+        self.run = stack.enter_context(mock.patch("pr_mon.cli.run_daemon", new=mock.MagicMock()))
+        self.asyncio_run = stack.enter_context(mock.patch("pr_mon.cli.asyncio.run"))
+        for name, value in (
+            ("detect_desktop_notifier", "/bin/tn"),
+            ("default_config_path", "cfg"),
+            ("default_state_path", "st"),
         ):
+            stack.enter_context(mock.patch(f"pr_mon.cli.{name}", return_value=value))
+
+    def test_runs_daemon(self):
+        with ExitStack() as stack:
+            self.daemon_patches(stack)
             code, _, _ = self.run_cli("daemon")
         self.assertEqual(code, 0)
-        client_cls.assert_called_once_with(cli.get_token)
-        run.assert_called_once_with(
+        self.client_cls.assert_called_once_with(cli.get_token)
+        self.run.assert_called_once_with(
             PATHS,
-            client_cls.return_value,
+            self.client_cls.return_value,
             "cfg",
             "st",
             notifier="/bin/tn",
             version=__version__,
-            log_to_stderr=True,
+            log_to_stderr=False,
         )
-        asyncio_run.assert_called_once_with(run.return_value)
+        self.asyncio_run.assert_called_once_with(self.run.return_value)
+
+    def test_daemon_logs_to_a_terminal(self):
+        terminal = mock.Mock()
+        terminal.isatty.return_value = True
+        with ExitStack() as stack:
+            self.daemon_patches(stack)
+            stack.enter_context(mock.patch("pr_mon.cli.DaemonPaths.default", return_value=PATHS))
+            stack.enter_context(mock.patch("sys.stderr", terminal))
+            cli.main(["daemon"])
+        self.assertTrue(self.run.call_args.kwargs["log_to_stderr"])
 
     def test_auth_failure(self):
         with mock.patch("pr_mon.cli.get_token", side_effect=AuthError("not logged in")):

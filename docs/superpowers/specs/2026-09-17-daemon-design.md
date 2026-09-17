@@ -40,6 +40,9 @@ All under `$XDG_STATE_HOME/pr-mon/` (default `~/.local/state/pr-mon/`):
 | `daemon.log` | Log (stdlib `logging`, `RotatingFileHandler`, 1 MB × 3) |
 | `state.json` | Unchanged format |
 
+- If `daemon.sock` would exceed the Unix socket path limit (~104 bytes on
+  macOS), the socket is `/tmp/pr-mon-<uid>/<hash of state dir>.sock`; that
+  directory must be owned by the user with mode 0700 or the daemon refuses to start.
 - A second daemon fails to take the lock and exits with "already running (pid N)".
 - A stale socket file (no lock holder) is removed at daemon start.
 
@@ -86,9 +89,9 @@ Events (listener callback, delivered on the TUI's event loop):
 | Event | Payload | TUI reaction |
 |-------|---------|--------------|
 | `repos` | — | rebuild tree (add/remove) |
-| `repo` | `name`, `alerted: bool` | relabel; re-render if selected; expand owner if `alerted` and collapsed |
+| `repo` | `name` | relabel; re-render if selected (a new alert under a collapsed owner makes the service un-collapse it and emit `collapsed`) |
 | `seen` | `name` | relabel |
-| `collapsed` | — | nothing (tree already reflects it) |
+| `collapsed` | — | sync tree expand/collapse state |
 | `config` | — | nothing visible |
 | `status` | — | header subtitle |
 | `toast` | `message`, `severity` | `notify()` |

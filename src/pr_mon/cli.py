@@ -71,10 +71,11 @@ def run_backend(paths: DaemonPaths) -> None:
                 default_state_path(),
                 notifier=detect_desktop_notifier(),
                 version=__version__,
-                log_to_stderr=True,
+                # When spawned, stderr already goes to the log file.
+                log_to_stderr=sys.stderr.isatty(),
             )
         )
-    except AlreadyRunning as e:
+    except (AlreadyRunning, DaemonError) as e:
         sys.exit(f"pr-mon: {e}")
 
 

@@ -16,6 +16,27 @@ make tool-install   # uv tool install; puts `pr-mon` on your PATH
 
 Or run from the checkout with `make run`.
 
+## How it runs
+
+A background **backend** does the work: it polls GitHub, tracks what changed,
+saves state, sends notifications, and performs merges. The dashboard is just a
+window onto it, so notifications keep coming after you close the window.
+
+- `pr-mon` opens the dashboard and starts the backend if it isn't running.
+- Quitting the dashboard (`q`) leaves the backend running.
+- The backend runs until you stop it (`S` in the dashboard or `pr-mon stop`),
+  log out, or reboot. It does not start at login.
+- If the backend stops while a dashboard is open, a banner says so and the last
+  data stays on screen; press `S` to start it again.
+
+| Command | What it does |
+|---------|--------------|
+| `pr-mon` | Open the dashboard (starts the backend if needed) |
+| `pr-mon start` | Start the backend in the background |
+| `pr-mon stop` | Stop the backend |
+| `pr-mon status` | Show whether it's running (exit code 0 if running) |
+| `pr-mon daemon` | Run the backend in the foreground (for debugging) |
+
 ## Keys
 
 | Key | Where | Action |
@@ -33,7 +54,8 @@ Or run from the checkout with `make run`.
 | `space` | action menu | Toggle "delete remote branch" |
 | `N` | repo tree (on a repo) | Notification settings for that repo |
 | `r` | anywhere | Refresh now |
-| `q` | anywhere | Quit |
+| `S` | anywhere | Stop the backend (asks first) / start it when stopped |
+| `q` | anywhere | Quit the dashboard (the backend keeps running) |
 
 ## Indicators
 
@@ -101,6 +123,16 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
   ```
 
 - State (seen PRs, collapsed groups): `~/.local/state/pr-mon/state.json` (respects `XDG_STATE_HOME`)
+- Backend files, next to the state: `daemon.log` (rotated at 1 MB), `daemon.lock`
+  (holds the pid), `daemon.sock`. If that path is too long for a Unix socket,
+  the socket lives in `/tmp/pr-mon-<uid>/` instead.
+
+## Troubleshooting
+
+- `pr-mon status` — is the backend up, and which version?
+- `~/.local/state/pr-mon/daemon.log` — backend errors, including GitHub auth
+  problems (`gh auth login` fixes those; the backend picks up the new token).
+- After upgrading pr-mon, the dashboard offers to restart an older backend.
 
 ## Development
 

@@ -17,6 +17,7 @@ from pr_mon.daemon import (
     DaemonPaths,
     daemon_info,
     daemon_status,
+    ensure_socket_dir,
     request,
     spawn_daemon,
     stop_daemon,
@@ -113,6 +114,34 @@ class DaemonTest(unittest.TestCase):
             spawn_daemon(self.paths, command=(sys.executable, "-c", script), timeout=0.3)
         time.sleep(1.5)
         self.assertFalse(marker.exists())
+
+    def test_long_state_dir_uses_short_socket_path(self):
+        long_dir = self.dir / ("x" * 60) / ("y" * 60)
+        paths = DaemonPaths(long_dir)
+        self.assertEqual(paths.socket.parent, Path(f"/tmp/pr-mon-{os.getuid()}"))
+        self.assertLessEqual(len(os.fsencode(paths.socket)), 100)
+        self.assertNotEqual(paths.socket, DaemonPaths(self.dir / ("z" * 120)).socket)
+        self.assertEqual(DaemonPaths(self.dir).socket, self.dir / "daemon.sock")
+        save_config(long_dir / "config.toml", Config(repos=["acme/api"]))
+        command = (sys.executable, "-m", "tests.daemon_harness", str(long_dir), "acme/api")
+        pid = spawn_daemon(paths, command=command, timeout=10)
+        self.addCleanup(lambda: stop_daemon(paths))
+        self.assertEqual(daemon_info(paths)["pid"], pid)
+        runtime = paths.socket.parent.stat()
+        self.assertEqual((runtime.st_uid, runtime.st_mode & 0o777), (os.getuid(), 0o700))
+        self.assertTrue(stop_daemon(paths))
+        self.assertFalse(paths.socket.exists())
+
+    def test_unsafe_runtime_dir_is_refused(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as shared:
+            runtime = Path(shared) / f"pr-mon-{os.getuid()}"
+            runtime.mkdir()
+            os.chmod(runtime, 0o777)
+            with (
+                mock.patch("pr_mon.daemon.SHORT_SOCKET_ROOT", Path(shared)),
+                self.assertRaisesRegex(DaemonError, "not private"),
+            ):
+                ensure_socket_dir(DaemonPaths(self.dir / ("x" * 120)))
 
     def test_tail_log(self):
         self.assertEqual(tail_log(self.paths), "")
