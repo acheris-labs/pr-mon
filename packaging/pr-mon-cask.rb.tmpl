@@ -19,13 +19,18 @@ cask "pr-mon" do
   app "PrMon.app"
   binary "#{appdir}/PrMon.app/Contents/Resources/bin/pr-mon"
 
-  # The backend outlives the app, so stop it before the bundle goes; without
-  # this a daemon keeps running from a deleted binary. must_succeed: false
-  # because a failed preflight would abort the uninstall entirely.
+  # The backend outlives the app, so stop it before the bundle goes; otherwise a
+  # daemon keeps running from a deleted binary.
+  #
+  # This is the deprecated spelling on purpose: `uninstall_preflight_steps`, the
+  # replacement `brew style` asks for, is silently a no-op in Homebrew 7.0.3 --
+  # the block never runs and nothing is reported. The classic block does run.
+  # must_succeed: false because a failed preflight would abort the uninstall and
+  # leave the app unremovable, and it also covers an already-missing binary.
   uninstall_preflight do
-    if_path_exists "PrMon.app/Contents/Resources/bin/pr-mon", base: :appdir do
-      run "#{appdir}/PrMon.app/Contents/Resources/bin/pr-mon",
-          args: ["stop"], must_succeed: false, print_stderr: false
+    stopper = "#{appdir}/PrMon.app/Contents/Resources/bin/pr-mon"
+    if File.executable?(stopper)
+      system_command stopper, args: ["stop"], must_succeed: false, print_stderr: false
     end
   end
 
