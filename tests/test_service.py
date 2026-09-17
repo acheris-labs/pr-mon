@@ -307,5 +307,192 @@ class PerformTest(MonitorTestCase):
             await m.perform("gone/repo", 1, Action("update"))
 
 
+UNSTABLE = {"merge_state": "UNSTABLE", "check_state": "FAILURE"}
+MERGE_EVENTS = NotifyConfig(script_enabled=True, script="im", events=["MERGED", "MERGE_FAILED"])
+
+
+def pr_at(sha, **status):
+    return {"head_sha": sha, **status}
+
+
+class ArmedMergeTest(MonitorTestCase):
+    async def start_armed(self, *prs, notifications=None, total=None, arm=True, delete=False):
+        kwargs = {"total": total} if total is not None else {}
+        m = await self.start(
+            {"acme/api": make_repo("acme/api", *prs, **kwargs)},
+            notifications={"acme/api": notifications} if notifications else None,
+        )
+        if arm:
+            await m.perform("acme/api", 1, Action("arm_merge", MergeMethod.SQUASH, delete))
+        self.events.clear()
+        return m
+
+    def set_prs(self, *prs, **kwargs):
+        self.client.repos["acme/api"] = make_repo("acme/api", *prs, **kwargs)
+
+    def merges(self):
+        return [c for c in self.client.calls if c[0] == "merge"]
+
+    async def test_arm_and_disarm(self):
+        m = await self.start({"acme/api": make_repo("acme/api", (1, PENDING))})
+        await m.perform("acme/api", 1, Action("arm_merge", MergeMethod.REBASE, True))
+        armed = m.armed("acme/api")[1]
+        self.assertEqual((armed.method, armed.delete_branch), (MergeMethod.REBASE, True))
+        saved = load_state(self.state_path)[0].armed["acme/api"]["1"]
+        self.assertEqual(saved["method"], "REBASE")
+        self.assertIn(
+            ("information", "pr-mon will merge acme/api#1 when it's ready (rebase)"),
+            self.toasts(),
+        )
+        self.assertEqual(self.kinds()[-2:], ["toast", "repo"])
+        await m.perform("acme/api", 1, Action("disarm_merge"))
+        self.assertEqual(m.armed("acme/api"), {})
+        self.assertEqual(load_state(self.state_path)[0].armed, {})
+        self.assertIn(("information", "Cancelled merge when ready for acme/api#1"), self.toasts())
+        self.assertEqual(self.merges(), [])
+
+    async def test_merges_when_strictly_ready(self):
+        m = await self.start_armed((1, pr_at("aaa", **PENDING)), notifications=MERGE_EVENTS)
+        self.set_prs((1, pr_at("aaa")))
+        fetches = len([c for c in self.client.calls if c[0] == "fetch"])
+        await self.poll()
+        self.assertEqual(self.merges(), [("merge", "PR_1", MergeMethod.SQUASH)])
+        self.assertEqual(self.client.merge_heads, ["aaa"])
+        self.assertEqual(m.armed("acme/api"), {})
+        self.assertIn(
+            ("information", "Merged acme/api#1 (pr-mon auto-merge, squash)"), self.toasts()
+        )
+        self.assertEqual(self.deliver.states(), [("acme/api", "1", "MERGED")])
+        self.assertEqual(len([c for c in self.client.calls if c[0] == "fetch"]), fetches + 2)
+
+    async def test_not_while_only_optionally_green(self):
+        m = await self.start_armed((1, PENDING))
+        self.set_prs((1, UNSTABLE))
+        await self.poll()
+        self.assertEqual(self.merges(), [])
+        self.assertIn(1, m.armed("acme/api"))
+
+    async def test_new_commits_keep_it_armed(self):
+        await self.start_armed((1, pr_at("aaa", **PENDING)))
+        self.set_prs((1, pr_at("bbb", **PENDING)))
+        await self.poll()
+        self.assertEqual(self.merges(), [])
+        self.set_prs((1, pr_at("bbb")))
+        await self.poll()
+        self.assertEqual(self.client.merge_heads, ["bbb"])
+
+    async def test_head_moved_is_retried_quietly(self):
+        m = await self.start_armed((1, PENDING), notifications=MERGE_EVENTS)
+        self.client.merge_errors = [
+            GitHubError("Head branch was modified. Review and try the merge again.")
+        ]
+        self.set_prs((1, READY))
+        await self.poll()
+        self.assertIn(1, m.armed("acme/api"))
+        self.assertEqual(self.toasts(), [])
+        self.assertEqual(self.deliver.calls, [])
+        await self.poll()
+        self.assertEqual(len(self.merges()), 2)
+        self.assertEqual(m.armed("acme/api"), {})
+
+    async def test_other_failure_disarms_and_reports(self):
+        m = await self.start_armed((1, PENDING), notifications=MERGE_EVENTS)
+        self.client.merge_error = GitHubError("Merge queue is required")
+        self.set_prs((1, READY))
+        await self.poll()
+        self.assertEqual(m.armed("acme/api"), {})
+        self.assertIn(
+            ("error", "pr-mon auto-merge failed for acme/api#1: Merge queue is required"),
+            self.toasts(),
+        )
+        self.assertEqual(self.deliver.states(), [("acme/api", "1", "MERGE_FAILED")])
+        self.assertEqual(self.deliver.calls[0][2]["PR_REASON"], "Merge queue is required")
+        await self.poll()
+        self.assertEqual(len(self.merges()), 1)
+
+    async def test_deletes_branch_when_chosen(self):
+        await self.start_armed((1, PENDING), delete=True)
+        self.set_prs((1, READY))
+        await self.poll()
+        self.assertIn(("delete", "REF_1"), self.client.calls)
+
+    async def test_branch_delete_failure_is_warning(self):
+        m = await self.start_armed((1, PENDING), delete=True)
+        self.client.delete_error = GitHubError("no push access")
+        self.set_prs((1, READY))
+        await self.poll()
+        self.assertEqual([s for s, _ in self.toasts()], ["information", "warning"])
+        self.assertEqual(m.armed("acme/api"), {})
+
+    async def test_keeps_branch_when_not_chosen(self):
+        await self.start_armed((1, PENDING))
+        self.set_prs((1, READY))
+        await self.poll()
+        self.assertNotIn("delete", [c[0] for c in self.client.calls])
+
+    async def test_closed_pr_is_disarmed(self):
+        m = await self.start_armed((1, PENDING))
+        self.set_prs()
+        await self.poll()
+        self.assertEqual(m.armed("acme/api"), {})
+        self.assertEqual(load_state(self.state_path)[0].armed, {})
+
+    async def test_truncated_list_keeps_it_armed(self):
+        m = await self.start_armed((1, PENDING))
+        self.set_prs((2, PENDING), total=80)
+        await self.poll()
+        self.assertIn(1, m.armed("acme/api"))
+
+    async def test_no_double_merge_while_in_flight(self):
+        await self.start_armed((1, PENDING))
+        self.client.merge_gate = asyncio.Event()
+        self.set_prs((1, READY))
+        await self.monitor.poll_once()
+        await self.monitor.poll_once()
+        await asyncio.sleep(0.01)
+        self.client.merge_gate.set()
+        await self.monitor.wait_idle()
+        self.assertEqual(len(self.merges()), 1)
+
+    async def test_remove_repo_drops_armed(self):
+        m = await self.start_armed((1, PENDING))
+        await m.remove_repo("acme/api")
+        self.assertEqual(load_state(self.state_path)[0].armed, {})
+
+    async def test_merges_on_first_load(self):
+        state = AppState(
+            armed={
+                "acme/api": {
+                    "1": {"method": "MERGE", "delete_branch": False, "armed_at": "2026-09-17"}
+                }
+            }
+        )
+        m = await self.start(
+            {"acme/api": make_repo("acme/api", (1, READY))},
+            notifications={"acme/api": MERGE_EVENTS},
+            state=state,
+        )
+        self.assertEqual(self.merges(), [("merge", "PR_1", MergeMethod.MERGE)])
+        self.assertEqual(m.armed("acme/api"), {})
+        self.assertEqual(self.deliver.states(), [("acme/api", "1", "MERGED")])
+
+    async def test_unconfigured_or_unselected_notifications(self):
+        await self.start_armed((1, PENDING))
+        self.set_prs((1, READY))
+        await self.poll()
+        self.assertEqual(self.deliver.calls, [])
+        quiet = NotifyConfig(script_enabled=True, script="im", events=["FAILING"])
+        m = await self.start_armed((1, PENDING), notifications=quiet)
+        self.set_prs((1, READY))
+        await self.poll()
+        self.assertEqual(m.armed("acme/api"), {})
+        self.assertEqual(self.deliver.calls, [])
+
+    async def test_invalid_saved_entries_are_skipped(self):
+        state = AppState(armed={"acme/api": {"1": {"method": "NOPE"}, "x": {}}})
+        m = await self.start({"acme/api": make_repo("acme/api", (1, PENDING))}, state=state)
+        self.assertEqual(m.armed("acme/api"), {})
+
+
 if __name__ == "__main__":
     unittest.main()

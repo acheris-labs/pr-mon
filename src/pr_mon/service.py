@@ -13,13 +13,25 @@ from pathlib import Path
 from pr_mon.backend import BackendError, BackendEvent, BackendStatus, Listener
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
 from pr_mon.github import GitHubError, RateLimitError
-from pr_mon.models import Action, RepoInfo, Status, owner_key
+from pr_mon.models import (
+    Action,
+    ArmedMerge,
+    PullRequest,
+    RepoInfo,
+    Status,
+    armed_from_dict,
+    armed_to_dict,
+    owner_key,
+)
 from pr_mon.notify import deliver, pr_variables, sample_variables, select_notifications
 from pr_mon.state import AppState, load_state, save_state
 from pr_mon.tracker import Tracker
 
 CHECKING_RETRY_DELAY = 5
 CHECKING_RETRIES = 3
+# GitHub's wording when the head or base moves under a merge ("Head branch was
+# modified. Review and try the merge again."); such merges are retried next refresh.
+RETRYABLE_MERGE_ERROR = "was modified"
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +68,7 @@ class Monitor:
         self._busy: set[asyncio.Task] = set()
         self._timers: set[asyncio.TimerHandle] = set()
         self._poll_task: asyncio.Task | None = None
+        self._merging: set[tuple[str, int]] = set()
 
     # ----- lifecycle -----
 
@@ -124,6 +137,15 @@ class Monitor:
     def unseen(self, name: str) -> set[int]:
         return self.tracker.unseen(name)
 
+    def armed(self, name: str) -> dict[int, ArmedMerge]:
+        armed = {}
+        for key, data in (self.state.armed.get(name) or {}).items():
+            try:
+                armed[int(key)] = armed_from_dict(data)
+            except ValueError:
+                log.warning("ignoring invalid armed merge %s#%s", name, key)
+        return armed
+
     # ----- polling -----
 
     async def poll_once(self) -> None:
@@ -178,8 +200,74 @@ class Monitor:
             # A new alert opens its group so it's visible next time anyone looks.
             self.state.collapsed.remove(owner)
             self._emit("collapsed")
+        self._check_armed(name, repo)
         self._save_state()
         self._emit("repo", name=name)
+
+    # ----- pr-mon auto-merge -----
+
+    def _check_armed(self, name: str, repo: RepoInfo) -> None:
+        """Merge armed PRs that are strictly ready; forget ones that closed."""
+        armed = self.armed(name)
+        if not armed:
+            return
+        prs = {pr.number: pr for pr in repo.prs}
+        truncated = repo.pr_total > len(repo.prs)
+        for number, merge in armed.items():
+            pr = prs.get(number)
+            if pr is None:
+                # Beyond the newest-N cut-off it may still be open; otherwise it closed.
+                if not truncated:
+                    log.info("%s#%s closed; no longer armed", name, number)
+                    self._disarm(name, number)
+                continue
+            if pr.strictly_ready and (name, number) not in self._merging:
+                self._merging.add((name, number))
+                self._spawn(self._auto_merge(name, pr, merge))
+
+    def _disarm(self, name: str, number: int) -> None:
+        entries = self.state.armed.get(name, {})
+        entries.pop(str(number), None)
+        if not entries:
+            self.state.armed.pop(name, None)
+        self._save_state()
+
+    async def _auto_merge(self, name: str, pr: PullRequest, merge: ArmedMerge) -> None:
+        label = f"{name}#{pr.number}"
+        try:
+            try:
+                await self.client.merge(pr.id, merge.method, expected_head_oid=pr.head_sha)
+            except GitHubError as e:
+                if RETRYABLE_MERGE_ERROR in str(e):
+                    log.info("auto-merge of %s raced a change; retrying: %s", label, e)
+                    return
+                log.warning("auto-merge of %s failed: %s", label, e)
+                self._disarm(name, pr.number)
+                self._emit("repo", name=name)
+                self._toast(f"pr-mon auto-merge failed for {label}: {e}", severity="error")
+                self._notify_result(name, pr, "MERGE_FAILED", str(e))
+                return
+            log.info("auto-merged %s", label)
+            self._disarm(name, pr.number)
+            self._toast(f"Merged {label} (pr-mon auto-merge, {merge.method.lower()})")
+            if merge.delete_branch and pr.head_ref_id:
+                try:
+                    await self.client.delete_branch(pr.head_ref_id)
+                except GitHubError as e:
+                    self._toast(
+                        f"Merged {label}, but couldn't delete {pr.head_ref}: {e}",
+                        severity="warning",
+                    )
+            self._notify_result(name, pr, "MERGED")
+            await self.refresh_repo(name)
+        finally:
+            self._merging.discard((name, pr.number))
+
+    def _notify_result(self, name: str, pr: PullRequest, state: str, reason: str = "") -> None:
+        # The user asked for this merge, so the first-load gate doesn't apply.
+        settings = self.config.notifications.get(name)
+        if settings is not None and state in settings.events:
+            self._spawn(self._send(settings, pr_variables(name, pr, state, reason)))
 
     # ----- notifications -----
 
@@ -245,6 +333,7 @@ class Monitor:
         self.errors.pop(name, None)
         self.loaded_repos.discard(name)
         self.tracker.forget(name)
+        self.state.armed.pop(name, None)
         save_config(self.config_path, self.config)
         self._save_state()
         self._emit("repos")
@@ -268,6 +357,19 @@ class Monitor:
         if pr is None:
             raise BackendError(f"{repo}#{number} is not an open PR")
         label = f"{repo}#{number}"
+        if action.kind == "arm_merge":
+            merge = ArmedMerge(action.method, action.delete_branch, _now_iso())
+            self.state.armed.setdefault(repo, {})[str(number)] = armed_to_dict(merge)
+            self._save_state()
+            self._toast(f"pr-mon will merge {label} when it's ready ({action.method.lower()})")
+            self._emit("repo", name=repo)
+            self._check_armed(repo, info)
+            return
+        if action.kind == "disarm_merge":
+            self._disarm(repo, number)
+            self._toast(f"Cancelled merge when ready for {label}")
+            self._emit("repo", name=repo)
+            return
         try:
             if action.kind == "merge":
                 await self.client.merge(pr.id, action.method)

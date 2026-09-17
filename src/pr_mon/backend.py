@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from pr_mon.config import Config, NotifyConfig
-from pr_mon.models import Action, RepoInfo
+from pr_mon.models import Action, ArmedMerge, RepoInfo
 
 
 class BackendError(Exception):
@@ -47,6 +47,8 @@ class Backend(Protocol):
     def collapsed(self) -> set[str]: ...
 
     def unseen(self, name: str) -> set[int]: ...
+
+    def armed(self, name: str) -> dict[int, ArmedMerge]: ...
 
     def add_listener(self, listener: Listener) -> None: ...
 

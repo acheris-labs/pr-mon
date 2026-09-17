@@ -18,6 +18,9 @@ class FakeClient:
         self.repos = dict(repos)  # name -> RepoInfo or Exception
         self.calls = []
         self.merge_error = None
+        self.merge_errors = []  # consumed in order before merge_error; None = success
+        self.merge_heads = []
+        self.merge_gate = None  # an asyncio.Event to hold merges open
         self.delete_error = None
 
     async def fetch_repo(self, name):
@@ -29,9 +32,16 @@ class FakeClient:
                 return value
         raise NotFoundError(f"Repository {name} not found")
 
-    async def merge(self, pr_id, method):
+    async def merge(self, pr_id, method, expected_head_oid=None):
         self.calls.append(("merge", pr_id, method))
-        if self.merge_error:
+        self.merge_heads.append(expected_head_oid)
+        if self.merge_gate is not None:
+            await self.merge_gate.wait()
+        if self.merge_errors:
+            error = self.merge_errors.pop(0)
+            if error:
+                raise error
+        elif self.merge_error:
             raise self.merge_error
 
     async def update_branch(self, pr_id):
