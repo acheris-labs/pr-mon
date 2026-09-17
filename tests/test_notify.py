@@ -65,9 +65,11 @@ class RenderTest(unittest.TestCase):
                     "PR_TARGET",
                     "PR_STATE",
                     "PR_URL",
+                    "PR_REASON",
                 ]
             ),
         )
+        self.assertEqual(SAMPLE_VARIABLES["PR_REASON"], "")
 
 
 def repo_of(*prs):
@@ -94,8 +96,11 @@ class VariablesTest(unittest.TestCase):
                 "PR_TARGET": "main",
                 "PR_STATE": "FAILING",
                 "PR_URL": "https://github.com/acme/api/pull/7",
+                "PR_REASON": "",
             },
         )
+        failed = pr_variables("acme/api", pr, "MERGE_FAILED", reason="no permission")
+        self.assertEqual(failed["PR_REASON"], "no permission")
 
 
 class SelectTest(unittest.TestCase):

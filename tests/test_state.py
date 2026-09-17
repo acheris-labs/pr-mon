@@ -23,10 +23,22 @@ class StateTest(unittest.TestCase):
         state = AppState(
             prs={"acme/api": {"12": {"status": "READY", "seen": False}}},
             collapsed=["acme", "cli"],
+            armed={
+                "acme/api": {
+                    "12": {"method": "SQUASH", "delete_branch": True, "armed_at": "2026-09-17"}
+                }
+            },
         )
         save_state(self.path, state)
         self.assertEqual(load_state(self.path), (state, None))
         self.assertEqual(list(self.path.parent.iterdir()), [self.path])
+
+    def test_bad_armed_is_ignored(self):
+        self.path.parent.mkdir(parents=True)
+        for armed in ("x", {"a/b": "x"}, {"a/b": {"1": "x"}}):
+            with self.subTest(armed=armed):
+                self.path.write_text(json.dumps({"prs": {}, "armed": armed}))
+                self.assertEqual(load_state(self.path)[0].armed, {})
 
     def test_bad_collapsed_is_ignored(self):
         self.path.parent.mkdir(parents=True)

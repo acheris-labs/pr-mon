@@ -11,6 +11,8 @@ from pr_mon.files import app_dir, write_atomic
 class AppState:
     prs: dict = field(default_factory=dict)  # Tracker records
     collapsed: list[str] = field(default_factory=list)  # lower-cased owner names
+    # PRs pr-mon will merge when ready: {repo: {"<number>": armed_to_dict(...)}}
+    armed: dict = field(default_factory=dict)
 
 
 def default_state_path() -> Path:
@@ -33,7 +35,17 @@ def load_state(path: Path) -> tuple[AppState, str | None]:
     collapsed = data.get("collapsed", [])
     if not (isinstance(collapsed, list) and all(isinstance(o, str) for o in collapsed)):
         collapsed = []
-    return AppState(prs=prs, collapsed=collapsed), None
+    armed = data.get("armed", {})
+    if not _valid_armed(armed):
+        armed = {}
+    return AppState(prs=prs, collapsed=collapsed, armed=armed), None
+
+
+def _valid_armed(armed: object) -> bool:
+    return isinstance(armed, dict) and all(
+        isinstance(entries, dict) and all(isinstance(e, dict) for e in entries.values())
+        for entries in armed.values()
+    )
 
 
 def save_state(path: Path, state: AppState) -> None:

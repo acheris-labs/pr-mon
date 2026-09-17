@@ -9,8 +9,18 @@ from pr_mon.files import app_dir, write_atomic
 
 DEFAULT_POLL_INTERVAL = 60
 DEFAULT_MESSAGE = "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}"
-EVENT_NAMES = ("READY", "FAILING", "CONFLICT", "BLOCKED", "BEHIND", "PENDING", "NEW")
-DEFAULT_EVENTS = ("READY", "FAILING", "CONFLICT")
+EVENT_NAMES = (
+    "READY",
+    "FAILING",
+    "CONFLICT",
+    "BLOCKED",
+    "BEHIND",
+    "PENDING",
+    "NEW",
+    "MERGED",
+    "MERGE_FAILED",
+)
+DEFAULT_EVENTS = ("READY", "FAILING", "CONFLICT", "MERGED", "MERGE_FAILED")
 
 
 @dataclass

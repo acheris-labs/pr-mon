@@ -258,6 +258,8 @@ EVENT_LABELS = {
     "BEHIND": "Behind base branch",
     "PENDING": "Pending (checks running)",
     "NEW": "New PR opened",
+    "MERGED": "Merged by pr-mon",
+    "MERGE_FAILED": "pr-mon auto-merge failed",
 }
 
 SCRIPT_HELP = (

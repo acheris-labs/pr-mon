@@ -54,7 +54,8 @@ class Check:
 class Action:
     """A user-requested change to a PR."""
 
-    kind: str  # "merge" | "update" | "auto_merge_on" | "auto_merge_off"
+    # "merge" | "update" | "auto_merge_on" | "auto_merge_off" | "arm_merge" | "disarm_merge"
+    kind: str
     method: MergeMethod | None = None
     delete_branch: bool = False
 
@@ -62,6 +63,32 @@ class Action:
 def owner_key(repo: str) -> str:
     """Case-insensitive owner of an owner/name repo, used to group repos."""
     return repo.partition("/")[0].lower()
+
+
+@dataclass(frozen=True)
+class ArmedMerge:
+    """A PR pr-mon will merge itself once it is strictly ready."""
+
+    method: MergeMethod
+    delete_branch: bool
+    armed_at: str  # ISO-8601 UTC
+
+
+def armed_to_dict(armed: ArmedMerge) -> dict:
+    return {
+        "method": str(armed.method),
+        "delete_branch": armed.delete_branch,
+        "armed_at": armed.armed_at,
+    }
+
+
+def armed_from_dict(data: object) -> ArmedMerge:
+    try:
+        return ArmedMerge(
+            MergeMethod(data["method"]), bool(data["delete_branch"]), str(data["armed_at"])
+        )
+    except (KeyError, TypeError, ValueError) as e:
+        raise ValueError(f"invalid armed merge: {e}") from e
 
 
 @dataclass(frozen=True)
@@ -103,6 +130,16 @@ class PullRequest:
     def last_check_started_at(self) -> str | None:
         # ISO-8601 UTC timestamps from GitHub sort correctly as strings.
         return max((c.started_at for c in self.checks if c.started_at), default=None)
+
+    @property
+    def strictly_ready(self) -> bool:
+        """Safe to merge unattended: mergeable and no check failing, required or not."""
+        return (
+            self.status == Status.READY
+            and self.merge_state in ("CLEAN", "HAS_HOOKS")
+            and self.check_state not in ("FAILURE", "ERROR")
+            and not any(check.failed for check in self.checks)
+        )
 
     @property
     def status(self) -> Status:

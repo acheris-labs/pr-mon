@@ -2,9 +2,12 @@ import json
 import unittest
 
 from pr_mon.models import (
+    ArmedMerge,
     AutoMerge,
     MergeMethod,
     Status,
+    armed_from_dict,
+    armed_to_dict,
     parse_repo,
     repo_from_dict,
     repo_to_dict,
@@ -209,6 +212,44 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(p.checks, ())
         self.assertIsNone(p.last_commit_at)
         self.assertIsNone(p.head_sha)
+
+
+class StrictlyReadyTest(unittest.TestCase):
+    def test_ready_states(self):
+        self.assertTrue(pr().strictly_ready)
+        self.assertTrue(pr(merge_state="HAS_HOOKS").strictly_ready)
+
+    def test_not_ready(self):
+        cases = {
+            "unstable": {"merge_state": "UNSTABLE", "check_state": "FAILURE"},
+            "failed optional check": {
+                "merge_state": "CLEAN",
+                "checks": [check_run("lint", conclusion="FAILURE")],
+            },
+            "draft": {"is_draft": True},
+            "pending": {"merge_state": "BLOCKED", "check_state": "PENDING"},
+            "checking": {"mergeable": "UNKNOWN"},
+            "blocked": {"merge_state": "BLOCKED"},
+            "behind": {"merge_state": "BEHIND"},
+        }
+        for name, kwargs in cases.items():
+            with self.subTest(name):
+                self.assertFalse(pr(**kwargs).strictly_ready)
+
+
+class ArmedMergeTest(unittest.TestCase):
+    def test_round_trip(self):
+        armed = ArmedMerge(MergeMethod.REBASE, True, "2026-09-17T10:00:00+00:00")
+        self.assertEqual(armed_from_dict(armed_to_dict(armed)), armed)
+        self.assertEqual(
+            armed_to_dict(armed),
+            {"method": "REBASE", "delete_branch": True, "armed_at": "2026-09-17T10:00:00+00:00"},
+        )
+
+    def test_invalid(self):
+        for data in ({}, {"method": "NOPE", "delete_branch": True, "armed_at": "x"}, "x"):
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                armed_from_dict(data)
 
 
 class SerializationTest(unittest.TestCase):

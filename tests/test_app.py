@@ -881,6 +881,8 @@ class NotificationsScreenTest(AppTestCase):
                     "behind": False,
                     "pending": False,
                     "new": False,
+                    "merged": True,
+                    "merge_failed": True,
                 },
             )
             self.assertEqual(screen.query_one("#message", Input).value, NotifyConfig().message)
@@ -913,7 +915,7 @@ class NotificationsScreenTest(AppTestCase):
             self.assertNotIsInstance(app.screen, NotificationsScreen)
             expected = NotifyConfig(
                 message="hi {{PR_NUM}}",
-                events=["FAILING", "CONFLICT", "NEW"],
+                events=["FAILING", "CONFLICT", "NEW", "MERGED", "MERGE_FAILED"],
                 include_drafts=True,
                 script_enabled=True,
                 script="im --deliver tgram",
@@ -1090,7 +1092,7 @@ class NotificationsScreenTest(AppTestCase):
             await self.open(pilot)
             await pilot.press("right")
             await pilot.pause()
-            await pilot.press(*["down"] * 9)
+            await pilot.press(*["down"] * 11)
             self.assertEqual(app.focused.id, "test")
 
 

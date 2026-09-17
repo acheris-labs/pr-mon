@@ -26,6 +26,7 @@ VARIABLE_NAMES = (
     "PR_TARGET",
     "PR_STATE",
     "PR_URL",
+    "PR_REASON",
 )
 SAMPLE_VARIABLES = {
     "PR_REPO": "owner/repo",
@@ -36,6 +37,7 @@ SAMPLE_VARIABLES = {
     "PR_TARGET": "main",
     "PR_STATE": "READY",
     "PR_URL": "https://github.com/owner/repo/pull/123",
+    "PR_REASON": "",
 }
 PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
 
@@ -69,7 +71,7 @@ def unknown_placeholders(template: str) -> list[str]:
     return unknown
 
 
-def pr_variables(repo_name: str, pr: PullRequest, state: str) -> dict[str, str]:
+def pr_variables(repo_name: str, pr: PullRequest, state: str, reason: str = "") -> dict[str, str]:
     return {
         "PR_REPO": repo_name,
         "PR_NUM": str(pr.number),
@@ -79,6 +81,7 @@ def pr_variables(repo_name: str, pr: PullRequest, state: str) -> dict[str, str]:
         "PR_TARGET": pr.base_ref,
         "PR_STATE": state,
         "PR_URL": pr.url,
+        "PR_REASON": reason,
     }
 
 

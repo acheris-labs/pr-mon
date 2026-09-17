@@ -172,6 +172,14 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("mergePullRequest", rec.body["query"])
         self.assertEqual(rec.body["variables"], {"id": "PR_1", "method": "SQUASH"})
 
+    async def test_merge_with_expected_head(self):
+        client, rec = self.client_for(ok({"mergePullRequest": {"clientMutationId": None}}))
+        await client.merge("PR_1", MergeMethod.REBASE, expected_head_oid="abc123")
+        self.assertIn("expectedHeadOid", rec.body["query"])
+        self.assertEqual(
+            rec.body["variables"], {"id": "PR_1", "method": "REBASE", "head": "abc123"}
+        )
+
     async def test_merge_error_surfaces_message(self):
         client, _ = self.client_for(gql_error("UNPROCESSABLE", "Base branch was modified"))
         with self.assertRaisesRegex(GitHubError, "Base branch was modified"):

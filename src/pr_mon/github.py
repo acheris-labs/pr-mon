@@ -88,8 +88,10 @@ def batch_query(numbers: list[int]) -> str:
 
 
 MERGE_MUTATION = """
-mutation($id: ID!, $method: PullRequestMergeMethod!) {
-  mergePullRequest(input: {pullRequestId: $id, mergeMethod: $method}) { clientMutationId }
+mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID) {
+  mergePullRequest(
+    input: {pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head}
+  ) { clientMutationId }
 }
 """
 
@@ -234,8 +236,14 @@ class GitHubClient:
         }
         return parse_repo(data)
 
-    async def merge(self, pr_id: str, method: MergeMethod) -> None:
-        await self._graphql(MERGE_MUTATION, {"id": pr_id, "method": str(method)})
+    async def merge(
+        self, pr_id: str, method: MergeMethod, expected_head_oid: str | None = None
+    ) -> None:
+        """Merge; with `expected_head_oid`, GitHub refuses if the head has moved."""
+        variables = {"id": pr_id, "method": str(method)}
+        if expected_head_oid:
+            variables["head"] = expected_head_oid
+        await self._graphql(MERGE_MUTATION, variables)
 
     async def update_branch(self, pr_id: str) -> None:
         await self._graphql(UPDATE_BRANCH_MUTATION, {"id": pr_id})

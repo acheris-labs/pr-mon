@@ -87,7 +87,7 @@ class NotifyConfigTest(unittest.TestCase):
         self.assertEqual(
             DEFAULT_MESSAGE, "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}"
         )
-        self.assertEqual(n.events, ["READY", "FAILING", "CONFLICT"])
+        self.assertEqual(n.events, ["READY", "FAILING", "CONFLICT", "MERGED", "MERGE_FAILED"])
         self.assertFalse(n.include_drafts or n.script_enabled or n.desktop_enabled)
         self.assertEqual(n.script, "")
 
