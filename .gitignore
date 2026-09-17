@@ -4,3 +4,11 @@ __pycache__/
 dist/
 build/
 .ruff_cache/
+
+# macOS app
+.build/
+.swiftpm/
+macos/build/
+macos/PrMon/PrMon.xcodeproj/
+macos/PrMon/PrMon/Info.plist
+xcuserdata/

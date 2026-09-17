@@ -1,0 +1,50 @@
+# Generate PrMon.xcodeproj with `make xcode` (XcodeGen); the project file isn't committed.
+name: PrMon
+options:
+  bundleIdPrefix: com.acheris-labs
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+packages:
+  PrMonKit:
+    path: ../PrMonKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  PrMon:
+    type: application
+    platform: macOS
+    sources:
+      - PrMon
+    dependencies:
+      - package: PrMonKit
+    info:
+      path: PrMon/Info.plist
+      properties:
+        CFBundleDisplayName: pr-mon
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.developer-tools
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.acheris-labs.pr-mon.app
+        PRODUCT_NAME: PrMon
+        # The app talks to the backend's Unix socket in ~/.local/state, outside any sandbox container.
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Manual
+        # Ad-hoc signing for local builds; set a team and identity to distribute.
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+schemes:
+  PrMon:
+    build:
+      targets:
+        PrMon: all
+    test:
+      config: Debug
+    run:
+      config: Debug

@@ -51,6 +51,20 @@
       "PR_URL",
       "PR_REASON"
     ],
-    "script_help": "The message is sent on stdin. PR_* variables are also set in the environment.\nRuns without a shell: use full paths or ~ (no $VARS)."
+    "script_help": "The message is sent on stdin. PR_* variables are also set in the environment.\nRuns without a shell: use full paths or ~ (no $VARS).",
+    "defaults": {
+      "message": "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}",
+      "events": [
+        "READY",
+        "FAILING",
+        "CONFLICT",
+        "MERGED",
+        "MERGE_FAILED"
+      ],
+      "include_drafts": false,
+      "script_enabled": false,
+      "script": "",
+      "desktop_enabled": false
+    }
   }
 }

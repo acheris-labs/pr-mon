@@ -506,7 +506,7 @@ class PrMonApp(App):
         def send_test(settings: NotifyConfig) -> None:
             self.run_command(self.backend.send_test(name, settings))
 
-        current = self.config.notifications.get(name, NotifyConfig())
+        current = self.config.notifications.get(name, form.defaults)
         notifier = self.backend.status.notifier
 
         def preview(message: str):

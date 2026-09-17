@@ -245,6 +245,7 @@ class RemoteBackendTest(ServerTestCase):
         self.assertEqual(form.events[0].name, "READY")
         self.assertIn("PR_REASON", form.variables)
         self.assertIn("stdin", form.script_help)
+        self.assertEqual(form.defaults, NotifyConfig())
         preview = await backend.preview_notification("acme/api", "{{PR_REPO}} {{NOPE}}")
         self.assertEqual((preview.text, preview.unknown), ("acme/api {{NOPE}}", ("NOPE",)))
 

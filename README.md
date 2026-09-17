@@ -171,6 +171,25 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
 - After upgrading pr-mon, the dashboard restarts an older backend by itself
   (after any merge it is in the middle of).
 
+## macOS app
+
+`macos/` holds a native Mac app for the same backend: repositories in a
+sidebar, pull requests, and details, with merges and auto-merge from the
+toolbar, the Pull Request menu, or a right-click. Repositories and
+notifications are managed in Settings (⌘,).
+
+```sh
+make app-install   # builds and copies PrMon.app to ~/Applications
+```
+
+- Needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+- The app starts the backend with `pr-mon start` through your login shell, so
+  install the CLI first (`make tool-install`), or enable `pr-mon autostart`.
+- Like the TUI, it's only a window onto the backend: quitting it leaves the
+  backend running, and it can run alongside dashboards.
+- `macos/PrMonKit` is the Swift client library (`make swift-test`);
+  `make xcode` generates `macos/PrMon/PrMon.xcodeproj` for working in Xcode.
+
 ## Development
 
 ```sh
@@ -179,4 +198,9 @@ make test      # unittest
 make lint      # ruff check + format check
 make fmt       # ruff format + fix
 make clean
+make fixtures     # regenerate protocol-fixtures/ after a wire change
+make swift-test   # PrMonKit tests (decodes protocol-fixtures/)
+make app          # build the Mac app into macos/build
 ```
+
+The backend protocol is documented in [docs/protocol.md](docs/protocol.md).

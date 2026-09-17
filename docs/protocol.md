@@ -150,6 +150,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `events` | [`EventOption`] | Events to offer, in display order. |
 | `variables` | [string] | Placeholder names usable as `{{NAME}}`. |
 | `script_help` | string | Help text for the script command. |
+| `defaults` | `NotifyConfig` | Settings to start from for a repo that has none. |
 
 ### Object: `EventOption`
 

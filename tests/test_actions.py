@@ -26,7 +26,7 @@ class ActionsTest(unittest.TestCase):
         self.assertTrue(merge.available)
         self.assertTrue(merge.needs_method)
         self.assertTrue(merge.offers_delete_branch)
-        self.assertEqual(options["auto_merge"].reason, "already mergeable — use m")
+        self.assertEqual(options["auto_merge"].reason, "already mergeable")
 
     def test_merge_unavailable_explains(self):
         merge = menu(PENDING)["merge"]

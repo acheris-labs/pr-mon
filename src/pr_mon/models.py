@@ -4,6 +4,8 @@ import json
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 
+from pr_mon.config import NotifyConfig
+
 
 class Status(StrEnum):
     DRAFT = "DRAFT"
@@ -106,6 +108,7 @@ class NotificationForm:
     events: tuple[EventOption, ...]
     variables: tuple[str, ...]  # placeholder names for {{NAME}}
     script_help: str
+    defaults: NotifyConfig  # settings for a repo that has none yet
 
 
 @dataclass(frozen=True)

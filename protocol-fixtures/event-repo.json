@@ -52,7 +52,7 @@
               "kind": "auto_merge_on",
               "label": "Auto-merge",
               "available": false,
-              "reason": "already mergeable — use m",
+              "reason": "already mergeable",
               "note": null,
               "needs_method": false,
               "offers_delete_branch": false

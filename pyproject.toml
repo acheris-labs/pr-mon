@@ -1,6 +1,6 @@
 [project]
 name = "pr-mon"
-version = "0.1.4"
+version = "0.1.5"
 description = "TUI dashboard for monitoring and merging GitHub pull requests"
 readme = "README.md"
 authors = [

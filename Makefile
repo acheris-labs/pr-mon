@@ -1,4 +1,8 @@
-.PHONY: install run test lint fmt clean tool-install fixtures
+.PHONY: install run test lint fmt clean tool-install fixtures \
+	swift-test xcode app app-install
+
+APP_BUILD := macos/build
+APP := $(APP_BUILD)/Build/Products/Release/PrMon.app
 
 install:
 	uv sync
@@ -21,8 +25,27 @@ fmt:
 	uv run ruff check --fix .
 
 clean:
-	rm -rf .venv dist build .ruff_cache
+	rm -rf .venv dist build .ruff_cache $(APP_BUILD) macos/PrMonKit/.build
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
 tool-install:
 	uv tool install --reinstall .
+
+# ----- macOS menu bar app (macos/) -----
+
+swift-test:
+	cd macos/PrMonKit && swift test
+
+xcode:
+	cd macos/PrMon && xcodegen generate
+
+app: xcode
+	xcodebuild -project macos/PrMon/PrMon.xcodeproj -scheme PrMon -configuration Release \
+		-destination generic/platform=macOS -derivedDataPath $(APP_BUILD) -quiet build
+	@echo "built $(APP)"
+
+app-install: app
+	mkdir -p ~/Applications
+	rm -rf ~/Applications/PrMon.app
+	cp -R $(APP) ~/Applications/
+	@echo "installed ~/Applications/PrMon.app"

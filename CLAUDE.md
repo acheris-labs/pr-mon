@@ -2,8 +2,8 @@
 
 ## Architecture
 
-The backend (`pr-mon daemon`) does all the work. Clients (the TUI, and any
-future menu bar app or widget) stay thin: they display what the backend sends
+The backend (`pr-mon daemon`) does all the work. Clients (the TUI and the Mac
+app in `macos/`) stay thin: they display what the backend sends
 and send commands. Put new logic in the backend and send its results over the
 socket rather than computing them in a client.
 
@@ -12,7 +12,7 @@ socket rather than computing them in a client.
 - The socket protocol is specified in `docs/protocol.md`;
   `tests/test_protocol_spec.py` checks the document against the code.
 - `protocol-fixtures/` holds sample messages generated from Python
-  (`make fixtures`) and decoded by the Swift tests. A stale fixture fails
+  (`make fixtures`) and decoded by the Swift tests (`make swift-test`). A stale fixture fails
   `tests/test_protocol_fixtures.py`.
 
 ## Versioning
@@ -36,3 +36,11 @@ Two version numbers guard the TUI ↔ backend connection:
 
 Any wire change also updates `docs/protocol.md` and the fixtures (`make fixtures`).
 Commit the bumped `pyproject.toml` and `uv.lock` together with the change.
+
+## Mac app
+
+- `macos/PrMonKit`: Swift package (client, models, state); tests use Swift Testing.
+- `macos/PrMon`: SwiftUI app; `project.yml` is the XcodeGen spec, the generated
+  `.xcodeproj` isn't committed. Build with `make app`.
+- The app should look like a standard Mac app, not a port of the TUI.
+- Wire changes also need the Swift models (`Models.swift`) updated.

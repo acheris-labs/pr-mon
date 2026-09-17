@@ -89,6 +89,7 @@ def notification_form() -> NotificationForm:
         events=tuple(EventOption(name, EVENT_LABELS[name]) for name in EVENT_NAMES),
         variables=VARIABLE_NAMES,
         script_help=SCRIPT_HELP,
+        defaults=NotifyConfig(),
     )
 
 

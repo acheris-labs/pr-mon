@@ -73,5 +73,5 @@ def _auto_merge_blocker(repo: RepoInfo, pr: PullRequest) -> str | None:
     if pr.is_draft:
         return "draft PR"
     if pr.status == Status.READY:
-        return "already mergeable — use m"
+        return "already mergeable"
     return None

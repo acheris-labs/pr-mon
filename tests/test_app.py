@@ -518,7 +518,7 @@ class PrMonAutoMergeTest(AppTestCase):
 
     async def test_unavailable_cases(self):
         cases = {
-            "already mergeable — use m": (1, READY),
+            "already mergeable": (1, READY),
             "draft PR": (1, {"is_draft": True}),
         }
         for reason, pr in cases.items():

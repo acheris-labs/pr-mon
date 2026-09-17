@@ -88,6 +88,7 @@ def form_from_dict(data: dict) -> NotificationForm:
         events=tuple(EventOption(**event) for event in data["events"]),
         variables=tuple(data["variables"]),
         script_help=data["script_help"],
+        defaults=settings_from_dict(data["defaults"]),
     )
 
 
