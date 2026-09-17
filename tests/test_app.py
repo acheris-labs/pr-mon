@@ -17,8 +17,8 @@ from textual.widgets import (
 
 from pr_mon.app import PrMonApp, PrTable
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
-from pr_mon.github import GitHubError, NotFoundError
-from pr_mon.models import MergeMethod, parse_repo
+from pr_mon.github import GitHubError
+from pr_mon.models import MergeMethod
 from pr_mon.notify import SAMPLE_VARIABLES
 from pr_mon.screens import (
     ActionMenuScreen,
@@ -28,61 +28,12 @@ from pr_mon.screens import (
     NotificationsScreen,
 )
 from pr_mon.state import AppState, save_state
-from tests.fixtures import auto_merge, raw_pr, raw_repo
+from tests.fakes import FakeClient, FakeDeliver, make_repo
+from tests.fixtures import auto_merge
 
 READY = {}
 CONFLICT = {"mergeable": "CONFLICTING", "merge_state": "DIRTY"}
 BEHIND = {"merge_state": "BEHIND"}
-
-
-def make_repo(name, *prs, **repo_kwargs):
-    return parse_repo(
-        raw_repo(
-            [raw_pr(number=n, title=f"PR {n}", **kw) for n, kw in prs], name=name, **repo_kwargs
-        )
-    )
-
-
-class FakeClient:
-    def __init__(self, repos):
-        self.repos = dict(repos)  # name -> RepoInfo or Exception
-        self.calls = []
-        self.merge_error = None
-        self.delete_error = None
-
-    async def fetch_repo(self, name):
-        self.calls.append(("fetch", name))
-        for key, value in self.repos.items():
-            if key.lower() == name.lower():
-                if isinstance(value, Exception):
-                    raise value
-                return value
-        raise NotFoundError(f"Repository {name} not found")
-
-    async def merge(self, pr_id, method):
-        self.calls.append(("merge", pr_id, method))
-        if self.merge_error:
-            raise self.merge_error
-
-    async def update_branch(self, pr_id):
-        self.calls.append(("update", pr_id))
-
-    async def enable_auto_merge(self, pr_id, method):
-        self.calls.append(("auto_on", pr_id, method))
-
-    async def disable_auto_merge(self, pr_id):
-        self.calls.append(("auto_off", pr_id))
-
-    async def delete_branch(self, ref_id):
-        self.calls.append(("delete", ref_id))
-        if self.delete_error:
-            raise self.delete_error
-
-    async def aclose(self):
-        self.calls.append(("close",))
-
-    def actions(self):
-        return [c for c in self.calls if c[0] not in ("fetch", "close")]
 
 
 def text_of(widget):
@@ -698,28 +649,6 @@ class RepoTreeTest(AppTestCase):
             await self.settle(pilot)
             self.assertEqual(self.tree_view(app), ["▼   beta/", "      x"])
             self.assertEqual(app.selected_repo, "beta/x")
-
-
-class FakeDeliver:
-    """Stands in for notify.deliver; records calls and returns canned results."""
-
-    def __init__(self):
-        self.calls = []
-        self.results = None
-
-    async def __call__(self, settings, notifier, variables):
-        self.calls.append((settings, notifier, variables))
-        if self.results is not None:
-            return self.results
-        channels = []
-        if settings.script_enabled and settings.script:
-            channels.append(("script", None))
-        if settings.desktop_enabled and notifier:
-            channels.append(("desktop", None))
-        return channels
-
-    def states(self):
-        return [(v["PR_REPO"], v["PR_NUM"], v["PR_STATE"]) for _, _, v in self.calls]
 
 
 PENDING = {"merge_state": "BLOCKED", "check_state": "PENDING"}

@@ -1,7 +1,6 @@
 """Modal dialogs: add repo, confirm, PR action menu, merge method choice, notifications."""
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 from rich.text import Text
@@ -22,7 +21,7 @@ from textual.widgets import (
 )
 
 from pr_mon.config import EVENT_NAMES, NotifyConfig
-from pr_mon.models import MergeMethod, PullRequest, RepoInfo, Status
+from pr_mon.models import Action, MergeMethod, PullRequest, RepoInfo, Status
 from pr_mon.notify import VARIABLE_NAMES, render, sample_variables, unknown_placeholders
 
 MODAL_CSS = """
@@ -50,13 +49,6 @@ METHOD_KEYS = {
     MergeMethod.MERGE: ("m", "Create a merge commit"),
     MergeMethod.REBASE: ("r", "Rebase and merge"),
 }
-
-
-@dataclass(frozen=True)
-class Action:
-    kind: str  # "merge" | "update" | "auto_merge_on" | "auto_merge_off"
-    method: MergeMethod | None = None
-    delete_branch: bool = False
 
 
 class AddRepoScreen(ModalScreen[RepoInfo | None]):

@@ -13,10 +13,9 @@ from textual.widgets.tree import TreeNode
 
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
 from pr_mon.github import GitHubError, RateLimitError
-from pr_mon.models import PullRequest, RepoInfo, Status
+from pr_mon.models import Action, PullRequest, RepoInfo, Status
 from pr_mon.notify import deliver, pr_variables, sample_variables, select_notifications
 from pr_mon.screens import (
-    Action,
     ActionMenuScreen,
     AddRepoScreen,
     ConfirmScreen,

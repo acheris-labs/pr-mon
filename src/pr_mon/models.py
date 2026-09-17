@@ -51,6 +51,20 @@ class Check:
 
 
 @dataclass(frozen=True)
+class Action:
+    """A user-requested change to a PR."""
+
+    kind: str  # "merge" | "update" | "auto_merge_on" | "auto_merge_off"
+    method: MergeMethod | None = None
+    delete_branch: bool = False
+
+
+def owner_key(repo: str) -> str:
+    """Case-insensitive owner of an owner/name repo, used to group repos."""
+    return repo.partition("/")[0].lower()
+
+
+@dataclass(frozen=True)
 class AutoMerge:
     method: MergeMethod
     enabled_by: str
