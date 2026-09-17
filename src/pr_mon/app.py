@@ -1,5 +1,6 @@
 """The pr-mon Textual application: a view onto a Backend."""
 
+import asyncio
 from datetime import UTC, datetime
 
 from rich.text import Text
@@ -10,9 +11,12 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Footer, Header, Static, Tree
 from textual.widgets.tree import TreeNode
 
+from pr_mon import __version__
 from pr_mon.backend import Backend, BackendError, BackendEvent
 from pr_mon.config import Config, NotifyConfig
+from pr_mon.daemon import DaemonError, DaemonPaths, spawn_daemon, stop_daemon
 from pr_mon.models import Action, PullRequest, RepoInfo, owner_key
+from pr_mon.remote import BackendUnavailable
 from pr_mon.screens import (
     ActionMenuScreen,
     AddRepoScreen,
@@ -94,19 +98,38 @@ class PrMonApp(App):
     #repos:focus, #prs:focus {
         border: round $accent;
     }
+    #banner {
+        display: none;
+        background: $error;
+        color: $text;
+        text-style: bold;
+        padding: 0 1;
+    }
+    #banner.-visible {
+        display: block;
+    }
     """
     BINDINGS = [
         Binding("A", "add_repo", "Add repo"),
         Binding("N", "notifications", "Notifications"),
         Binding("r", "refresh_all", "Refresh"),
+        Binding("S", "stop_backend", "Stop backend"),
+        Binding("S", "start_backend", "Start backend"),
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, backend: Backend, owns_backend: bool = False):
-        """`owns_backend`: start and stop an in-process backend with the app."""
+    def __init__(
+        self,
+        backend: Backend,
+        owns_backend: bool = False,
+        daemon: DaemonPaths | None = None,
+    ):
+        """Either `owns_backend` (start/stop an in-process backend with the app) or
+        `daemon` (connect `backend` to that daemon, starting it if needed)."""
         super().__init__()
         self.backend = backend
         self.owns_backend = owns_backend
+        self.daemon = daemon
         self.shown_repo: str | None = None
         self.repo_nodes: dict[str, TreeNode[str]] = {}
         self.owner_nodes: dict[str, TreeNode[str]] = {}
@@ -125,6 +148,7 @@ class PrMonApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        yield Static("", id="banner")
         with Horizontal():
             yield RepoTree("repos", id="repos")
             with Vertical():
@@ -141,17 +165,102 @@ class PrMonApp(App):
         table = self.query_one("#prs", PrTable)
         table.add_columns("", "#", "Status", "Author", "Title")
         self.backend.add_listener(self.on_backend_event)
+        if self.daemon is not None:
+            self.sub_title = "connecting to backend…"
+            self.open_session()
+            return
         if self.owns_backend:
             await self.backend.start()
+        self.show_warnings()
+        self.render_all()
+
+    @work(group="backend", exclusive=True)
+    async def open_session(self) -> None:
+        try:
+            await self.connect_backend()
+        except (BackendError, DaemonError) as e:
+            self.exit(return_code=1, message=f"pr-mon: could not start the backend\n{e}")
+            return
+        if self.backend.status.connected:
+            self.show_warnings()
+            self.render_all()
+
+    def show_warnings(self) -> None:
         for warning in self.backend.status.warnings:
             self.notify(warning, severity="warning", timeout=15)
-        self.render_repo_tree()
-        self.render_prs()
-        self.render_status()
 
     async def on_unmount(self) -> None:
         if self.owns_backend:
             await self.backend.stop()
+        elif self.daemon is not None:
+            await self.backend.close()
+
+    # ----- daemon connection -----
+
+    async def connect_backend(self) -> None:
+        """Connect, starting the daemon if it isn't running; handle version mismatch."""
+        try:
+            await self.backend.connect()
+        except BackendUnavailable:
+            await asyncio.to_thread(spawn_daemon, self.daemon)
+            await self.backend.connect()
+        running = self.backend.status.version
+        if running != __version__:
+            question = (
+                f"The backend is running version {running} but this is {__version__}. "
+                "Restart the backend? (No quits.)"
+            )
+            if await self.push_screen_wait(ConfirmScreen(question)):
+                await self.backend.close()
+                await asyncio.to_thread(stop_daemon, self.daemon)
+                await asyncio.to_thread(spawn_daemon, self.daemon)
+                await self.backend.connect()
+            else:
+                await self.backend.close()
+                self.exit(return_code=1, message="pr-mon: backend version mismatch")
+                return
+        self.show_banner(False)
+
+    def show_banner(self, stopped: bool) -> None:
+        banner = self.query_one("#banner", Static)
+        banner.update("Backend stopped — press S to start it" if stopped else "")
+        banner.set_class(stopped, "-visible")
+        self.refresh_bindings()
+        self.render_status()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action in ("stop_backend", "start_backend"):
+            if self.daemon is None:
+                return False
+            connected = self.backend.status.connected
+            return connected if action == "stop_backend" else not connected
+        return True
+
+    def action_stop_backend(self) -> None:
+        def confirmed(yes: bool | None) -> None:
+            if yes:
+                self.run_command(self.backend.shutdown())
+
+        question = "Stop the background monitor? Notifications stop until it is started again."
+        self.push_screen(ConfirmScreen(question), confirmed)
+
+    @work(group="backend", exclusive=True)
+    async def action_start_backend(self) -> None:
+        self.sub_title = "starting backend…"
+        try:
+            await self.connect_backend()
+        except (BackendError, DaemonError) as e:
+            self.notify(f"Could not start the backend: {e}", severity="error", timeout=15)
+            self.render_status()
+            return
+        if self.backend.status.connected:
+            self.render_all()
+            self.notify("Backend started")
+
+    def render_all(self) -> None:
+        self.render_repo_tree()
+        self.render_prs()
+        self.render_status()
 
     # ----- backend events -----
 
@@ -173,6 +282,8 @@ class PrMonApp(App):
             self.render_status()
         elif event.kind == "toast":
             self.notify(event.message, severity=event.severity)
+        elif event.kind == "disconnected":
+            self.show_banner(True)
 
     def run_command(self, command) -> None:
         """Run a backend coroutine in the background; show BackendError as a toast."""
@@ -208,12 +319,19 @@ class PrMonApp(App):
 
     def render_status(self) -> None:
         status = self.backend.status
+        parts = []
+        if self.daemon is not None:
+            if not status.connected:
+                self.sub_title = "backend stopped"
+                return
+            parts.append(f"backend pid {status.pid}")
         if status.rate_limited_until:
             local = datetime.fromisoformat(status.rate_limited_until).astimezone()
-            self.sub_title = f"Rate limited until {local.strftime('%H:%M:%S')}"
+            parts.append(f"rate limited until {local.strftime('%H:%M:%S')}")
         elif status.last_update:
             local = datetime.fromisoformat(status.last_update).astimezone()
-            self.sub_title = f"Updated {local.strftime('%H:%M:%S')}"
+            parts.append(f"updated {local.strftime('%H:%M:%S')}")
+        self.sub_title = " · ".join(parts)
 
     def unseen_prs(self, name: str) -> list[PullRequest]:
         repo = self.repos.get(name)
