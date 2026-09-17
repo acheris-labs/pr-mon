@@ -8,6 +8,7 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.widgets import DataTable, Footer, Header, Static, Tree
 from textual.widgets.tree import TreeNode
 
@@ -108,6 +109,8 @@ class PrMonApp(App):
         Binding("N", "notifications", "Notifications"),
         Binding("r", "refresh_all", "Refresh"),
         Binding("q", "quit", "Quit"),
+        # Textual's default only shows a "press ctrl+q" hint.
+        Binding("ctrl+c", "quit", "Quit", show=False, priority=True),
     ]
 
     def __init__(
@@ -125,6 +128,19 @@ class PrMonApp(App):
         self.shown_repo: str | None = None
         self.repo_nodes: dict[str, TreeNode[str]] = {}
         self.owner_nodes: dict[str, TreeNode[str]] = {}
+
+    def format_title(self, title: str, sub_title: str) -> Content:
+        """Color the connection dot at the start of the subtitle."""
+        colors = {"●": "bold green", "○": "bold red"}
+        dot = sub_title[:1]
+        if dot not in colors:
+            return super().format_title(title, sub_title)
+        return Content.assemble(
+            Content(title),
+            (" — ", "dim"),
+            (dot, colors[dot]),
+            Content(sub_title[1:]).stylize("dim"),
+        )
 
     @property
     def config(self) -> Config:

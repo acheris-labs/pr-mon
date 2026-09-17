@@ -201,6 +201,22 @@ class ConnectTest(RemoteAppTestCase):
                 self.assertEqual(self.pr_numbers(app), ["#1"])
 
 
+class TitleTest(unittest.TestCase):
+    def dot_style(self, sub_title):
+        title = PrMonApp(RemoteBackend(Path("/tmp/x.sock"))).format_title("pr-mon", sub_title)
+        dot = title.plain.index(sub_title[0])
+        return [str(s.style) for s in title.spans if s.start <= dot < s.end]
+
+    def test_connection_dot_colors(self):
+        self.assertEqual(self.dot_style("● connected · updated 10:00:00"), ["bold green"])
+        self.assertEqual(self.dot_style("○ disconnected"), ["bold red"])
+
+    def test_other_subtitles_unchanged(self):
+        title = PrMonApp(RemoteBackend(Path("/tmp/x.sock"))).format_title("pr-mon", "updated")
+        self.assertEqual(title.plain, "pr-mon — updated")
+        self.assertEqual([str(s.style) for s in title.spans], ["dim", "dim"])
+
+
 class CommandsTest(RemoteAppTestCase):
     async def test_commands_go_through_the_socket(self):
         self.write_config({"acme/api": make_repo("acme/api", (1, READY))})

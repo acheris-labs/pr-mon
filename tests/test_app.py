@@ -106,6 +106,23 @@ class LayoutTest(AppTestCase):
             self.assertNotIn("Last check", details)
             self.assertNotIn("enter", details)
 
+    async def test_ctrl_c_quits(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
+        async with app.run_test(size=(120, 40)) as pilot:
+            await self.settle(pilot)
+            with mock.patch.object(app, "exit") as exit_app:
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                exit_app.assert_called_once_with()
+            # Even from a text field in a dialog.
+            await pilot.press("A")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, AddRepoScreen)
+            with mock.patch.object(app, "exit") as exit_app:
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                exit_app.assert_called_once_with()
+
     async def test_pr_url_opens_on_click(self):
         app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
         async with app.run_test(size=(120, 40)) as pilot:
