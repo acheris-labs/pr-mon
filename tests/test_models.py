@@ -1,6 +1,14 @@
+import json
 import unittest
 
-from pr_mon.models import AutoMerge, MergeMethod, Status, parse_repo
+from pr_mon.models import (
+    AutoMerge,
+    MergeMethod,
+    Status,
+    parse_repo,
+    repo_from_dict,
+    repo_to_dict,
+)
 from tests.fixtures import auto_merge, check_run, raw_pr, raw_repo, status_context
 
 
@@ -201,6 +209,45 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(p.checks, ())
         self.assertIsNone(p.last_commit_at)
         self.assertIsNone(p.head_sha)
+
+
+class SerializationTest(unittest.TestCase):
+    def test_round_trip_through_json(self):
+        missing = raw_pr(number=3, head_ref_id=None, check_state=None)
+        missing["author"] = None
+        missing["headRepository"] = None
+        repo = parse_repo(
+            raw_repo(
+                [
+                    raw_pr(
+                        number=1,
+                        auto_merge=auto_merge("REBASE", "carol"),
+                        checks=[
+                            check_run("a", started_at="2026-09-15T03:00:00Z"),
+                            status_context("b", state="PENDING"),
+                        ],
+                        checks_total=30,
+                        review_decision="REVIEW_REQUIRED",
+                    ),
+                    raw_pr(number=2, is_draft=True, merge_state="DRAFT"),
+                    missing,
+                ],
+                merge=False,
+                delete_on_merge=True,
+                auto_merge_allowed=False,
+                total=90,
+            )
+        )
+        data = json.loads(json.dumps(repo_to_dict(repo)))
+        restored = repo_from_dict(data)
+        self.assertEqual(restored, repo)
+        self.assertIsInstance(restored.merge_methods[0], MergeMethod)
+        self.assertIsInstance(restored.prs[0].auto_merge.method, MergeMethod)
+        self.assertEqual(restored.prs[0].status, repo.prs[0].status)
+
+    def test_empty_repo(self):
+        repo = parse_repo(raw_repo())
+        self.assertEqual(repo_from_dict(json.loads(json.dumps(repo_to_dict(repo)))), repo)
 
 
 if __name__ == "__main__":

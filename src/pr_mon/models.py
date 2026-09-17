@@ -1,6 +1,7 @@
 """Pull request data and merge-readiness rules."""
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 
 
@@ -208,4 +209,31 @@ def parse_repo(data: dict) -> RepoInfo:
         prs=tuple(_parse_pr(node) for node in prs["nodes"]),
         pr_total=prs["totalCount"],
         auto_merge_allowed=data.get("autoMergeAllowed", False),
+    )
+
+
+def repo_to_dict(repo: RepoInfo) -> dict:
+    """JSON-safe form of a RepoInfo (enums become strings, tuples become lists)."""
+    return json.loads(json.dumps(asdict(repo)))
+
+
+def repo_from_dict(data: dict) -> RepoInfo:
+    def pr_from_dict(pr: dict) -> PullRequest:
+        auto = pr["auto_merge"]
+        return PullRequest(
+            **{
+                **pr,
+                "checks": tuple(Check(**c) for c in pr["checks"]),
+                "auto_merge": AutoMerge(MergeMethod(auto["method"]), auto["enabled_by"])
+                if auto
+                else None,
+            }
+        )
+
+    return RepoInfo(
+        **{
+            **data,
+            "merge_methods": tuple(MergeMethod(m) for m in data["merge_methods"]),
+            "prs": tuple(pr_from_dict(pr) for pr in data["prs"]),
+        }
     )
