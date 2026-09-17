@@ -54,8 +54,14 @@ app: build xcode
 		-destination generic/platform=macOS -derivedDataPath $(APP_BUILD) -quiet build
 	@echo "built $(APP)"
 
+LS := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework
+LSREGISTER := $(LS)/Support/lsregister
+
 app-install: app
 	mkdir -p ~/Applications
 	rm -rf ~/Applications/PrMon.app
 	cp -R $(APP) ~/Applications/
+	# Replacing the bundle leaves macOS showing the old icon until it re-reads it.
+	$(LSREGISTER) -f ~/Applications/PrMon.app
+	touch ~/Applications/PrMon.app
 	@echo "installed ~/Applications/PrMon.app"
