@@ -11,11 +11,11 @@ from pr_mon.state import default_state_path
 
 def main() -> None:
     try:
-        token = get_token()
+        client = GitHubClient(get_token)
     except AuthError as e:
         sys.exit(f"pr-mon: {e}. Run `gh auth login`.")
     app = PrMonApp(
-        GitHubClient(token),
+        client,
         default_config_path(),
         default_state_path(),
         notifier=detect_desktop_notifier(),

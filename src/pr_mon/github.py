@@ -2,6 +2,7 @@
 
 import asyncio
 import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -156,17 +157,32 @@ def _rate_limit_reset(response: httpx.Response) -> datetime:
 
 
 class GitHubClient:
-    def __init__(self, token: str, transport: httpx.AsyncBaseTransport | None = None):
-        self._http = httpx.AsyncClient(
-            transport=transport,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=30,
-        )
+    """GraphQL client; `token_provider` is called again if GitHub rejects the token."""
+
+    def __init__(
+        self,
+        token_provider: Callable[[], str],
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
+        self._token_provider = token_provider
+        self._http = httpx.AsyncClient(transport=transport, timeout=30)
+        self._set_token(token_provider())
+
+    def _set_token(self, token: str) -> None:
+        self._http.headers["Authorization"] = f"Bearer {token}"
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
     async def _graphql(self, query: str, variables: dict) -> dict:
+        try:
+            return await self._post(query, variables)
+        except AuthError:
+            # A long-running daemon outlives `gh auth login`; pick up the new token once.
+            self._set_token(await asyncio.to_thread(self._token_provider))
+            return await self._post(query, variables)
+
+    async def _post(self, query: str, variables: dict) -> dict:
         try:
             response = await self._http.post(API_URL, json={"query": query, "variables": variables})
         except httpx.HTTPError as e:

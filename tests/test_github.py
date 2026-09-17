@@ -48,7 +48,7 @@ def gql_error(error_type, message="boom"):
 class ClientTest(unittest.IsolatedAsyncioTestCase):
     def client_for(self, response):
         recorder = Recorder(response)
-        client = GitHubClient("tok", transport=httpx.MockTransport(recorder))
+        client = GitHubClient(lambda: "tok", transport=httpx.MockTransport(recorder))
         self.addAsyncCleanup(client.aclose)
         return client, recorder
 
@@ -83,7 +83,7 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
             numbers = [int(n) for n in re.findall(r"pullRequest\(number: (\d+)\)", body["query"])]
             return ok({"repository": {f"pr{n}": by_number[n] for n in numbers}})
 
-        client = GitHubClient("tok", transport=httpx.MockTransport(handler))
+        client = GitHubClient(lambda: "tok", transport=httpx.MockTransport(handler))
         self.addAsyncCleanup(client.aclose)
         repo = await client.fetch_repo("acme/api")
         self.assertEqual([p.number for p in repo.prs], list(range(125, 101, -1)))
@@ -100,7 +100,7 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
                 return ok(repo_response(raw_repo(prs)))
             return httpx.Response(502, headers={"content-type": "text/html"}, text="<html>")
 
-        client = GitHubClient("tok", transport=httpx.MockTransport(handler))
+        client = GitHubClient(lambda: "tok", transport=httpx.MockTransport(handler))
         self.addAsyncCleanup(client.aclose)
         with self.assertRaisesRegex(GitHubError, "timed out"):
             await client.fetch_repo("acme/api")
@@ -161,7 +161,7 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
         def fail(request):
             raise httpx.ConnectError("no network")
 
-        client = GitHubClient("tok", transport=httpx.MockTransport(fail))
+        client = GitHubClient(lambda: "tok", transport=httpx.MockTransport(fail))
         self.addAsyncCleanup(client.aclose)
         with self.assertRaisesRegex(GitHubError, "no network"):
             await client.fetch_repo("acme/api")
@@ -212,6 +212,65 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
         await client.delete_branch("REF_1")
         self.assertIn("deleteRef", rec.body["query"])
         self.assertEqual(rec.body["variables"], {"id": "REF_1"})
+
+
+class TokenRefreshTest(unittest.IsolatedAsyncioTestCase):
+    def make(self, statuses):
+        tokens = iter(["old", "new", "newer"])
+        self.provided = []
+
+        def provider():
+            token = next(tokens)
+            self.provided.append(token)
+            return token
+
+        self.seen = []
+        responses = iter(statuses)
+
+        def handler(request):
+            self.seen.append(request.headers["authorization"])
+            status = next(responses)
+            if status == 401:
+                return httpx.Response(401, json={"message": "Bad credentials"})
+            return ok({"updatePullRequestBranch": {"clientMutationId": None}})
+
+        client = GitHubClient(provider, transport=httpx.MockTransport(handler))
+        self.addAsyncCleanup(client.aclose)
+        return client
+
+    async def test_token_read_at_construction(self):
+        self.make([200])
+        self.assertEqual(self.provided, ["old"])
+
+    async def test_rejected_token_is_reread_once(self):
+        client = self.make([401, 200, 200])
+        await client.update_branch("PR_1")
+        self.assertEqual(self.seen, ["Bearer old", "Bearer new"])
+        await client.update_branch("PR_1")
+        self.assertEqual(self.seen[-1], "Bearer new")
+        self.assertEqual(self.provided, ["old", "new"])
+
+    async def test_still_rejected_after_reread(self):
+        client = self.make([401, 401])
+        with self.assertRaises(AuthError):
+            await client.update_branch("PR_1")
+        self.assertEqual(self.seen, ["Bearer old", "Bearer new"])
+
+    async def test_provider_failure_propagates(self):
+        def provider():
+            if calls:
+                raise AuthError("not logged in")
+            calls.append(1)
+            return "old"
+
+        calls = []
+        client = GitHubClient(
+            provider,
+            transport=httpx.MockTransport(lambda r: httpx.Response(401, json={})),
+        )
+        self.addAsyncCleanup(client.aclose)
+        with self.assertRaisesRegex(AuthError, "not logged in"):
+            await client.update_branch("PR_1")
 
 
 class GetTokenTest(unittest.TestCase):
