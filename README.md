@@ -11,10 +11,21 @@ why they can't merge, and merging them when they're ready.
 ## Install
 
 ```sh
-make install   # go install; puts `pr-mon` in $(go env GOPATH)/bin
+brew install --cask acheris-labs/tools/pr-mon
 ```
 
-Or run from the checkout with `make run`.
+That installs the app and puts the `pr-mon` command line (dashboard, backend
+and CLI) on your PATH: one artifact, both ways of using it.
+
+From a checkout instead:
+
+```sh
+make install   # go install; puts `pr-mon` in $(go env GOPATH)/bin
+make app-install   # builds the Mac app into ~/Applications
+```
+
+Or run it straight from the checkout with `make run`. Releasing is documented
+in [DISTRIBUTING.md](DISTRIBUTING.md).
 
 ## How it runs
 

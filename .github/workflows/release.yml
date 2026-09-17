@@ -1,0 +1,246 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 0.2.0, no v prefix)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      KEYCHAIN_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+      NOTARY_PROFILE: pr-mon-notary
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Resolve version
+        id: v
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "→ tag=$TAG version=$VERSION"
+
+      - name: Toolchain versions
+        run: |
+          sw_vers
+          go version
+          swift --version
+
+      - name: Tests
+        run: make lint test swift-test
+
+      # --- Code signing setup ----------------------------------------------
+      - name: Import signing certificate
+        env:
+          DEVID_CERT_P12:      ${{ secrets.DEVID_CERT_P12 }}
+          DEVID_CERT_PASSWORD: ${{ secrets.DEVID_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${DEVID_CERT_P12:?missing DEVID_CERT_P12 secret}"
+          : "${DEVID_CERT_PASSWORD:?missing DEVID_CERT_PASSWORD secret}"
+
+          CERT_PATH="$RUNNER_TEMP/devid.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+
+          echo "$DEVID_CERT_P12" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" \
+            -P "$DEVID_CERT_PASSWORD" -T /usr/bin/codesign
+          # Keep the other keychains on the search list, or Apple's roots go missing.
+          OTHERS=$(security list-keychains -d user | sed -e 's/^ *//' -e 's/"//g' \
+            | grep -v "$KEYCHAIN_PATH" || true)
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $OTHERS
+          security default-keychain -s "$KEYCHAIN_PATH"
+          # Without this, codesign waits for a UI prompt that never comes.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          rm -f "$CERT_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Store notarytool credentials
+        env:
+          APPLE_ID:           ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID:      ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${APPLE_ID:?missing APPLE_ID secret}"
+          : "${APPLE_TEAM_ID:?missing APPLE_TEAM_ID secret}"
+          : "${APPLE_APP_PASSWORD:?missing APPLE_APP_PASSWORD secret}"
+          xcrun notarytool store-credentials "$NOTARY_PROFILE" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+
+      # --- Build, sign, notarize -------------------------------------------
+      - name: Build, sign, notarize, package zip + DMG
+        env:
+          DEVID_IDENTITY: ${{ secrets.DEVID_IDENTITY }}
+        run: |
+          set -euo pipefail
+          : "${DEVID_IDENTITY:?missing DEVID_IDENTITY secret}"
+          make release VERSION="${{ steps.v.outputs.version }}" \
+            SIGN_ID="$DEVID_IDENTITY" NOTARY_PROFILE="$NOTARY_PROFILE"
+
+      - name: Verify what we are about to publish
+        run: make verify
+
+      # The .sha256 sidecar lets the cask job read the hash without downloading
+      # the zip again.
+      - name: Collect artifacts
+        id: artifacts
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.v.outputs.version }}"
+          mv macos/build/PrMon.dmg "PrMon-${VERSION}.dmg"
+          mv macos/build/PrMon.zip "PrMon-${VERSION}.zip"
+          shasum -a 256 "PrMon-${VERSION}.zip" > "PrMon-${VERSION}.zip.sha256"
+          echo "dmg=PrMon-${VERSION}.dmg" >> "$GITHUB_OUTPUT"
+          echo "zip=PrMon-${VERSION}.zip" >> "$GITHUB_OUTPUT"
+          echo "sha=PrMon-${VERSION}.zip.sha256" >> "$GITHUB_OUTPUT"
+          ls -la PrMon-${VERSION}.*
+
+      - name: Cleanup keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+
+      # --- Release ---------------------------------------------------------
+      - name: Create or push tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          if ! git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      # Use this version's CHANGELOG.md section as the notes, or let GitHub
+      # generate them when there is no entry.
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { found=1; next }
+              found && /^## \[/        { exit }
+              found                    { print }
+            ' CHANGELOG.md > "$NOTES_FILE"
+          fi
+          if [ -s "$NOTES_FILE" ]; then
+            echo "path=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=" >> "$GITHUB_OUTPUT"
+            echo "→ no CHANGELOG entry for $VERSION; falling back to --generate-notes"
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARGS=(--title "pr-mon ${{ steps.v.outputs.version }}")
+          if [ -n "${{ steps.notes.outputs.path }}" ]; then
+            ARGS+=(--notes-file "${{ steps.notes.outputs.path }}")
+          else
+            ARGS+=(--generate-notes)
+          fi
+          if [ "${{ steps.v.outputs.prerelease }}" = "true" ]; then
+            ARGS+=(--prerelease)
+          fi
+          gh release create "${{ steps.v.outputs.tag }}" \
+            "${ARGS[@]}" \
+            "${{ steps.artifacts.outputs.dmg }}" \
+            "${{ steps.artifacts.outputs.zip }}" \
+            "${{ steps.artifacts.outputs.sha }}"
+
+  # Regenerate the cask in acheris-labs/homebrew-tools from the notarized zip.
+  # The default GITHUB_TOKEN cannot write to another repository, so this pushes
+  # over SSH with a deploy key scoped to the tap.
+  brew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: v
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          # Without the deploy key the release is still fine; the cask just has
+          # to be pushed by hand. Warn rather than fail the run.
+          if [ -z "${TAP_SSH_KEY:-}" ]; then
+            echo "::warning::HOMEBREW_TAP_SSH_KEY not set; skipping cask update"
+            exit 0
+          fi
+
+          export VERSION="${{ steps.v.outputs.version }}"
+          export SHA_APP="$(gh release download "${{ steps.v.outputs.tag }}" \
+            --pattern "PrMon-${VERSION}.zip.sha256" -O - | cut -d' ' -f1)"
+          test -n "$SHA_APP" || { echo "could not read the zip's sha256"; exit 1; }
+          envsubst < packaging/pr-mon-cask.rb.tmpl > pr-mon.rb
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$TAP_SSH_KEY" > ~/.ssh/tap_key
+          chmod 600 ~/.ssh/tap_key
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap_key -o IdentitiesOnly=yes"
+
+          git clone git@github.com:acheris-labs/homebrew-tools.git tap
+          mkdir -p tap/Casks
+          cp pr-mon.rb tap/Casks/pr-mon.rb
+          cd tap
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add Casks/pr-mon.rb
+          if git diff --cached --quiet; then
+            echo "cask unchanged; nothing to push"
+          else
+            git commit -m "chore: update pr-mon cask to ${{ steps.v.outputs.tag }}"
+            git push
+          fi

@@ -1,0 +1,71 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Toolchain versions
+        run: |
+          sw_vers
+          go version
+          swift --version
+
+      - name: Lint
+        run: make lint
+
+      - name: Go tests
+        run: make test
+
+      - name: Swift tests
+        run: make swift-test
+
+      - name: Fixtures are current
+        run: |
+          make fixtures
+          git diff --exit-code protocol-fixtures/ \
+            || { echo "::error::protocol-fixtures/ is stale; run make fixtures"; exit 1; }
+
+  app:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build the app (ad-hoc, Release)
+        run: make app
+
+      - name: The bundled CLI runs and is universal
+        run: |
+          set -euo pipefail
+          BINARY=macos/build/Build/Products/Release/PrMon.app/Contents/Resources/bin/pr-mon
+          lipo -info "$BINARY"
+          "$BINARY" --version
+
+      - name: Verify the ad-hoc signature
+        run: codesign -dv macos/build/Build/Products/Release/PrMon.app 2>&1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PrMon.app
+          path: macos/build/Build/Products/Release/PrMon.app
+          if-no-files-found: error

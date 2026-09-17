@@ -1,0 +1,51 @@
+# Cask template for acheris-labs/homebrew-tools (Casks/pr-mon.rb).
+# Rendered by the release workflow with envsubst: VERSION and SHA_APP come from
+# the release's notarized app zip.
+#
+# One artifact installs the whole product: the app window, and the CLI inside
+# the bundle (dashboard, backend and commands) that the `binary` stanza
+# symlinks onto PATH. Signed, notarized, stapled.
+cask "pr-mon" do
+  version "${VERSION}"
+  sha256 "${SHA_APP}"
+
+  url "https://github.com/acheris-labs/pr-mon/releases/download/v#{version}/PrMon-#{version}.zip"
+  name "pr-mon"
+  desc "Watch GitHub pull requests and merge them when they are ready"
+  homepage "https://github.com/acheris-labs/pr-mon"
+
+  depends_on macos: :sonoma
+
+  app "PrMon.app"
+  binary "#{appdir}/PrMon.app/Contents/Resources/bin/pr-mon"
+
+  # The backend outlives the app, so stop it before the bundle goes; without
+  # this a daemon keeps running from a deleted binary. must_succeed: false
+  # because a failed preflight would abort the uninstall entirely.
+  uninstall_preflight do
+    if_path_exists "PrMon.app/Contents/Resources/bin/pr-mon", base: :appdir do
+      run "#{appdir}/PrMon.app/Contents/Resources/bin/pr-mon",
+          args: ["stop"], must_succeed: false, print_stderr: false
+    end
+  end
+
+  uninstall quit: "com.acheris-labs.pr-mon.app"
+
+  # `brew uninstall --zap pr-mon` is the full teardown: the repos being watched,
+  # what has been seen, armed merges, and the app's own preferences.
+  zap trash: [
+    "~/.config/pr-mon",
+    "~/.local/state/pr-mon",
+    "~/Library/Preferences/com.acheris-labs.pr-mon.app.plist",
+    "~/Library/Saved Application State/com.acheris-labs.pr-mon.app.savedState",
+  ]
+
+  caveats <<~TEXT
+    pr-mon needs the GitHub CLI, logged in:
+      brew install gh && gh auth login
+
+    The dashboard is `pr-mon` in a terminal; the app is the same thing in a
+    window. Both talk to one backend, which keeps polling and notifying with
+    nothing open. To run it at login: pr-mon autostart enable
+  TEXT
+end
