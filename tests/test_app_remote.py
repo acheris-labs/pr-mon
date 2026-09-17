@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from textual.widgets import Checkbox, DataTable, Input, Static
+from textual.widgets import Checkbox, DataTable, Input
 
 from pr_mon import __version__
 from pr_mon.app import PrMonApp
@@ -108,14 +108,8 @@ class RemoteAppTestCase(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
         self.fail(f"{screen_type.__name__} never appeared")
 
-    def banner(self, app):
-        banner = app.query_one("#banner", Static)
-        return str(banner.render()) if banner.has_class("-visible") else None
-
-    def footer_actions(self, app):
-        return [
-            b.binding.action for b in app.screen.active_bindings.values() if b.binding.key == "S"
-        ]
+    def messages(self, app):
+        return [n.message for n in app._notifications]
 
     def pr_numbers(self, app):
         table = app.query_one("#prs", DataTable)
@@ -130,10 +124,8 @@ class ConnectTest(RemoteAppTestCase):
             await self.settle(pilot)
             self.assertEqual(self.spawns, 1)
             self.assertEqual(self.pr_numbers(app), ["#1"])
-            self.assertTrue(app.sub_title.startswith(f"backend pid {self.monitor.status.pid}"))
-            self.assertIn("updated", app.sub_title)
-            self.assertIsNone(self.banner(app))
-            self.assertEqual(self.footer_actions(app), ["stop_backend"])
+            self.assertTrue(app.sub_title.startswith("● connected · updated "))
+            self.assertNotIn("S", [b.binding.key for b in app.screen.active_bindings.values()])
 
     async def test_uses_running_backend_and_leaves_it_running(self):
         self.write_config({"acme/api": make_repo("acme/api", (1, READY))})
@@ -228,71 +220,63 @@ class CommandsTest(RemoteAppTestCase):
             self.assertEqual(app.selected_repo, "acme/api")
 
 
-class StopStartTest(RemoteAppTestCase):
-    async def test_stop_then_start(self):
+class DisconnectTest(RemoteAppTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        patcher = mock.patch("pr_mon.app.RECONNECT_DELAY", 0.05)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    async def wait_until(self, pilot, condition):
+        for _ in range(100):
+            if condition():
+                return
+            await asyncio.sleep(0.02)
+            await pilot.pause()
+        self.fail("condition never became true")
+
+    async def test_toast_then_reconnect_when_backend_returns(self):
         self.write_config({"acme/api": make_repo("acme/api", (1, READY))})
         app = self.make_app()
         async with app.run_test(size=SIZE, notifications=True) as pilot:
             await self.settle(pilot)
-            await pilot.press("S")
-            await pilot.pause()
-            self.assertIsInstance(app.screen, ConfirmScreen)
-            self.assertIn("Stop the background monitor", str(app.screen.message))
-            await pilot.press("y")
-            await self.settle(pilot)
-            self.assertIsNone(self.server)
-            self.assertEqual(self.banner(app), "Backend stopped — press S to start it")
-            self.assertEqual(app.sub_title, "backend stopped")
-            self.assertEqual(self.footer_actions(app), ["start_backend"])
+            await self.stop_server()
+            await self.wait_until(pilot, lambda: app.sub_title == "○ disconnected")
+            self.assertIn("Backend disconnected — reconnecting…", self.messages(app))
             self.assertEqual(self.pr_numbers(app), ["#1"])
-
             await pilot.press("r")
-            await self.settle(pilot)
-            self.assertIn("backend stopped", [n.message for n in app._notifications])
+            await self.wait_until(pilot, lambda: "backend stopped" in self.messages(app))
+
+            # Nothing restarts it from the TUI; it comes back on its own (e.g. launchd).
+            await asyncio.sleep(0.2)
+            self.assertIsNone(self.server)
+            self.assertEqual(self.spawns, 1)
 
             self.client.repos["acme/api"] = make_repo("acme/api", (1, READY), (2, READY))
-            await pilot.press("S")
-            await self.settle(pilot)
-            self.assertEqual(self.spawns, 2)
-            self.assertIsNone(self.banner(app))
-            self.assertEqual(self.footer_actions(app), ["stop_backend"])
+            await self.start_server()
+            await self.wait_until(pilot, lambda: "Backend reconnected" in self.messages(app))
+            self.assertTrue(app.sub_title.startswith("● connected"))
             self.assertEqual(self.pr_numbers(app), ["#1", "#2"])
-            self.assertIn("Backend started", [n.message for n in app._notifications])
-
-    async def test_stop_cancelled(self):
-        self.write_config({})
-        app = self.make_app()
-        async with app.run_test(size=SIZE) as pilot:
-            await self.settle(pilot)
-            await pilot.press("S", "n")
-            await self.settle(pilot)
-            self.assertIsNotNone(self.server)
-            self.assertIsNone(self.banner(app))
-
-    async def test_backend_dies_unexpectedly(self):
-        self.write_config({"acme/api": make_repo("acme/api", (1, READY))})
-        app = self.make_app()
-        async with app.run_test(size=SIZE) as pilot:
-            await self.settle(pilot)
-            await self.stop_server()
-            await self.settle(pilot)
-            self.assertIsNotNone(self.banner(app))
             self.assertEqual(self.spawns, 1)
-            self.assertEqual(self.pr_numbers(app), ["#1"])
 
-    async def test_start_failure_keeps_banner(self):
+            # And it keeps working after reconnecting.
+            await pilot.press("r")
+            await self.settle(pilot)
+            self.assertTrue(self.backend.status.connected)
+
+    async def test_disconnect_twice(self):
         self.write_config({})
         app = self.make_app()
         async with app.run_test(size=SIZE, notifications=True) as pilot:
             await self.settle(pilot)
-            await self.stop_server()
-            await self.settle(pilot)
-            self.spawn_error = DaemonError("no luck")
-            await pilot.press("S")
-            await self.settle(pilot)
-            self.assertIsNotNone(self.banner(app))
-            messages = [n.message for n in app._notifications]
-            self.assertIn("Could not start the backend: no luck", messages)
+            for _ in range(2):
+                await self.stop_server()
+                await self.wait_until(pilot, lambda: not self.backend.status.connected)
+                await self.start_server()
+                await self.wait_until(pilot, lambda: self.backend.status.connected)
+            await self.wait_until(
+                pilot, lambda: self.messages(app).count("Backend reconnected") == 2
+            )
 
 
 if __name__ == "__main__":

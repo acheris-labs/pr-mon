@@ -24,10 +24,10 @@ window onto it, so notifications keep coming after you close the window.
 
 - `pr-mon` opens the dashboard and starts the backend if it isn't running.
 - Quitting the dashboard (`q`) leaves the backend running.
-- The backend runs until you stop it (`S` in the dashboard or `pr-mon stop`),
-  log out, or reboot. It does not start at login.
-- If the backend stops while a dashboard is open, a banner says so and the last
-  data stays on screen; press `S` to start it again.
+- The backend runs until you stop it (`pr-mon stop`), log out, or reboot.
+- The header shows `● connected` or `○ disconnected`. If the backend goes
+  away, the dashboard says so, keeps the last data on screen, and reconnects
+  on its own once the backend is back.
 
 | Command | What it does |
 |---------|--------------|
@@ -54,7 +54,6 @@ window onto it, so notifications keep coming after you close the window.
 | `space` | action menu | Toggle "delete remote branch" |
 | `N` | repo tree (on a repo) | Notification settings for that repo |
 | `r` | anywhere | Refresh now |
-| `S` | anywhere | Stop the backend (asks first) / start it when stopped |
 | `q` | anywhere | Quit the dashboard (the backend keeps running) |
 
 ## Indicators

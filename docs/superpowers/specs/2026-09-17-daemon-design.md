@@ -10,6 +10,11 @@ actions. The TUI becomes a client that can come and go.
 
 ## Decisions
 
+> **Revised:** the TUI no longer starts or stops the backend while open (no `S`
+> key, no banner). The header shows `● connected` / `○ disconnected`; on
+> disconnect the TUI shows a toast and retries connecting every 5 s without
+> spawning. It still auto-starts the backend when it opens.
+
 Defaults chosen while writing this spec are marked **(default)** — confirm or
 change them during review.
 
