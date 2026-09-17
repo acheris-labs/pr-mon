@@ -21,7 +21,7 @@ from textual.widgets import (
 )
 
 from pr_mon.config import EVENT_NAMES, NotifyConfig
-from pr_mon.models import Action, MergeMethod, PullRequest, RepoInfo, Status
+from pr_mon.models import Action, ArmedMerge, MergeMethod, PullRequest, RepoInfo, Status
 from pr_mon.notify import VARIABLE_NAMES, render, sample_variables, unknown_placeholders
 
 MODAL_CSS = """
@@ -149,10 +149,11 @@ class ActionMenuScreen(ModalScreen[Action | None]):
         Binding("escape", "cancel", "Close"),
     ]
 
-    def __init__(self, repo: RepoInfo, pr: PullRequest):
+    def __init__(self, repo: RepoInfo, pr: PullRequest, armed: ArmedMerge | None = None):
         super().__init__()
         self.repo = repo
         self.pr = pr
+        self.armed = armed
 
     @property
     def can_merge(self) -> bool:
@@ -163,10 +164,22 @@ class ActionMenuScreen(ModalScreen[Action | None]):
         return self.pr.merge_state == "BEHIND"
 
     @property
+    def native_auto_merge(self) -> bool:
+        """GitHub's auto-merge; otherwise `a` arms pr-mon's merge-when-ready."""
+        return self.repo.auto_merge_allowed
+
+    @property
+    def can_arm(self) -> bool:
+        return (
+            not self.native_auto_merge
+            and self.armed is None
+            and not self.pr.auto_merge
+            and self.auto_merge_blocker is None
+        )
+
+    @property
     def auto_merge_blocker(self) -> str | None:
         """Why auto-merge can't be enabled, or None if it can."""
-        if not self.repo.auto_merge_allowed:
-            return "disabled in repo settings"
         if not self.repo.merge_methods:
             return "no merge methods allowed"
         if self.pr.is_draft:
@@ -178,9 +191,14 @@ class ActionMenuScreen(ModalScreen[Action | None]):
     def auto_merge_line(self) -> Static:
         if self.pr.auto_merge:
             return Static("[b]\\[a][/b] Disable auto-merge", id="auto")
+        if self.armed:
+            return Static("[b]\\[a][/b] Cancel merge when ready (pr-mon)", id="auto")
+        name = "Auto-merge" if self.native_auto_merge else "Merge when ready"
         blocker = self.auto_merge_blocker
         if blocker:
-            return Static(Text(f"[a] Auto-merge — unavailable ({blocker})", style="dim"), id="auto")
+            return Static(Text(f"[a] {name} — unavailable ({blocker})", style="dim"), id="auto")
+        if not self.native_auto_merge:
+            return Static("[b]\\[a][/b] Merge when ready (pr-mon)", id="auto")
         note = (
             ""
             if self.repo.delete_branch_on_merge
@@ -190,7 +208,11 @@ class ActionMenuScreen(ModalScreen[Action | None]):
 
     @property
     def offers_delete(self) -> bool:
-        return self.can_merge and not self.repo.delete_branch_on_merge and bool(self.pr.head_ref_id)
+        return (
+            (self.can_merge or self.can_arm)
+            and not self.repo.delete_branch_on_merge
+            and bool(self.pr.head_ref_id)
+        )
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -235,10 +257,14 @@ class ActionMenuScreen(ModalScreen[Action | None]):
     def action_auto_merge(self) -> None:
         if self.pr.auto_merge:
             self.dismiss(Action("auto_merge_off"))
+        elif self.armed:
+            self.dismiss(Action("disarm_merge"))
         elif self.auto_merge_blocker:
             self.app.bell()
-        else:
+        elif self.native_auto_merge:
             self._dismiss_with_method("auto_merge_on")
+        else:
+            self._dismiss_with_method("arm_merge", self._delete_branch())
 
     def action_update(self) -> None:
         if not self.can_update:

@@ -2,9 +2,10 @@
 
 from datetime import datetime
 
+from rich.style import Style
 from rich.text import Text
 
-from pr_mon.models import BLOCKED_STATUSES, PullRequest, RepoInfo, Status
+from pr_mon.models import BLOCKED_STATUSES, ArmedMerge, PullRequest, RepoInfo, Status
 
 STATUS_STYLE = {
     Status.READY: ("✓", "bold green"),
@@ -52,12 +53,15 @@ def owner_label(owner: str, unseen: list[PullRequest], error: bool) -> Text:
     return _badged(f"{owner}/", unseen, error, "bold")
 
 
-def pr_row(pr: PullRequest, unseen: bool) -> tuple[Text, Text, Text, Text, Text]:
+def pr_row(
+    pr: PullRequest, unseen: bool, armed: bool = False
+) -> tuple[Text, Text, Text, Text, Text]:
     icon, style = STATUS_STYLE[pr.status]
+    marker = " auto" if pr.auto_merge else " auto*" if armed else ""
     return (
         Text(icon, style=style),
         Text(f"#{pr.number}", style="bold" if unseen else ""),
-        Text(str(pr.status), style=style) + Text(" auto" if pr.auto_merge else "", style="cyan"),
+        Text(str(pr.status), style=style) + Text(marker, style="cyan"),
         Text(pr.author, style="dim"),
         Text(pr.title, style="bold" if unseen else ""),
     )
@@ -78,7 +82,15 @@ def format_time(iso: str, now: datetime) -> str:
     return f"{when.astimezone().strftime('%Y-%m-%d %H:%M')} ({age})"
 
 
-def pr_details(repo: RepoInfo, pr: PullRequest, now: datetime) -> Text:
+def link(url: str) -> Text:
+    """A URL that opens on click (via the app's open_link action) or ⌘-click."""
+    style = Style(underline=True, link=url, meta={"@click": f"app.open_link({url!r})"})
+    return Text(url, style=style)
+
+
+def pr_details(
+    repo: RepoInfo, pr: PullRequest, now: datetime, armed: ArmedMerge | None = None
+) -> Text:
     icon, style = STATUS_STYLE[pr.status]
     text = Text()
     text.append(f"#{pr.number} {pr.title}\n", style="bold")
@@ -98,11 +110,18 @@ def pr_details(repo: RepoInfo, pr: PullRequest, now: datetime) -> Text:
     if pr.head_sha:
         text.append("Head SHA:    ", style="dim")
         text.append(f"{pr.head_sha}\n")
-    text.append(f"{pr.url}\n\n", style="dim underline")
+    text.append_text(link(pr.url))
+    text.append("\n\n")
     text.append(f"{icon} {pr.status}\n", style=style)
     if pr.auto_merge:
         method = pr.auto_merge.method.lower()
         text.append(f"Auto-merge: on ({method}, by {pr.auto_merge.enabled_by})\n", style="cyan")
+    elif armed:
+        delete = ", delete branch" if armed.delete_branch else ""
+        when = format_time(armed.armed_at, now)
+        text.append(
+            f"Auto-merge: pr-mon ({armed.method.lower()}{delete}), armed {when}\n", style="cyan"
+        )
     reasons = pr.reasons
     if reasons:
         text.append("\nBlocked by:\n" if pr.status != Status.READY else "\nNotes:\n")

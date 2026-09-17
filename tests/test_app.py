@@ -18,7 +18,7 @@ from textual.widgets import (
 from pr_mon.app import PrMonApp, PrTable
 from pr_mon.config import Config, NotifyConfig, load_config, save_config
 from pr_mon.github import GitHubError
-from pr_mon.models import MergeMethod
+from pr_mon.models import Action, MergeMethod
 from pr_mon.notify import SAMPLE_VARIABLES
 from pr_mon.screens import (
     ActionMenuScreen,
@@ -105,6 +105,22 @@ class LayoutTest(AppTestCase):
             self.assertIn("Head SHA:    abc1234def5678abc1234def5678abc1234def56", details)
             self.assertNotIn("Last check", details)
             self.assertNotIn("enter", details)
+
+    async def test_pr_url_opens_on_click(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
+        async with app.run_test(size=(120, 40)) as pilot:
+            await self.settle(pilot)
+            url = "https://github.com/acme/api/pull/1"
+            lines = text_of(app.query_one("#details", Static)).splitlines()
+            row = lines.index(url)
+            with mock.patch.object(app, "open_url") as open_url:
+                # Inside the border (1 row/col) and padding (1 col).
+                await pilot.click("#details", offset=(5, 1 + row))
+                await pilot.pause()
+                open_url.assert_called_once_with(url)
+                app.action_open_link("javascript:alert(1)")
+                app.action_open_link("file:///etc/passwd")
+                open_url.assert_called_once_with(url)
 
     async def test_navigating_repos_switches_prs(self):
         app = self.make_app(
@@ -388,18 +404,6 @@ class AutoMergeTest(AppTestCase):
             await self.settle(pilot)
             self.assertEqual(self.client.actions(), [("auto_off", "PR_1")])
 
-    async def test_unavailable_when_repo_disallows(self):
-        app = self.make_app(
-            {"acme/api": make_repo("acme/api", (1, BEHIND), auto_merge_allowed=False)}
-        )
-        async with app.run_test(size=(120, 30)) as pilot:
-            await self.open_menu(pilot)
-            self.assertIn("repo settings", text_of(app.screen.query_one("#auto")))
-            await pilot.press("a")
-            await pilot.pause()
-            self.assertIsInstance(app.screen, ActionMenuScreen)
-            self.assertEqual(self.client.actions(), [])
-
     async def test_unavailable_when_already_mergeable(self):
         app = self.make_app({"acme/api": make_repo("acme/api", (1, READY))})
         async with app.run_test(size=(120, 30)) as pilot:
@@ -424,6 +428,115 @@ class AutoMergeTest(AppTestCase):
         async with app.run_test(size=(120, 30)) as pilot:
             await self.open_menu(pilot)
             self.assertNotIn("deleted", text_of(app.screen.query_one("#auto")))
+
+
+NO_NATIVE = {"auto_merge_allowed": False}
+
+
+class PrMonAutoMergeTest(AppTestCase):
+    open_menu = ActionTest.open_menu
+
+    def armed(self):
+        return self.monitor.armed("acme/api")
+
+    def status_cell(self, app):
+        return str(app.query_one("#prs", DataTable).get_row_at(0)[2])
+
+    async def test_arm_single_method_with_delete(self):
+        app = self.make_app(
+            {"acme/api": make_repo("acme/api", (1, BEHIND), merge=False, rebase=False, **NO_NATIVE)}
+        )
+        async with app.run_test(size=(120, 30), notifications=True) as pilot:
+            await self.open_menu(pilot)
+            self.assertEqual(
+                text_of(app.screen.query_one("#auto")), "[a] Merge when ready (pr-mon)"
+            )
+            self.assertTrue(app.screen.query_one("#delete", Checkbox).value)
+            await pilot.press("a")
+            await self.settle(pilot)
+            self.assertNotIsInstance(app.screen, ActionMenuScreen)
+            armed = self.armed()[1]
+            self.assertEqual((armed.method, armed.delete_branch), (MergeMethod.SQUASH, True))
+            self.assertEqual(self.client.actions(), [])
+            self.assertEqual(self.status_cell(app), "BEHIND auto*")
+            details = text_of(app.query_one("#details", Static))
+            self.assertIn("Auto-merge: pr-mon (squash, delete branch), armed ", details)
+            messages = [n.message for n in app._notifications]
+            self.assertIn("pr-mon will merge acme/api#1 when it's ready (squash)", messages)
+
+    async def test_arm_asks_for_method_and_respects_checkbox(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, BEHIND), **NO_NATIVE)})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            await pilot.press("space", "a")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, MergeMethodScreen)
+            await pilot.press("r")
+            await self.settle(pilot)
+            armed = self.armed()[1]
+            self.assertEqual((armed.method, armed.delete_branch), (MergeMethod.REBASE, False))
+            self.assertIn("(rebase)", text_of(app.query_one("#details", Static)))
+
+    async def test_no_delete_checkbox_when_repo_auto_deletes(self):
+        app = self.make_app(
+            {"acme/api": make_repo("acme/api", (1, BEHIND), delete_on_merge=True, **NO_NATIVE)}
+        )
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            self.assertEqual(len(app.screen.query(Checkbox)), 0)
+
+    async def test_cancel(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, BEHIND), **NO_NATIVE)})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.settle(pilot)
+            await self.monitor.perform("acme/api", 1, Action("arm_merge", MergeMethod.MERGE))
+            await self.open_menu(pilot)
+            self.assertEqual(
+                text_of(app.screen.query_one("#auto")), "[a] Cancel merge when ready (pr-mon)"
+            )
+            await pilot.press("a")
+            await self.settle(pilot)
+            self.assertEqual(self.armed(), {})
+            self.assertEqual(self.status_cell(app), "BEHIND")
+
+    async def test_unavailable_cases(self):
+        cases = {
+            "already mergeable — use m": (1, READY),
+            "draft PR": (1, {"is_draft": True}),
+        }
+        for reason, pr in cases.items():
+            with self.subTest(reason):
+                app = self.make_app({"acme/api": make_repo("acme/api", pr, **NO_NATIVE)})
+                async with app.run_test(size=(120, 30)) as pilot:
+                    await self.open_menu(pilot)
+                    self.assertEqual(
+                        text_of(app.screen.query_one("#auto")),
+                        f"[a] Merge when ready — unavailable ({reason})",
+                    )
+                    await pilot.press("a")
+                    await self.settle(pilot)
+                    self.assertIsInstance(app.screen, ActionMenuScreen)
+                    self.assertEqual(self.armed(), {})
+
+    async def test_merges_once_ready(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, BEHIND), **NO_NATIVE)})
+        async with app.run_test(size=(120, 30), notifications=True) as pilot:
+            await self.open_menu(pilot)
+            await pilot.press("a", "s")
+            await self.settle(pilot)
+            self.client.repos["acme/api"] = make_repo("acme/api", (1, READY), **NO_NATIVE)
+            await pilot.press("r")
+            await self.settle(pilot)
+            self.assertEqual(self.client.actions()[0], ("merge", "PR_1", MergeMethod.SQUASH))
+            messages = [n.message for n in app._notifications]
+            self.assertIn("Merged acme/api#1 (pr-mon auto-merge, squash)", messages)
+
+    async def test_native_repo_unchanged(self):
+        app = self.make_app({"acme/api": make_repo("acme/api", (1, BEHIND))})
+        async with app.run_test(size=(120, 30)) as pilot:
+            await self.open_menu(pilot)
+            self.assertIn("Enable auto-merge", text_of(app.screen.query_one("#auto")))
+            self.assertEqual(len(app.screen.query(Checkbox)), 0)
 
 
 class RepoManagementTest(AppTestCase):

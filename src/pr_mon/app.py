@@ -371,8 +371,10 @@ class PrMonApp(App):
         table.border_title = pr_table_title(repo)
         if repo:
             unseen = self.backend.unseen(repo.name)
+            armed = self.backend.armed(repo.name)
             for pr in repo.prs:
-                table.add_row(*pr_row(pr, pr.number in unseen), key=str(pr.number))
+                row = pr_row(pr, pr.number in unseen, pr.number in armed)
+                table.add_row(*row, key=str(pr.number))
             if repo.prs:
                 table.move_cursor(row=min(cursor, len(repo.prs) - 1))
         self.render_details()
@@ -394,14 +396,16 @@ class PrMonApp(App):
         elif pr is None:
             text.append("No open pull requests", style="dim")
         else:
-            text.append_text(pr_details(repo, pr, datetime.now(UTC)))
+            armed = self.backend.armed(name).get(pr.number)
+            text.append_text(pr_details(repo, pr, datetime.now(UTC), armed))
         details.update(text)
 
     def mark_current_seen(self) -> None:
         name, pr = self.selected_repo, self.selected_pr
         if name and pr and pr.number in self.backend.unseen(name):
             table = self.query_one("#prs", PrTable)
-            for column, cell in enumerate(pr_row(pr, False)):
+            armed = pr.number in self.backend.armed(name)
+            for column, cell in enumerate(pr_row(pr, False, armed)):
                 table.update_cell_at((table.cursor_row, column), cell)
             self.run_command(self.backend.mark_seen(name, pr.number))
 
@@ -448,9 +452,14 @@ class PrMonApp(App):
             if action is not None:
                 self.run_command(self.backend.perform(name, pr.number, action))
 
-        self.push_screen(ActionMenuScreen(repo, pr), chosen)
+        armed = self.backend.armed(name).get(pr.number)
+        self.push_screen(ActionMenuScreen(repo, pr, armed), chosen)
 
     # ----- commands -----
+
+    def action_open_link(self, url: str) -> None:
+        if url.startswith("https://"):
+            self.open_url(url)
 
     def action_refresh_all(self) -> None:
         self.run_command(self.backend.refresh_all())
