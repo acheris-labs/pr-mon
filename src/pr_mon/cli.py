@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import sys
 
-from pr_mon import __version__
+from pr_mon import __version__, autostart
 from pr_mon.app import PrMonApp
 from pr_mon.config import default_config_path
 from pr_mon.daemon import (
@@ -30,6 +30,12 @@ COMMANDS = {
     "status": "show whether the backend is running",
 }
 
+AUTOSTART_ACTIONS = {
+    "enable": "run the backend at every login (and start it now)",
+    "disable": "stop running the backend at login",
+    "status": "show whether autostart is enabled",
+}
+
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
@@ -39,7 +45,15 @@ def main(argv: list[str] | None = None) -> None:
     subcommands = parser.add_subparsers(dest="command", metavar="command")
     for name, help_text in COMMANDS.items():
         subcommands.add_parser(name, help=help_text)
+    login = subcommands.add_parser("autostart", help="start the backend at login (macOS)")
+    actions = login.add_subparsers(dest="action", metavar="action", required=True)
+    for name, help_text in AUTOSTART_ACTIONS.items():
+        actions.add_parser(name, help=help_text)
     args = parser.parse_args(argv)
+    paths = DaemonPaths.default()
+    if args.command == "autostart":
+        autostart_command(args.action, paths)
+        return
     handlers = {
         "tui": run_tui,
         "daemon": run_backend,
@@ -47,7 +61,7 @@ def main(argv: list[str] | None = None) -> None:
         "stop": stop_backend,
         "status": backend_status,
     }
-    handlers[args.command or "tui"](DaemonPaths.default())
+    handlers[args.command or "tui"](paths)
 
 
 def run_tui(paths: DaemonPaths) -> None:
@@ -75,7 +89,10 @@ def run_backend(paths: DaemonPaths) -> None:
                 log_to_stderr=sys.stderr.isatty(),
             )
         )
-    except (AlreadyRunning, DaemonError) as e:
+    except AlreadyRunning as e:
+        # Not a failure: launchd must not keep retrying when a backend is already up.
+        print(f"pr-mon: {e}", file=sys.stderr)
+    except DaemonError as e:
         sys.exit(f"pr-mon: {e}")
 
 
@@ -106,3 +123,19 @@ def backend_status(paths: DaemonPaths) -> None:
     else:
         print("backend stopped")
     sys.exit(1)
+
+
+def autostart_command(action: str, paths: DaemonPaths) -> None:
+    try:
+        if action == "enable":
+            for line in autostart.enable(paths):
+                print(line)
+        elif action == "disable":
+            print(autostart.disable(paths))
+        else:
+            enabled, description = autostart.describe()
+            print(f"autostart {description}")
+            if not enabled:
+                sys.exit(1)
+    except (autostart.AutostartError, DaemonError) as e:
+        sys.exit(f"pr-mon: {e}")

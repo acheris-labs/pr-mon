@@ -36,6 +36,23 @@ window onto it, so notifications keep coming after you close the window.
 | `pr-mon stop` | Stop the backend |
 | `pr-mon status` | Show whether it's running (exit code 0 if running) |
 | `pr-mon daemon` | Run the backend in the foreground (for debugging) |
+| `pr-mon autostart enable` | macOS: run the backend at every login, starting it now |
+| `pr-mon autostart disable` | Stop running it at login (a running backend keeps running) |
+| `pr-mon autostart status` | Whether autostart is on (exit code 0 if enabled) |
+
+### Start at login (macOS)
+
+`pr-mon autostart enable` installs a launchd agent
+(`~/Library/LaunchAgents/com.acheris-labs.pr-mon.plist`) that runs
+`pr-mon daemon` at login. It records your current `PATH` (so the backend can
+find `gh`), hands the backend over to launchd, waits for it to come up, and
+reports whether GitHub access works. launchd restarts the backend if it
+crashes, but not after `pr-mon stop`.
+
+Install with `make tool-install` first, so the agent points at a stable
+`~/.local/bin/pr-mon` rather than a checkout. macOS shows a "Background Items
+Added" notice the first time. If `im` notifications stop working under
+autostart, use Send test in the `N` dialog and approve the Automation prompt.
 
 ## Keys
 

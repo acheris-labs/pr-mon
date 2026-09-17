@@ -4,7 +4,7 @@ from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from pr_mon import __version__, cli
+from pr_mon import __version__, autostart, cli
 from pr_mon.daemon import AlreadyRunning, DaemonError, DaemonPaths
 from pr_mon.github import AuthError
 
@@ -94,14 +94,24 @@ class DaemonCommandTest(CliTestCase):
             code, _, _ = self.run_cli("daemon")
         self.assertEqual(code, "pr-mon: not logged in. Run `gh auth login`.")
 
-    def test_already_running(self):
+    def test_already_running_is_not_an_error(self):
         with (
             mock.patch("pr_mon.cli.GitHubClient"),
             mock.patch("pr_mon.cli.run_daemon", new=mock.MagicMock()),
             mock.patch("pr_mon.cli.asyncio.run", side_effect=AlreadyRunning(42)),
         ):
+            code, _, err = self.run_cli("daemon")
+        self.assertEqual(code, 0)
+        self.assertEqual(err, "pr-mon: backend already running (pid 42)\n")
+
+    def test_daemon_error(self):
+        with (
+            mock.patch("pr_mon.cli.GitHubClient"),
+            mock.patch("pr_mon.cli.run_daemon", new=mock.MagicMock()),
+            mock.patch("pr_mon.cli.asyncio.run", side_effect=DaemonError("not private")),
+        ):
             code, _, _ = self.run_cli("daemon")
-        self.assertEqual(code, "pr-mon: backend already running (pid 42)")
+        self.assertEqual(code, "pr-mon: not private")
 
 
 class ControlCommandTest(CliTestCase):
@@ -147,6 +157,44 @@ class ControlCommandTest(CliTestCase):
             code, out, _ = self.run_cli("status")
         self.assertEqual(code, 1)
         self.assertIn("not responding (pid 9)", out)
+
+
+class AutostartCommandTest(CliTestCase):
+    def test_enable(self):
+        with mock.patch("pr_mon.cli.autostart.enable", return_value=["a", "b"]) as enable:
+            code, out, _ = self.run_cli("autostart", "enable")
+        enable.assert_called_once_with(PATHS)
+        self.assertEqual((code, out), (0, "a\nb\n"))
+
+    def test_enable_failure(self):
+        error = autostart.AutostartError("the backend did not start under launchd")
+        with mock.patch("pr_mon.cli.autostart.enable", side_effect=error):
+            code, _, _ = self.run_cli("autostart", "enable")
+        self.assertEqual(code, "pr-mon: the backend did not start under launchd")
+
+    def test_disable(self):
+        with mock.patch("pr_mon.cli.autostart.disable", return_value="autostart disabled") as off:
+            code, out, _ = self.run_cli("autostart", "disable")
+        off.assert_called_once_with(PATHS)
+        self.assertEqual((code, out), (0, "autostart disabled\n"))
+
+    def test_disable_spawn_failure(self):
+        with mock.patch("pr_mon.cli.autostart.disable", side_effect=DaemonError("nope")):
+            code, _, _ = self.run_cli("autostart", "disable")
+        self.assertEqual(code, "pr-mon: nope")
+
+    def test_status(self):
+        with mock.patch("pr_mon.cli.autostart.describe", return_value=(True, "enabled (x)")):
+            code, out, _ = self.run_cli("autostart", "status")
+        self.assertEqual((code, out), (0, "autostart enabled (x)\n"))
+        with mock.patch("pr_mon.cli.autostart.describe", return_value=(False, "disabled")):
+            code, out, _ = self.run_cli("autostart", "status")
+        self.assertEqual((code, out), (1, "autostart disabled\n"))
+
+    def test_action_required(self):
+        code, _, err = self.run_cli("autostart")
+        self.assertEqual(code, 2)
+        self.assertIn("action", err)
 
 
 if __name__ == "__main__":
