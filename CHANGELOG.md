@@ -4,6 +4,19 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc4]
+
+### Added
+
+- The details pane lists the issues a PR closes on merge, in the dashboard and
+  the app; an issue in another repository shows as `owner/repo#n`.
+
+### Changed
+
+- In the app, a pending merge (GitHub's auto-merge, or one pr-mon will make when
+  the PR is ready) is a coloured chip on its own line rather than grey text
+  beside the status.
+
 ## [0.2.0-rc3]
 
 ### Changed
