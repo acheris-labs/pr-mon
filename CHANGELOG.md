@@ -4,10 +4,19 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
-## [Unreleased]
+## [0.2.0-rc2]
+
+### Fixed
+
+- Commands from the Mac app (enabling auto-merge, arming a merge, marking a PR
+  seen) reported "Unexpected data from the backend" although they had worked:
+  a reply with nothing to return left out its `result` key.
+- Uninstalling the Homebrew cask left the backend running from a deleted
+  binary; it is now signalled to stop first.
 
 ### Added
 
+- `make uninstall` and `make purge` for a source install.
 - Homebrew cask: one notarized artifact installs the app and puts the `pr-mon`
   command line (dashboard, backend and CLI) on PATH.
 - An app icon: three status dots.
