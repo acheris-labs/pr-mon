@@ -22,16 +22,13 @@ cask "pr-mon" do
   # The backend outlives the app, so stop it before the bundle goes; otherwise a
   # daemon keeps running from a deleted binary.
   #
-  # This is the deprecated spelling on purpose: `uninstall_preflight_steps`, the
-  # replacement `brew style` asks for, is silently a no-op in Homebrew 7.0.3 --
-  # the block never runs and nothing is reported. The classic block does run.
-  # must_succeed: false because a failed preflight would abort the uninstall and
-  # leave the app unremovable, and it also covers an already-missing binary.
-  uninstall_preflight do
-    stopper = "#{appdir}/PrMon.app/Contents/Resources/bin/pr-mon"
-    if File.executable?(stopper)
-      system_command stopper, args: ["stop"], must_succeed: false, print_stderr: false
-    end
+  # Signalling it rather than running `pr-mon stop`: steps run in Homebrew's
+  # sandbox with $HOME pointing at a scratch directory, so `stop` looks for the
+  # socket in the wrong place and reports the backend as not running. The
+  # daemon shuts down cleanly on SIGTERM. The match is the full command line,
+  # so an open dashboard (plain `pr-mon`) is left alone.
+  uninstall_preflight_steps do
+    terminate_process "pr-mon daemon", match: :full, must_succeed: false
   end
 
   uninstall quit: "com.acheris-labs.pr-mon.app"
