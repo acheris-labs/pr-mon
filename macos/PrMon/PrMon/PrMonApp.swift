@@ -18,6 +18,10 @@ struct PrMonApp: App {
         Window("pr-mon", id: "main") {
             ContentView(store: store, selection: selection)
                 .frame(minWidth: 900, minHeight: 480)
+                // Like Mail: the Dock shows how many PRs you haven't looked at.
+                .onChange(of: store.state?.unseenTotal ?? 0, initial: true) { _, count in
+                    NSApp.dockTile.badgeLabel = count > 0 ? String(count) : nil
+                }
         }
         .defaultSize(width: 1200, height: 760)
         .commands {

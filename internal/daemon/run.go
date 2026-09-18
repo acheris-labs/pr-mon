@@ -93,6 +93,8 @@ func Run(ctx context.Context, paths Paths, client *github.Client, options Option
 		return err
 	}
 	defer lock.Close()
+	// Running again, whoever started it: no longer deliberately stopped.
+	os.Remove(paths.Stopped())
 	if err := paths.EnsureSocketDir(); err != nil {
 		return err
 	}
@@ -128,6 +130,9 @@ func Run(ctx context.Context, paths Paths, client *github.Client, options Option
 	case <-ctx.Done():
 	case <-monitor.Shutdown:
 		logger.Info("shutdown requested")
+		if err := os.WriteFile(paths.Stopped(), nil, 0o644); err != nil {
+			logger.Warn("could not record the requested stop", "error", err)
+		}
 	case received := <-signals:
 		logger.Info("stopping", "signal", received.String())
 	}

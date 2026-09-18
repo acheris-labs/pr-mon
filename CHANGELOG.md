@@ -4,6 +4,26 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc6]
+
+### Added
+
+- The app's Dock icon shows how many PRs you haven't looked at, like Mail.
+
+### Fixed
+
+- After `brew upgrade` stopped the backend, an app left open waited forever
+  with nothing coming in. It now starts the backend again when one it was
+  connected to disappears, unless it was stopped on purpose (`pr-mon stop`, or
+  Stop in the app), which the backend now records.
+
+## [0.2.0-rc5]
+
+### Changed
+
+- Linked issues are their own section in the app, shown only when a PR closes
+  something.
+
 ## [0.2.0-rc4]
 
 ### Fixed

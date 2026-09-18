@@ -32,4 +32,10 @@ public enum SocketPath {
     public static func current() -> String {
         socket(stateDirectory: stateDirectory())
     }
+
+    /// Present while the backend is down because someone asked it to stop
+    /// (docs/protocol.md, "Starting the backend").
+    public static func stoppedMarker(stateDirectory: String = stateDirectory()) -> String {
+        (stateDirectory as NSString).appendingPathComponent("stopped")
+    }
 }

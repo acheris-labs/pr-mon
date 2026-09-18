@@ -55,6 +55,15 @@ tests read.
 3. Apply events as they arrive. When the connection closes, the backend has
    stopped; reconnect and start again from step 1.
 
+## Starting the backend
+
+A client may start the backend (`pr-mon start`) when it can't connect. After
+losing a backend it was connected to, it should first check for `stopped` in
+the state directory: the backend writes that file when a `shutdown` request
+stops it and removes it when it next starts. Present means someone stopped it
+on purpose, so leave it stopped; absent means it went away some other way (an
+upgrade, a crash, a signal) and starting it again is the right thing to do.
+
 ## Requests
 
 | Op | Args | Result | Notes |

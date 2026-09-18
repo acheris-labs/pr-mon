@@ -31,21 +31,28 @@ public final class PrMonStore {
     private let retryDelay: Duration
     private let toastDuration: Duration
     private let startBackend: @Sendable () async throws -> Void
+    private let stoppedOnPurpose: @Sendable () -> Bool
     private var loop: Task<Void, Never>?
     private var wake: CheckedContinuation<Void, Never>?
+    /// Whether the backend has been started since the last good connection:
+    /// each time one goes away it gets one restart, not a loop of them.
     private var triedStarting = false
 
     public init(
         socketPath: String = SocketPath.current(),
         retryDelay: Duration = .seconds(5),
         toastDuration: Duration = .seconds(6),
-        startBackend: @escaping @Sendable () async throws -> Void = Launcher.startBackend
+        startBackend: @escaping @Sendable () async throws -> Void = Launcher.startBackend,
+        stoppedOnPurpose: @escaping @Sendable () -> Bool = {
+            FileManager.default.fileExists(atPath: SocketPath.stoppedMarker())
+        }
     ) {
         self.socketPath = socketPath
         self.client = BackendClient(socketPath: socketPath)
         self.retryDelay = retryDelay
         self.toastDuration = toastDuration
         self.startBackend = startBackend
+        self.stoppedOnPurpose = stoppedOnPurpose
     }
 
     public var isConnected: Bool { phase == .connected }
@@ -112,7 +119,13 @@ public final class PrMonStore {
         do {
             connection = try await client.connect()
         } catch ClientError.unavailable where !triedStarting {
-            // Like the TUI: start the backend when the app opens and it isn't running.
+            // Like the TUI, start the backend when the app opens and it isn't
+            // running. One that went away while connected is restarted too --
+            // an upgrade or a crash -- unless someone stopped it on purpose.
+            if wasConnected && stoppedOnPurpose() {
+                phase = .disconnected("The backend was stopped.")
+                return false
+            }
             triedStarting = true
             return await launchBackend()
         } catch let error as ClientError {
@@ -126,7 +139,7 @@ public final class PrMonStore {
             phase = .disconnected(error.localizedDescription)
             return false
         }
-        triedStarting = true
+        triedStarting = false
         state = BackendState(snapshot: connection.snapshot)
         phase = .connected
         if wasConnected {

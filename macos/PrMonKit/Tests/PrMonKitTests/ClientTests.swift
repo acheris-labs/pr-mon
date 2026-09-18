@@ -15,6 +15,14 @@ import Testing
 }
 
 @Suite struct BackendStateTests {
+    @Test func unseenTotalAddsUpTheSidebar() throws {
+        var state = BackendState(snapshot: try Fixtures.snapshot())
+        // acme/api has #1 and #5 unseen; the other repos have none.
+        #expect(state.unseenTotal == 2)
+        state.markSeenLocally(repo: "acme/api", number: 1)
+        #expect(state.unseenTotal == 1)
+    }
+
     @Test func appliesEvents() throws {
         var state = BackendState(snapshot: try Fixtures.snapshot())
         #expect(state.repos.map(\.name) == ["acme/api", "acme/web", "Textualize/rich"])
@@ -234,6 +242,58 @@ final class FakeServer: @unchecked Sendable {
         try await Task.sleep(for: .milliseconds(100))
         #expect(starts.ops == ["start"])
         #expect(store.phase == .disconnected("The pr-mon backend isn't running"))
+    }
+
+    /// A backend that answers, then vanishes along with its socket: what an
+    /// upgrade or a crash looks like from the app.
+    private func vanishingBackend() throws -> FakeServer {
+        let server = try FakeServer()
+        let path = server.path
+        server.serve { request, send in
+            switch request["op"] as! String {
+            case "hello": send(try! FakeServer.reply(to: request, fixture: "hello-response.json"))
+            case "snapshot":
+                send(try! FakeServer.reply(to: request, fixture: "snapshot-response.json"))
+                unlink(path)
+                return false  // hang up
+            default: break
+            }
+            return true
+        }
+        return server
+    }
+
+    @Test func restartsABackendThatWentAway() async throws {
+        let server = try vanishingBackend()
+        let starts = RequestLog()
+        let store = PrMonStore(
+            socketPath: server.path,
+            retryDelay: .milliseconds(20),
+            startBackend: { starts.append("start"); throw Launcher.Failure(output: "no") },
+            stoppedOnPurpose: { false }
+        )
+        store.start()
+        defer { store.stop() }
+        try await waitUntil { starts.ops == ["start"] }
+        // One attempt per lost connection, not a loop of them.
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(starts.ops == ["start"])
+    }
+
+    @Test func leavesADeliberatelyStoppedBackendAlone() async throws {
+        let server = try vanishingBackend()
+        let starts = RequestLog()
+        let store = PrMonStore(
+            socketPath: server.path,
+            retryDelay: .milliseconds(20),
+            startBackend: { starts.append("start") },
+            stoppedOnPurpose: { true }
+        )
+        store.start()
+        defer { store.stop() }
+        try await waitUntil { store.phase == .disconnected("The backend was stopped.") }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(starts.ops.isEmpty)
     }
 }
 

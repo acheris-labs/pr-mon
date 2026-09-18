@@ -56,6 +56,12 @@ func (p Paths) Lock() string { return filepath.Join(p.Directory, "daemon.lock") 
 
 func (p Paths) Log() string { return filepath.Join(p.Directory, "daemon.log") }
 
+// Stopped exists while the backend is down because someone asked it to stop
+// (the shutdown op: `pr-mon stop`, or Stop in the app). A client that finds
+// the backend gone restarts it only when this is absent, so an upgrade or a
+// crash is recovered from but a deliberate stop is left alone.
+func (p Paths) Stopped() string { return filepath.Join(p.Directory, "stopped") }
+
 // EnsureSocketDir creates the socket's directory, refusing a shared one outside
 // the state directory.
 func (p Paths) EnsureSocketDir() error {
