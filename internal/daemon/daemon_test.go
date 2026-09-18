@@ -12,7 +12,7 @@ func TestToolPathAddsHomebrew(t *testing.T) {
 		"/usr/bin:/bin:/usr/sbin:/sbin": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
 		// Already there: left where the user put it, not duplicated.
 		"/opt/homebrew/bin:/usr/bin": "/opt/homebrew/bin:/usr/bin:/usr/local/bin",
-		"":                          "/opt/homebrew/bin:/usr/local/bin",
+		"":                           "/opt/homebrew/bin:/usr/local/bin",
 	}
 	for path, want := range cases {
 		if got := daemon.ToolPath(path); got != want {
