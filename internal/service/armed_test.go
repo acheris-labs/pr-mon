@@ -221,7 +221,9 @@ func TestNoSecondMergeWhileOneIsInFlight(t *testing.T) {
 	client.mutex.Unlock()
 	h := start(t, client, []string{"acme/api"}, nil)
 	armNoWait(t, h, 1, false)
-	waitFor(t, h.monitor.Merging)
+	// A PR is marked in flight before GitHub is called, so waiting on Merging()
+	// and counting calls in the next breath sees zero. Wait for the call.
+	waitFor(t, func() bool { return len(client.callsMatching("merge ")) == 1 })
 
 	if !h.monitor.Merging() {
 		t.Error("a merge in flight should be visible")
