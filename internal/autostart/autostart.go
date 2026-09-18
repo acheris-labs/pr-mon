@@ -252,6 +252,12 @@ func Enable(paths daemon.Paths, agent *Agent, program []string) ([]string, error
 	if program == nil {
 		program = Program()
 	}
+	if bundle := AppBundle(program[0]); bundle != "" {
+		return nil, &Error{Message: "this copy of pr-mon lives in " +
+			filepath.Base(bundle) + ", which registers the login item itself.\n" +
+			"Turn on \"Start the backend at login\" in PrMon › Settings › General,\n" +
+			"so macOS lists it as pr-mon rather than the developer who signed it."}
+	}
 	lines := []string{}
 	// launchd should own the only backend; a second one would just exit.
 	if _, err := daemon.Stop(paths, daemon.StopTimeout); err != nil {
@@ -314,7 +320,27 @@ func waitUntilReady(paths daemon.Paths, timeout time.Duration) (string, error) {
 	}
 }
 
+// AppBundle is the .app this path sits inside, or "" when it is a plain
+// binary. The app registers the login item through ServiceManagement, which is
+// what makes macOS name and illustrate it, so the command line leaves that to
+// the app rather than writing an agent of its own.
+func AppBundle(path string) string {
+	resolved := path
+	if link, err := filepath.EvalSymlinks(path); err == nil {
+		resolved = link
+	}
+	for directory := filepath.Dir(resolved); ; directory = filepath.Dir(directory) {
+		if filepath.Ext(directory) == ".app" {
+			return directory
+		}
+		if parent := filepath.Dir(directory); parent == directory {
+			return ""
+		}
+	}
+}
+
 // Disable removes the login agent; a backend that was running keeps running.
+// It never defers to the app: whatever installed an agent, this takes it away.
 func Disable(paths daemon.Paths, agent *Agent) (string, error) {
 	if err := requireMacOS(); err != nil {
 		return "", err

@@ -4,6 +4,16 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc3]
+
+### Changed
+
+- The app registers "start the backend at login" itself, through an agent that
+  ships inside the bundle, so System Settings lists it as pr-mon with its icon
+  instead of the name on the signing certificate. `pr-mon autostart enable`
+  defers to the app when it is running from inside PrMon.app; a source install
+  is unaffected.
+
 ## [0.2.0-rc2]
 
 ### Fixed

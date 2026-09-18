@@ -2,8 +2,24 @@
 // whatever the user's login shell finds on PATH (a source checkout).
 
 import Foundation
+import ServiceManagement
 
 public enum Launcher {
+    /// The backend's launchd agent shipped in the app bundle. Registering it
+    /// through ServiceManagement is what makes Login Items say "PrMon" and show
+    /// its icon: a plain agent in ~/Library/LaunchAgents has no bundle to name,
+    /// so macOS falls back to whoever signed the binary.
+    static let agentPlistName = "com.acheris-labs.pr-mon.plist"
+
+    /// Non-nil when this build carries the agent, i.e. anything but a source
+    /// checkout running the command line on its own.
+    static func bundledAgent() -> SMAppService? {
+        guard let path = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Library/LaunchAgents")
+            .appendingPathComponent(agentPlistName).path as String?,
+            FileManager.default.fileExists(atPath: path) else { return nil }
+        return SMAppService.agent(plistName: agentPlistName)
+    }
     public struct Failure: Error, LocalizedError {
         public var output: String
         public var errorDescription: String? { output }
@@ -40,12 +56,21 @@ public enum Launcher {
 
     public enum AutostartState: Sendable {
         case enabled, disabled
+        /// Registered, but waiting for the user to allow it in Login Items.
+        case needsApproval
         /// pr-mon isn't installed, so this can't be read or changed.
         case unavailable
     }
 
-    /// Whether the backend starts at login (`pr-mon autostart status`).
+    /// Whether the backend starts at login.
     public static func autostartState() async -> AutostartState {
+        if let agent = bundledAgent() {
+            switch agent.status {
+            case .enabled: return .enabled
+            case .requiresApproval: return .needsApproval
+            default: return .disabled
+            }
+        }
         let result = await output(["autostart", "status"])
         if result.status == 127 || result.text.contains("command not found") {
             return .unavailable
@@ -54,7 +79,18 @@ public enum Launcher {
     }
 
     public static func setAutostart(_ enabled: Bool) async throws {
-        try await run(["autostart", enabled ? "enable" : "disable"])
+        guard let agent = bundledAgent() else {
+            try await run(["autostart", enabled ? "enable" : "disable"])
+            return
+        }
+        if enabled {
+            // An agent installed earlier by `pr-mon autostart enable` carries the
+            // same label, so clear it out before launchd gets a second one.
+            _ = await output(["autostart", "disable"])
+            try agent.register()
+        } else {
+            try await agent.unregister()
+        }
     }
 
     static func loginShell() -> String {

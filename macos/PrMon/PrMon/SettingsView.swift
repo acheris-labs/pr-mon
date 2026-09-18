@@ -104,7 +104,7 @@ struct GeneralSettings: View {
                     set: { setOpenAtLogin($0) }
                 ))
                 Toggle("Start the backend at login", isOn: Binding(
-                    get: { backendAtLogin == .enabled },
+                    get: { backendAtLogin == .enabled || backendAtLogin == .needsApproval },
                     set: { setBackendAtLogin($0) }
                 ))
                 .disabled(backendAtLogin == .unavailable)
@@ -116,9 +116,14 @@ struct GeneralSettings: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("The backend keeps polling and notifying with no window open; "
-                        + "at login it starts through launchd (`pr-mon autostart`).")
+                        + "at login it starts on its own, listed as pr-mon in Login Items.")
+                    if backendAtLogin == .needsApproval {
+                        Label("Allow pr-mon in System Settings \u{203A} General \u{203A} Login Items.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
                     if backendAtLogin == .unavailable {
-                        Label("Install the pr-mon command line (`make tool-install`) to change this.",
+                        Label("Install the pr-mon command line (`make install`) to change this.",
                               systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                     }

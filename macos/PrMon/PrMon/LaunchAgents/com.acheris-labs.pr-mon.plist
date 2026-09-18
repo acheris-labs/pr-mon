@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The backend's login item, registered by the app through SMAppService.
+
+  It lives inside the bundle so macOS attributes it to PrMon: a bare launchd
+  agent in ~/Library/LaunchAgents has no bundle to name, so Login Items shows
+  the certificate holder's name and a blank icon instead.
+
+  BundleProgram is relative to PrMon.app, which is what lets the same plist
+  work wherever the app is installed.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.acheris-labs.pr-mon</string>
+  <key>BundleProgram</key>
+  <string>Contents/Resources/bin/pr-mon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>pr-mon</string>
+    <string>daemon</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- Restart after a crash, but not after a requested shutdown (exit 0). -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <!-- launchd starts jobs with a bare environment, and the backend shells out
+       to gh. A plist inside the bundle cannot capture the user's own PATH, so
+       name the usual places a Homebrew or system gh lives. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>

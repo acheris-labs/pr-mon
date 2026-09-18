@@ -199,3 +199,34 @@ func TestRestartWithoutLaunchdStartsAFreshBackend(t *testing.T) {
 		t.Skip("a backend started unexpectedly; nothing to assert")
 	}
 }
+
+func TestAppBundleFindsTheEnclosingApp(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir()) // macOS puts /var behind a symlink
+	if err != nil {
+		t.Fatal(err)
+	}
+	inside := filepath.Join(root, "PrMon.app", "Contents", "Resources", "bin")
+	if err := os.MkdirAll(inside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bundled := filepath.Join(inside, "pr-mon")
+	if err := os.WriteFile(bundled, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// What Homebrew's binary stanza leaves on PATH.
+	link := filepath.Join(root, "pr-mon")
+	if err := os.Symlink(bundled, link); err != nil {
+		t.Fatal(err)
+	}
+	plain := filepath.Join(root, "go-bin-pr-mon")
+	if err := os.WriteFile(plain, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	app := filepath.Join(root, "PrMon.app")
+	for path, want := range map[string]string{bundled: app, link: app, plain: ""} {
+		if got := autostart.AppBundle(path); got != want {
+			t.Errorf("AppBundle(%q) = %q, want %q", path, got, want)
+		}
+	}
+}

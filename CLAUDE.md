@@ -48,5 +48,10 @@ and the Swift models (`macos/PrMonKit/Sources/PrMonKit/Models.swift`).
   `.xcodeproj` isn't committed. Build with `make app`.
 - The app should look like a standard Mac app, not a port of the TUI: system
   fonts and colours, standard Settings tabs, no key-hint bars.
-- Backend control the app can't reach over the socket (autostart, restart,
-  stop) runs the `pr-mon` command line.
+- Backend control the app can't reach over the socket (restart, stop) runs the
+  `pr-mon` command line.
+- "Start the backend at login" is the exception: the app registers the agent in
+  `Contents/Library/LaunchAgents` through `SMAppService`, because an agent
+  written by the command line has no bundle and macOS then lists it under the
+  signing certificate's name with no icon. The command line defers when it is
+  running from inside the bundle.

@@ -64,22 +64,31 @@ window onto it, so notifications keep coming after you close the window.
 | `pr-mon restart` | Restart the backend (through launchd when autostart runs it) |
 | `pr-mon status` | Show whether it's running (exit code 0 if running) |
 | `pr-mon daemon` | Run the backend in the foreground (for debugging) |
-| `pr-mon autostart enable` | macOS: run the backend at every login, starting it now |
+| `pr-mon autostart enable` | macOS: run the backend at every login (use the app's Settings when installed from Homebrew) |
 | `pr-mon autostart disable` | Stop running it at login (a running backend keeps running) |
 | `pr-mon autostart status` | Whether autostart is on (exit code 0 if enabled) |
 
 ### Start at login (macOS)
 
-`pr-mon autostart enable` installs a launchd agent
+**Installed from Homebrew:** turn on *Start the backend at login* in
+PrMon › Settings › General. The app registers an agent that ships inside the
+bundle, which is what makes System Settings › General › Login Items list it as
+**pr-mon** with its icon. `pr-mon autostart enable` refuses in this case and
+points you at the setting: an agent written by the command line has no bundle
+for macOS to name, so it appears under the name on the signing certificate,
+with no icon.
+
+**From a checkout:** `pr-mon autostart enable` installs a launchd agent
 (`~/Library/LaunchAgents/com.acheris-labs.pr-mon.plist`) that runs
 `pr-mon daemon` at login. It records your current `PATH` (so the backend can
 find `gh`), hands the backend over to launchd, waits for it to come up, and
-reports whether GitHub access works. launchd restarts the backend if it
-crashes, but not after `pr-mon stop`.
+reports whether GitHub access works. Install with `make install` first, so the
+agent points at a stable binary in `$(go env GOPATH)/bin` rather than a
+checkout.
 
-Install with `make install` first, so the agent points at a stable binary in
-`$(go env GOPATH)/bin` rather than a checkout. macOS shows a "Background Items
-Added" notice the first time. If `im` notifications stop working under
+Either way launchd restarts the backend if it crashes, but not after
+`pr-mon stop`, and `pr-mon autostart disable` removes whichever agent is
+installed. macOS shows a "Background Items Added" notice the first time. If `im` notifications stop working under
 autostart, use Send test in the `N` dialog and approve the Automation prompt.
 
 ## Keys

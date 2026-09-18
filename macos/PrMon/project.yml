@@ -18,7 +18,15 @@ targets:
     type: application
     platform: macOS
     sources:
-      - PrMon
+      - path: PrMon
+        excludes:
+          - LaunchAgents
+      # SMAppService reads the backend's agent from Contents/Library/LaunchAgents.
+      - path: PrMon/LaunchAgents
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
     dependencies:
       - package: PrMonKit
     info:
