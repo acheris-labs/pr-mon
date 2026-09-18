@@ -125,13 +125,24 @@ public actor BackendClient {
 
     // MARK: plumbing
 
-    private struct Ignored: Decodable {}
-
+    /// A command whose reply carries nothing to decode. It must not look at
+    /// `result`: the backend has nothing to put there, and whether it sends
+    /// null or leaves the key out is not something a command should care about.
     private func command(_ op: String, _ args: some Encodable & Sendable) async throws {
-        let _: Ignored? = try await request(op, args)
+        _ = try await send(op, args)
     }
 
     func request<T: Decodable>(_ op: String, _ args: some Encodable & Sendable) async throws -> T {
+        let line = try await send(op, args)
+        do {
+            return try JSONDecoder().decode(ResultBox<T>.self, from: line).result
+        } catch {
+            throw ClientError.malformed("\(op): \(error)")
+        }
+    }
+
+    /// Sends one request and returns the reply line; `ok: false` throws.
+    private func send(_ op: String, _ args: some Encodable & Sendable) async throws -> Data {
         guard let socket else { throw ClientError.disconnected }
         let id = nextID
         nextID += 1
@@ -144,11 +155,7 @@ public actor BackendClient {
                 pending.removeValue(forKey: id)?.resume(throwing: error)
             }
         }
-        do {
-            return try JSONDecoder().decode(ResultBox<T>.self, from: line).result
-        } catch {
-            throw ClientError.malformed("\(op): \(error)")
-        }
+        return line
     }
 
     private func readLoop(_ lines: AsyncStream<Data>, socket: UnixSocket) async {

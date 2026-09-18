@@ -153,7 +153,8 @@ final class FakeServer: @unchecked Sendable {
                 send(try! FakeServer.reply(to: request, fixture: "error-response.json"))
                 return false  // then hang up
             default:
-                send(Data("{\"id\": \(request["id"]!), \"ok\": true, \"result\": null}\n".utf8))
+                // No result key at all: a command must not need one.
+                send(Data("{\"id\": \(request["id"]!), \"ok\": true}\n".utf8))
             }
             return true
         }

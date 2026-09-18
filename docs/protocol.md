@@ -36,6 +36,8 @@ tests read.
 | Response | backend → client | `{"id": 7, "ok": true, "result": ...}` or `{"id": 7, "ok": false, "error": "text for the user"}` |
 | Event | backend → client | `{"event": "repo", "data": {...}}` |
 
+- `result` is always present in a reply, and is `null` when the op has
+  nothing to return, so a client may decode it as a required field.
 - `id` is chosen by the client and echoed back; use a unique integer per request.
 - Requests are handled concurrently, so responses may arrive out of order.
 - Events and responses are interleaved on the same connection. A message with an

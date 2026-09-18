@@ -220,3 +220,19 @@ func TestEncodeKeepsOneLine(t *testing.T) {
 		}
 	}
 }
+
+// A command that returns nothing still answers with a result key: a client
+// that decodes result as a required field must not break on an empty reply.
+func TestSuccessfulResponseAlwaysCarriesResult(t *testing.T) {
+	line, err := protocol.Encode(protocol.Response{ID: 7, OK: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(line, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fields["result"]; !ok {
+		t.Errorf("no result key in %s", line)
+	}
+}

@@ -1,5 +1,6 @@
 {
   "id": 3,
   "ok": false,
+  "result": null,
   "error": "acme/api#99 is not an open PR"
 }

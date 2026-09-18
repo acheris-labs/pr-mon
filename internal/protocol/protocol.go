@@ -36,11 +36,13 @@ type Request struct {
 	Args json.RawMessage `json:"args"`
 }
 
-// Response is the reply to one request.
+// Response is the reply to one request. A successful reply always carries
+// result, null when the op has nothing to return: omitting the key breaks
+// clients that decode it as a required field.
 type Response struct {
 	ID     int    `json:"id"`
 	OK     bool   `json:"ok"`
-	Result any    `json:"result,omitempty"`
+	Result any    `json:"result"`
 	Error  string `json:"error,omitempty"`
 }
 
