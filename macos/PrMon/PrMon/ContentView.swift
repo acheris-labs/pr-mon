@@ -401,6 +401,17 @@ private struct PRDetail: View {
                         .padding(4)
                     }
                 }
+                if !pr.closingIssues.isEmpty {
+                    GroupBox("Closes") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(pr.closingIssues) { issue in
+                                issueLine(issue)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(4)
+                    }
+                }
                 GroupBox("Details") {
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                         row("Branch", Text(verbatim: "\(pr.headRef) → \(pr.baseRef)"))
@@ -410,17 +421,6 @@ private struct PRDetail: View {
                         dateRow("Last check", pr.lastCheckStartedAt)
                         if let sha = pr.headSha {
                             row("Head", Text(sha).font(.body.monospaced()))
-                        }
-                        if !pr.closingIssues.isEmpty {
-                            GridRow {
-                                Text("Closes").foregroundStyle(.secondary)
-                                    .gridColumnAlignment(.trailing)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    ForEach(pr.closingIssues) { issue in
-                                        issueLine(issue)
-                                    }
-                                }
-                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -475,13 +475,17 @@ private struct PRDetail: View {
 
     @ViewBuilder
     private func issueLine(_ issue: LinkedIssue) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if let url = URL(string: issue.url) {
-                Link(issue.label(in: repo.name), destination: url)
-            } else {
-                Text(issue.label(in: repo.name))
+        Label {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if let url = URL(string: issue.url) {
+                    Link(issue.label(in: repo.name), destination: url)
+                } else {
+                    Text(issue.label(in: repo.name))
+                }
+                Text(issue.title)
             }
-            Text(issue.title).foregroundStyle(.secondary)
+        } icon: {
+            Image(systemName: "smallcircle.filled.circle").foregroundStyle(.secondary)
         }
     }
 

@@ -13,8 +13,9 @@ the git tags the release workflow builds from.
 
 ### Added
 
-- The details pane lists the issues a PR closes on merge, in the dashboard and
-  the app; an issue in another repository shows as `owner/repo#n`.
+- The issues a PR closes on merge: its own section in the app, beside Blocked By
+  and Details, and a `Closes:` line in the dashboard. An issue in another
+  repository shows as `owner/repo#n`.
 
 ### Changed
 
