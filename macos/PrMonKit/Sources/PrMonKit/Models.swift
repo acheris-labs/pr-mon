@@ -180,6 +180,22 @@ public struct ActionOption: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+/// An issue this PR closes when it merges. `repo` is the issue's own
+/// repository, which is not always the one the PR is in.
+public struct LinkedIssue: Codable, Sendable, Equatable, Identifiable {
+    public var number: Int
+    public var title: String
+    public var url: String
+    public var repo: String
+
+    public var id: String { "\(repo)#\(number)" }
+
+    /// "#12", or "other/repo#12" for an issue outside `repo`.
+    public func label(in repo: String) -> String {
+        self.repo.isEmpty || self.repo == repo ? "#\(number)" : "\(self.repo)#\(number)"
+    }
+}
+
 public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     public var number: Int
@@ -199,6 +215,7 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public var checks: [Check]
     public var checksTotal: Int
     public var autoMerge: AutoMerge?
+    public var closingIssues: [LinkedIssue]
     public var lastCommitAt: String?
     public var headSha: String?
     public var status: PRStatus
@@ -220,6 +237,7 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
         case checkState = "check_state"
         case checksTotal = "checks_total"
         case autoMerge = "auto_merge"
+        case closingIssues = "closing_issues"
         case lastCommitAt = "last_commit_at"
         case headSha = "head_sha"
         case strictlyReady = "strictly_ready"

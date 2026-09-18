@@ -34,7 +34,15 @@ var armed = models.ArmedMerge{Method: models.MergeSquash, DeleteBranch: true, Ar
 // a repo that failed to load, and GitHub's own auto-merge.
 func state() protocol.Snapshot {
 	api := testfixtures.Repo("acme/api", []models.PullRequest{
-		pr(1, func(p *models.PullRequest) { p.Title = "Ready to go 🚀" }),
+		pr(1, func(p *models.PullRequest) {
+			p.Title = "Ready to go 🚀"
+			p.ClosingIssues = []models.LinkedIssue{
+				{Number: 12, Title: "Crash on empty config",
+					URL: "https://github.com/acme/api/issues/12", Repo: "acme/api"},
+				{Number: 7, Title: "Tracked elsewhere",
+					URL: "https://github.com/acme/infra/issues/7", Repo: "acme/infra"},
+			}
+		}),
 		pr(2, func(p *models.PullRequest) {
 			testfixtures.Pending(p)
 			p.Checks = []models.Check{{Name: "ci", State: "PENDING", StartedAt: models.Ptr(checkStarted)}}

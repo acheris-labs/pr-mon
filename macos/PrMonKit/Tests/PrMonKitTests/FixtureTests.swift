@@ -73,6 +73,17 @@ enum Fixtures {
         #expect(autoMerged.headRefId == nil)
     }
 
+    @Test func closingIssues() throws {
+        let api = try #require(try Fixtures.snapshot().repos["acme/api"])
+        let linked = api.prs[0].closingIssues
+        #expect(linked.map(\.number) == [12, 7])
+        #expect(linked.first?.title == "Crash on empty config")
+        // An issue in this repo is "#12"; one elsewhere carries its repository.
+        #expect(linked[0].label(in: "acme/api") == "#12")
+        #expect(linked[1].label(in: "acme/api") == "acme/infra#7")
+        #expect(api.prs[1].closingIssues.isEmpty)
+    }
+
     @Test func actions() throws {
         let snapshot = try Fixtures.snapshot()
         let api = try #require(snapshot.repos["acme/api"])

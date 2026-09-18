@@ -24,6 +24,9 @@ const (
 	APIURL     = "https://api.github.com/graphql"
 	PRLimit    = 50
 	CheckLimit = 20
+	// Issues a PR closes on merge. More than a handful is rare, and the list is
+	// there to be read in a details pane, not counted.
+	IssueLimit = 10
 	// Mergeability fields are slow for GitHub to compute and GraphQL requests time
 	// out after ~10s, so full PR details are fetched in pages of this size.
 	PageSize          = 10
@@ -40,6 +43,9 @@ fragment PrFields on PullRequest {
   headRepository { nameWithOwner }
   mergeable mergeStateStatus reviewDecision
   autoMergeRequest { mergeMethod enabledBy { login } }
+  closingIssuesReferences(first: %d) {
+    nodes { number title url repository { nameWithOwner } }
+  }
   commits(last: 1) {
     nodes {
       commit {
@@ -60,7 +66,7 @@ fragment PrFields on PullRequest {
     }
   }
 }
-`, CheckLimit)
+`, IssueLimit, CheckLimit)
 
 var repoQuery = fmt.Sprintf(`
 query($owner: String!, $name: String!) {

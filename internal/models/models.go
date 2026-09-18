@@ -39,6 +39,16 @@ type Check struct {
 	StartedAt *string `json:"started_at"`
 }
 
+// LinkedIssue is an issue this PR closes when it merges: what GitHub's own
+// Development panel lists, from "Closes #12" in the body or a manual link.
+// Repo is the issue's own repository, which is not always the PR's.
+type LinkedIssue struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	Repo   string `json:"repo"`
+}
+
 type AutoMerge struct {
 	Method    MergeMethod `json:"method"`
 	EnabledBy string      `json:"enabled_by"`
@@ -69,26 +79,27 @@ type ActionOption struct {
 }
 
 type PullRequest struct {
-	ID             string     `json:"id"`
-	Number         int        `json:"number"`
-	Title          string     `json:"title"`
-	URL            string     `json:"url"`
-	Author         string     `json:"author"`
-	CreatedAt      string     `json:"created_at"`
-	IsDraft        bool       `json:"is_draft"`
-	HeadRef        string     `json:"head_ref"`
-	BaseRef        string     `json:"base_ref"`
-	HeadRefID      *string    `json:"head_ref_id"`
-	HeadRepo       *string    `json:"head_repo"`
-	Mergeable      string     `json:"mergeable"`
-	MergeState     string     `json:"merge_state"`
-	ReviewDecision *string    `json:"review_decision"`
-	CheckState     *string    `json:"check_state"`
-	Checks         []Check    `json:"checks"`
-	ChecksTotal    int        `json:"checks_total"`
-	AutoMerge      *AutoMerge `json:"auto_merge"`
-	LastCommitAt   *string    `json:"last_commit_at"`
-	HeadSha        *string    `json:"head_sha"`
+	ID             string        `json:"id"`
+	Number         int           `json:"number"`
+	Title          string        `json:"title"`
+	URL            string        `json:"url"`
+	Author         string        `json:"author"`
+	CreatedAt      string        `json:"created_at"`
+	IsDraft        bool          `json:"is_draft"`
+	HeadRef        string        `json:"head_ref"`
+	BaseRef        string        `json:"base_ref"`
+	HeadRefID      *string       `json:"head_ref_id"`
+	HeadRepo       *string       `json:"head_repo"`
+	Mergeable      string        `json:"mergeable"`
+	MergeState     string        `json:"merge_state"`
+	ReviewDecision *string       `json:"review_decision"`
+	CheckState     *string       `json:"check_state"`
+	Checks         []Check       `json:"checks"`
+	ChecksTotal    int           `json:"checks_total"`
+	AutoMerge      *AutoMerge    `json:"auto_merge"`
+	ClosingIssues  []LinkedIssue `json:"closing_issues"`
+	LastCommitAt   *string       `json:"last_commit_at"`
+	HeadSha        *string       `json:"head_sha"`
 	// Filled in by the backend (readiness, actions); clients only display them.
 	Status             Status         `json:"status"`
 	Reasons            []Reason       `json:"reasons"`

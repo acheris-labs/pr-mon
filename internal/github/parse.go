@@ -67,6 +67,17 @@ type prNode struct {
 		MergeMethod string `json:"mergeMethod"`
 		EnabledBy   *login `json:"enabledBy"`
 	} `json:"autoMergeRequest"`
+	// Nodes can hold nulls: an issue in a repository the token cannot read.
+	ClosingIssuesReferences *struct {
+		Nodes []*struct {
+			Number     int    `json:"number"`
+			Title      string `json:"title"`
+			URL        string `json:"url"`
+			Repository *struct {
+				NameWithOwner string `json:"nameWithOwner"`
+			} `json:"repository"`
+		} `json:"nodes"`
+	} `json:"closingIssuesReferences"`
 	Commits struct {
 		Nodes []struct {
 			Commit struct {
@@ -125,6 +136,7 @@ func (p prNode) toPullRequest() models.PullRequest {
 		MergeState:     p.MergeState,
 		ReviewDecision: p.ReviewDecision,
 		Checks:         []models.Check{},
+		ClosingIssues:  []models.LinkedIssue{},
 		Reasons:        []models.Reason{},
 		Actions:        []models.ActionOption{},
 	}
@@ -144,6 +156,18 @@ func (p prNode) toPullRequest() models.PullRequest {
 		}
 		pr.AutoMerge = &models.AutoMerge{
 			Method: models.MergeMethod(auto.MergeMethod), EnabledBy: enabledBy,
+		}
+	}
+	if linked := p.ClosingIssuesReferences; linked != nil {
+		for _, issue := range linked.Nodes {
+			if issue == nil {
+				continue // an issue this token cannot read
+			}
+			entry := models.LinkedIssue{Number: issue.Number, Title: issue.Title, URL: issue.URL}
+			if issue.Repository != nil {
+				entry.Repo = issue.Repository.NameWithOwner
+			}
+			pr.ClosingIssues = append(pr.ClosingIssues, entry)
 		}
 	}
 	if len(p.Commits.Nodes) > 0 {

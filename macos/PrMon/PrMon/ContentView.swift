@@ -411,6 +411,17 @@ private struct PRDetail: View {
                         if let sha = pr.headSha {
                             row("Head", Text(sha).font(.body.monospaced()))
                         }
+                        if !pr.closingIssues.isEmpty {
+                            GridRow {
+                                Text("Closes").foregroundStyle(.secondary)
+                                    .gridColumnAlignment(.trailing)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ForEach(pr.closingIssues) { issue in
+                                        issueLine(issue)
+                                    }
+                                }
+                            }
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(4)
@@ -425,20 +436,18 @@ private struct PRDetail: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(pr.title).font(.title2).bold()
-            HStack(spacing: 12) {
-                Label(pr.status.title, systemImage: pr.status.symbol)
-                    .foregroundStyle(pr.status.color)
-                    .fontWeight(.medium)
-                if let auto = pr.autoMerge {
-                    Label("Auto-merge on (\(Format.method(auto.method)), by \(auto.enabledBy))",
-                          systemImage: "arrow.triangle.merge")
-                        .foregroundStyle(.secondary)
-                } else if let armed {
-                    Label("pr-mon merges when ready (\(Format.method(armed.method))"
-                          + (armed.deleteBranch ? ", deletes branch)" : ")"),
-                          systemImage: "arrow.triangle.merge")
-                        .foregroundStyle(.secondary)
-                }
+            Label(pr.status.title, systemImage: pr.status.symbol)
+                .foregroundStyle(pr.status.color)
+                .fontWeight(.medium)
+            // A merge waiting to happen is the thing you most want to spot, so it
+            // gets its own line and a colour of its own rather than more grey text.
+            if let auto = pr.autoMerge {
+                chip("Auto-merge on (\(Format.method(auto.method)), by \(auto.enabledBy))",
+                     tint: .green)
+            } else if let armed {
+                chip("pr-mon merges when ready (\(Format.method(armed.method))"
+                     + (armed.deleteBranch ? ", deletes branch)" : ")"),
+                     tint: .accentColor)
             }
             if let url = URL(string: pr.url) {
                 Link(destination: url) {
@@ -448,10 +457,31 @@ private struct PRDetail: View {
         }
     }
 
+    private func chip(_ text: String, tint: Color) -> some View {
+        Label(text, systemImage: "arrow.triangle.merge")
+            .font(.callout.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 10)
+            .background(tint.opacity(0.15), in: Capsule())
+    }
+
     private func row(_ label: String, _ value: Text) -> some View {
         GridRow {
             Text(label).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
             value
+        }
+    }
+
+    @ViewBuilder
+    private func issueLine(_ issue: LinkedIssue) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if let url = URL(string: issue.url) {
+                Link(issue.label(in: repo.name), destination: url)
+            } else {
+                Text(issue.label(in: repo.name))
+            }
+            Text(issue.title).foregroundStyle(.secondary)
         }
     }
 

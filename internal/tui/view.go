@@ -29,6 +29,14 @@ var (
 )
 
 // statusStyle is the icon and colour for each status.
+// issueLabel is "#12", or "other/repo#12" when the issue is somewhere else.
+func issueLabel(issue models.LinkedIssue, repo string) string {
+	if issue.Repo != "" && issue.Repo != repo {
+		return fmt.Sprintf("%s#%d", issue.Repo, issue.Number)
+	}
+	return fmt.Sprintf("#%d", issue.Number)
+}
+
 func statusStyle(status models.Status) (string, lipgloss.Style) {
 	switch status {
 	case models.StatusReady:
@@ -350,6 +358,13 @@ func (m *Model) detailsView(width int) string {
 	}
 	if pr.HeadSha != nil {
 		lines = append(lines, dim.Render("Head SHA:    ")+*pr.HeadSha)
+	}
+	for index, issue := range pr.ClosingIssues {
+		label := "Closes:      "
+		if index > 0 {
+			label = "             "
+		}
+		lines = append(lines, dim.Render(label)+issueLabel(issue, name)+" "+issue.Title)
 	}
 	lines = append(lines, lipgloss.NewStyle().Underline(true).Foreground(blue).Render(pr.URL), "")
 	lines = append(lines, style.Render(icon+" "+string(pr.Status)))

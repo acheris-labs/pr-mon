@@ -38,7 +38,12 @@ type fakeBackend struct {
 
 func newFakeBackend() *fakeBackend {
 	api := testfixtures.Repo("acme/api", []models.PullRequest{
-		readiness.Assess(testfixtures.PR(1)),
+		readiness.Assess(testfixtures.PR(1, func(pr *models.PullRequest) {
+			pr.ClosingIssues = []models.LinkedIssue{
+				{Number: 12, Title: "Crash on empty config", Repo: "acme/api"},
+				{Number: 7, Title: "Tracked elsewhere", Repo: "acme/infra"},
+			}
+		})),
 		readiness.Assess(testfixtures.PR(2, func(pr *models.PullRequest) {
 			testfixtures.Pending(pr)
 			pr.ReviewDecision = models.Ptr("REVIEW_REQUIRED")
@@ -499,6 +504,14 @@ func TestDetailsPane(t *testing.T) {
 			t.Errorf("the details pane is missing %q:\n%s", want, view)
 		}
 	}
+	// Linked issues: bare in this repo, qualified when they live elsewhere.
+	for _, want := range []string{"Closes:", "#12 Crash on empty config",
+		"acme/infra#7 Tracked elsewhere"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the details pane is missing %q:\n%s", want, view)
+		}
+	}
+
 	press(t, model, "down") // the pending PR
 	view = model.View()
 	if !strings.Contains(view, "Blocked by:") || !strings.Contains(view, "PENDING") {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -480,4 +481,41 @@ func sameMap(got any, want map[string]any) bool {
 		}
 	}
 	return true
+}
+
+// GitHub lists the issues a PR closes on merge, and returns null for one in a
+// repository this token cannot read.
+func TestParsesClosingIssues(t *testing.T) {
+	withIssues := rawPR(1, func(pr map[string]any) {
+		pr["closingIssuesReferences"] = map[string]any{"nodes": []any{
+			map[string]any{
+				"number": 12, "title": "Crash on empty config",
+				"url":        "https://github.com/acme/api/issues/12",
+				"repository": map[string]any{"nameWithOwner": "acme/api"},
+			},
+			nil,
+			map[string]any{
+				"number": 7, "title": "Tracked elsewhere",
+				"url":        "https://github.com/acme/infra/issues/7",
+				"repository": map[string]any{"nameWithOwner": "acme/infra"},
+			},
+		}}
+	})
+	client, rec := serve(t, always(okData(repoResponse([]map[string]any{withIssues}, 1))))
+	repo, err := client.FetchRepo(context.Background(), "acme/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []models.LinkedIssue{
+		{Number: 12, Title: "Crash on empty config",
+			URL: "https://github.com/acme/api/issues/12", Repo: "acme/api"},
+		{Number: 7, Title: "Tracked elsewhere",
+			URL: "https://github.com/acme/infra/issues/7", Repo: "acme/infra"},
+	}
+	if got := repo.PRs[0].ClosingIssues; !reflect.DeepEqual(got, want) {
+		t.Errorf("closing issues = %+v, want %+v", got, want)
+	}
+	if !strings.Contains(query(rec.last()), "closingIssuesReferences") {
+		t.Error("the query should ask for closing issues")
+	}
 }

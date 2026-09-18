@@ -206,6 +206,7 @@ reimplement the rules.
 | `checks` | [`Check`] | Up to 50 checks. |
 | `checks_total` | int | All checks. |
 | `auto_merge` | `AutoMerge` or null | GitHub's native auto-merge, if enabled. |
+| `closing_issues` | [`LinkedIssue`] | Issues this PR closes on merge; empty when none are linked. |
 | `last_commit_at` | timestamp or null | |
 | `head_sha` | string or null | |
 | `status` | string | One of `DRAFT`, `CHECKING`, `CONFLICT`, `FAILING`, `PENDING`, `BEHIND`, `BLOCKED`, `READY`. |
@@ -221,6 +222,15 @@ reimplement the rules.
 | `name` | string | |
 | `state` | string | e.g. `SUCCESS`, `FAILURE`, `PENDING`. |
 | `started_at` | timestamp or null | |
+
+### Object: `LinkedIssue`
+
+| Field | Type | Meaning |
+|:------|:-----|:--------|
+| `number` | int | |
+| `title` | string | |
+| `url` | string | |
+| `repo` | string | The issue's own repository, which may not be the PR's. |
 
 ### Object: `AutoMerge`
 
