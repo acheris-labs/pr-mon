@@ -27,6 +27,19 @@ make app-install   # builds the Mac app into ~/Applications
 Or run it straight from the checkout with `make run`. Releasing is documented
 in [DISTRIBUTING.md](DISTRIBUTING.md).
 
+## Uninstall
+
+Either way, the backend is stopped first so nothing keeps polling from a
+deleted binary.
+
+```sh
+brew uninstall --cask pr-mon          # Homebrew install
+brew uninstall --zap --cask pr-mon    # …and the config, state and preferences
+
+make uninstall   # source install: the app in ~/Applications and the CLI in GOBIN
+make purge       # …and the config, state and preferences
+```
+
 ## How it runs
 
 A background **backend** does the work: it polls GitHub, tracks what changed,

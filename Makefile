@@ -1,6 +1,6 @@
-.PHONY: build run install test lint fmt fixtures clean universal \
-	swift-test xcode app app-install icon sign zip dmg release verify \
-	setup-notary setup-secrets
+.PHONY: build run install uninstall purge test lint fmt fixtures clean \
+	universal swift-test xcode app app-install icon sign zip dmg release \
+	verify setup-notary setup-secrets
 
 DESIGN ?= dots
 # A monotonic build number, so a newer build always sorts above an older one.
@@ -138,6 +138,53 @@ app-install: app
 	$(LSREGISTER) -f ~/Applications/PrMon.app
 	touch ~/Applications/PrMon.app
 	@echo "installed ~/Applications/PrMon.app"
+
+# --- Uninstall --------------------------------------------------------------
+# Removes a source install: the app bundle from `make app-install` and the
+# binary from `make install`. A Homebrew install is removed with
+# `brew uninstall --cask pr-mon` (add --zap to take the config and state too).
+#
+# The backend outlives both, so stop it — and take it out of launchd — before
+# the binary it runs from goes away.
+GOBIN := $(shell go env GOBIN)
+ifeq ($(GOBIN),)
+  GOBIN := $(shell go env GOPATH)/bin
+endif
+
+APP_INSTALLED := $(HOME)/Applications/PrMon.app
+
+uninstall:
+	@cli=""; \
+	for candidate in "$(APP_INSTALLED)/Contents/Resources/bin/pr-mon" \
+			 "$(GOBIN)/pr-mon" "$(BIN)"; do \
+		if [ -x "$$candidate" ]; then cli="$$candidate"; break; fi; \
+	done; \
+	if [ -n "$$cli" ]; then \
+		"$$cli" autostart disable >/dev/null 2>&1 || true; \
+		"$$cli" stop 2>/dev/null || true; \
+	fi
+	@if [ -d "$(APP_INSTALLED)" ]; then \
+		$(LSREGISTER) -u "$(APP_INSTALLED)" || true; \
+		rm -rf "$(APP_INSTALLED)"; \
+		echo "removed $(APP_INSTALLED)"; \
+	fi
+	@if [ -e "$(GOBIN)/pr-mon" ]; then \
+		rm -f "$(GOBIN)/pr-mon"; echo "removed $(GOBIN)/pr-mon"; \
+	fi
+	@if [ -d /Applications/PrMon.app ]; then \
+		echo "note: /Applications/PrMon.app is still there;" \
+		     "remove it with \`brew uninstall --cask pr-mon\`"; \
+	fi
+	@echo "config and state kept; \`make purge\` removes those too"
+
+# Everything uninstall removes, plus the repos being watched, what has been
+# seen, armed merges and the app's own preferences. Not reversible.
+purge: uninstall
+	rm -rf "$${XDG_CONFIG_HOME:-$(HOME)/.config}/pr-mon"
+	rm -rf "$${XDG_STATE_HOME:-$(HOME)/.local/state}/pr-mon"
+	rm -f "$(HOME)/Library/Preferences/com.acheris-labs.pr-mon.app.plist"
+	rm -rf "$(HOME)/Library/Saved Application State/com.acheris-labs.pr-mon.app.savedState"
+	@echo "purged config, state and preferences"
 
 # --- Credential bootstrap ---------------------------------------------------
 # Reads the Developer ID identity and Team ID from the keychain; inlined into
