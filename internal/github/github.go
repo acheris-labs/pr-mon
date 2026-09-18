@@ -170,12 +170,13 @@ func GetToken() (string, error) {
 	if err := command.Run(); err != nil {
 		var missing *exec.Error
 		if errors.As(err, &missing) {
-			return "", &AuthError{Message: "GitHub CLI 'gh' not found"}
+			return "", &AuthError{Message: "GitHub CLI 'gh' not found. " +
+				"Install it with `brew install gh`, then run `gh auth login`"}
 		}
 		if problem := strings.TrimSpace(stderr.String()); problem != "" {
-			return "", &AuthError{Message: problem}
+			return "", &AuthError{Message: problem + ". Run `gh auth login`"}
 		}
-		return "", &AuthError{Message: "gh returned no token"}
+		return "", &AuthError{Message: "gh returned no token. Run `gh auth login`"}
 	}
 	token := strings.TrimSpace(stdout.String())
 	if token == "" {

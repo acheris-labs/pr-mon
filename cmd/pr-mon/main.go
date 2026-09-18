@@ -74,9 +74,11 @@ func main() {
 }
 
 func runDaemon(paths daemon.Paths) error {
+	// Before anything looks up a tool: gh, the desktop notifier, scripts.
+	os.Setenv("PATH", daemon.ToolPath(os.Getenv("PATH")))
 	client, err := github.NewClient(github.GetToken)
 	if err != nil {
-		return fmt.Errorf("%v. Run `gh auth login`", err)
+		return err
 	}
 	stat, _ := os.Stderr.Stat()
 	err = daemon.Run(context.Background(), paths, client, daemon.Options{

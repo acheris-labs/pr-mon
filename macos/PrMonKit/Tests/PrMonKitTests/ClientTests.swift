@@ -238,10 +238,22 @@ final class FakeServer: @unchecked Sendable {
         store.start()
         defer { store.stop() }
         try await waitUntil { if case .disconnected = store.phase { true } else { false } }
-        #expect(store.phase == .disconnected("couldn't start the backend: pr-mon: not found"))
+        #expect(store.phase == .disconnected("Couldn't start the backend: not found"))
         try await Task.sleep(for: .milliseconds(100))
         #expect(starts.ops == ["start"])
         #expect(store.phase == .disconnected("The pr-mon backend isn't running"))
+    }
+
+    @Test func showsWhyTheBackendWouldNotStart() {
+        // What `pr-mon start` printed when gh was not on the app's PATH.
+        let output = """
+            pr-mon: backend exited with code 1
+            time=2026-09-18T11:39:27.416-04:00 level=INFO msg=stopping signal=terminated
+            time=2026-09-18T11:39:27.417-04:00 level=INFO msg="pr-mon backend stopped"
+            pr-mon: GitHub CLI 'gh' not found. Install it with `brew install gh`
+            """
+        #expect(PrMonStore.cause(of: output) == "GitHub CLI 'gh' not found. Install it with `brew install gh`")
+        #expect(PrMonStore.cause(of: "pr-mon: backend did not start within 5s") == "backend did not start within 5s")
     }
 
     /// A backend that answers, then vanishes along with its socket: what an

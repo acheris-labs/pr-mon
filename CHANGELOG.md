@@ -4,6 +4,17 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc7]
+
+### Fixed
+
+- A backend started by the app opened from the Dock could not find `gh` and
+  exited at once: apps inherit launchd's bare PATH, without Homebrew. The
+  backend now adds `/opt/homebrew/bin` and `/usr/local/bin` to its own PATH,
+  which also covers the desktop notifier and notification scripts.
+- When the backend won't start, the app shows the reason in one line instead of
+  the tail of the log.
+
 ## [0.2.0-rc6]
 
 ### Added

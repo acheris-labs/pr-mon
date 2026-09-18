@@ -91,12 +91,25 @@ public final class PrMonStore {
         do {
             try await startBackend()
         } catch {
-            phase = .disconnected("couldn't start the backend: \(error.localizedDescription)")
+            phase = .disconnected("Couldn't start the backend: \(Self.cause(of: error.localizedDescription))")
             return false
         }
         phase = .connecting
         retryNow()
         return true
+    }
+
+    /// The one line worth showing from a failed `pr-mon start`. Its output is
+    /// "backend exited with code N" and then the tail of the log; the backend's
+    /// own error is the last line it printed with the "pr-mon: " prefix.
+    static func cause(of output: String) -> String {
+        let prefix = "pr-mon: "
+        let lines = output.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let line = lines.last { $0.hasPrefix(prefix) && !$0.hasPrefix(prefix + "backend ") }
+            ?? lines.first ?? output
+        return line.hasPrefix(prefix) ? String(line.dropFirst(prefix.count)) : line
     }
 
     public func notify(_ message: String, severity: ToastSeverity = .information) {

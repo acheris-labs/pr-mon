@@ -83,6 +83,30 @@ func (p Paths) EnsureSocketDir() error {
 	return nil
 }
 
+// toolDirs are where Homebrew puts gh and terminal-notifier.
+var toolDirs = []string{"/opt/homebrew/bin", "/usr/local/bin"}
+
+// ToolPath is path with the Homebrew directories appended where missing. An
+// app opened from the Dock hands its children launchd's bare PATH
+// (/usr/bin:/bin:/usr/sbin:/sbin), so a backend it starts would not find gh,
+// terminal-notifier, or whatever a notification script calls.
+func ToolPath(path string) string {
+	present := map[string]bool{}
+	parts := []string{}
+	for _, dir := range filepath.SplitList(path) {
+		if dir != "" {
+			present[dir] = true
+			parts = append(parts, dir)
+		}
+	}
+	for _, dir := range toolDirs {
+		if !present[dir] {
+			parts = append(parts, dir)
+		}
+	}
+	return strings.Join(parts, string(os.PathListSeparator))
+}
+
 // AlreadyRunningError means another backend holds the lock.
 type AlreadyRunningError struct{ PID int }
 
