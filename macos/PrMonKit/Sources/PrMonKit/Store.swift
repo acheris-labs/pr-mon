@@ -23,7 +23,21 @@ public final class PrMonStore {
     }
 
     public private(set) var phase: Phase = .connecting
-    public private(set) var state: BackendState?
+    public private(set) var state: BackendState? {
+        didSet {
+            let total = state?.unseenTotal ?? 0
+            if total != lastUnseenTotal {
+                lastUnseenTotal = total
+                unseenTotalChanged?(total)
+            }
+        }
+    }
+
+    /// Called with the unseen-PR total whenever it changes. The app badges the
+    /// Dock from here rather than from a view, which stops updating once its
+    /// window is closed and the app keeps running.
+    @ObservationIgnored public var unseenTotalChanged: ((Int) -> Void)?
+    @ObservationIgnored private var lastUnseenTotal = 0
     public private(set) var toasts: [ToastItem] = []
 
     public let socketPath: String

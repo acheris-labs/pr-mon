@@ -4,6 +4,14 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc8]
+
+### Changed
+
+- Closing the app's window (Command-W) leaves the app running, like Mail:
+  the Dock badge keeps counting, and clicking the Dock icon brings the window
+  back. Command-Q quits.
+
 ## [0.2.0-rc7]
 
 ### Fixed
