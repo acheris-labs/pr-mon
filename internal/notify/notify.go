@@ -371,34 +371,42 @@ type Result struct {
 func Deliver(ctx context.Context, settings config.NotifyConfig, notifier string,
 	variables map[string]string) []Result {
 	message := Render(settings.Message, variables)
-	results := []Result{}
-	var mutex sync.Mutex
-	var group sync.WaitGroup
-	send := func(channel string, run func() string) {
-		results = append(results, Result{Channel: channel})
-		index := len(results) - 1
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			problem := run()
-			mutex.Lock()
-			results[index].Error = problem
-			mutex.Unlock()
-		}()
+	// Decide every channel before anything runs: the senders write into one
+	// element each of a slice that is never appended to again, so growing it
+	// cannot move an element out from under a sender still writing to it.
+	type channel struct {
+		name string
+		run  func() string
 	}
+	channels := []channel{}
 	if settings.ScriptEnabled && strings.TrimSpace(settings.Script) != "" {
 		argv, err := ScriptArgv(settings.Script)
 		if err != nil {
-			send("script", func() string { return fmt.Sprintf("Bad script command: %v", err) })
+			channels = append(channels, channel{"script", func() string {
+				return fmt.Sprintf("Bad script command: %v", err)
+			}})
 		} else {
-			send("script", func() string {
+			channels = append(channels, channel{"script", func() string {
 				return Run(ctx, argv, &message, variables, CommandTimeout)
-			})
+			}})
 		}
 	}
 	if settings.DesktopEnabled && notifier != "" {
 		argv := DesktopArgv(notifier, message, variables)
-		send("desktop", func() string { return Run(ctx, argv, nil, nil, CommandTimeout) })
+		channels = append(channels, channel{"desktop", func() string {
+			return Run(ctx, argv, nil, nil, CommandTimeout)
+		}})
+	}
+
+	results := make([]Result, len(channels))
+	var group sync.WaitGroup
+	for index, each := range channels {
+		results[index] = Result{Channel: each.name}
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			results[index].Error = each.run()
+		}()
 	}
 	group.Wait()
 	return results

@@ -6,6 +6,11 @@ the git tags the release workflow builds from.
 
 ## [0.2.0-rc4]
 
+### Fixed
+
+- A notification could report success although the command failed: two channels
+  sending at once raced on the results slice.
+
 ### Added
 
 - The details pane lists the issues a PR closes on merge, in the dashboard and
