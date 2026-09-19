@@ -4,6 +4,16 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc13]
+
+### Fixed
+
+- If the backend job the app registered can't launch (macOS refused it: a
+  launch constraint left over from another build), the app showed
+  "disconnected" for good. `pr-mon start` now falls back to loading a job
+  itself.
+- A backend's earlier clean exit no longer reads as a failed start.
+
 ## [0.2.0-rc12]
 
 ### Fixed

@@ -82,20 +82,27 @@ func sessionTarget() string { return fmt.Sprintf("gui/%d/%s", os.Getuid(), Sessi
 
 // launchSession hands the backend to launchd as a one-shot job: no KeepAlive,
 // so `pr-mon stop` stays stopped. A job left from an earlier start is replaced.
-func launchSession(paths Paths, executable string) error {
+// sessionLoaded reports whether launchd has the session job, whoever loaded it.
+func sessionLoaded() bool {
+	return exec.Command("launchctl", "print", sessionTarget()).Run() == nil
+}
+
+// kickstartSession runs the session job the app registered, if launchd has it.
+// Loading a job is what macOS charges to the caller, and an app charged with a
+// job stays in the Dock after it quits; running one someone else loaded isn't.
+func kickstartSession() bool {
+	return sessionLoaded() && exec.Command("launchctl", "kickstart", sessionTarget()).Run() == nil
+}
+
+// loadSession loads the session job itself: a source install has none
+// registered, and a registered one can fail to launch (a signing check).
+func loadSession(paths Paths, executable string) error {
 	plistPath := filepath.Join(paths.Directory, "session.plist")
 	text := JobPlist(SessionLabel, []string{executable, "daemon"}, Environment(), paths.Log(), false)
 	if err := os.WriteFile(plistPath, []byte(text), 0o644); err != nil {
 		return err
 	}
-	// Already loaded (on demand): just run it. Loading is what macOS charges to
-	// the caller, and an app charged with a job stays in the Dock.
-	if exec.Command("launchctl", "print", sessionTarget()).Run() == nil {
-		if output, err := exec.Command("launchctl", "kickstart", sessionTarget()).CombinedOutput(); err != nil {
-			return fmt.Errorf("launchctl kickstart failed: %s", strings.TrimSpace(string(output)))
-		}
-		return nil
-	}
+	exec.Command("launchctl", "bootout", sessionTarget()).Run()
 	domain := fmt.Sprintf("gui/%d", os.Getuid())
 	output, err := exec.Command("launchctl", "bootstrap", domain, plistPath).CombinedOutput()
 	if err != nil {

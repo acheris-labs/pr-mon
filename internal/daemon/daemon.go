@@ -271,8 +271,12 @@ func Spawn(paths Paths, timeout time.Duration) (int, error) {
 // spawnSession is Spawn on macOS: launchd runs the backend, so it belongs to
 // no app or terminal, and whatever started it can go away cleanly.
 func spawnSession(paths Paths, executable string, timeout time.Duration) (int, error) {
-	if err := launchSession(paths, executable); err != nil {
-		return 0, err
+	// The registered job first; if it can't run, one loaded here instead.
+	registered := kickstartSession()
+	if !registered {
+		if err := loadSession(paths, executable); err != nil {
+			return 0, err
+		}
 	}
 	deadline := time.Now().Add(timeout)
 	for check := 0; time.Now().Before(deadline); check++ {
@@ -280,10 +284,21 @@ func spawnSession(paths Paths, executable string, timeout time.Duration) (int, e
 			return *hello.PID, nil
 		}
 		// Asking launchd costs a process, so only every few rounds.
-		if check%5 == 4 {
-			if code, exited := sessionExited(); exited {
-				return 0, fmt.Errorf("backend exited with code %d\n%s", code, TailLog(paths))
+		if check%5 != 4 {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		code, exited := sessionExited()
+		switch {
+		case registered && (!sessionLoaded() || (exited && code != 0)):
+			// launchd refused or dropped the registered job (it removes one that
+			// fails a launch constraint); fall back once.
+			registered = false
+			if err := loadSession(paths, executable); err != nil {
+				return 0, err
 			}
+		case exited && code != 0:
+			return 0, fmt.Errorf("backend exited with code %d\n%s", code, TailLog(paths))
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
