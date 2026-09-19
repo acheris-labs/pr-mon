@@ -47,8 +47,15 @@ saves state, sends notifications, and performs merges. The dashboard is just a
 window onto it, so notifications keep coming after you close the window.
 
 - `pr-mon` opens the dashboard and starts the backend if it isn't running.
-- Quitting the dashboard (`q`) leaves the backend running.
-- The backend runs until you stop it (`pr-mon stop`), log out, or reboot.
+- On macOS the backend is started as its own launchd job, so it belongs to no
+  app or terminal: the app leaves the Dock when you quit it.
+- **How long it runs** depends on *Start the backend at login*: on, it runs all
+  the time from login; off, it runs while the app or a dashboard is open and
+  stops two minutes after the last one closes (merge when ready and
+  notifications stop with it). Opening either starts it again.
+- Quitting the dashboard (`q`) or the app leaves the backend running for
+  those two minutes, so reopening one finds it still there. `pr-mon stop`
+  stops it at once.
 - The header shows `● connected` or `○ disconnected`. If the backend goes
   away, the dashboard says so, keeps the last data on screen, and reconnects
   on its own once the backend is back.
@@ -64,19 +71,22 @@ window onto it, so notifications keep coming after you close the window.
 | `pr-mon restart` | Restart the backend (through launchd when autostart runs it) |
 | `pr-mon status` | Show whether it's running (exit code 0 if running) |
 | `pr-mon daemon` | Run the backend in the foreground (for debugging) |
-| `pr-mon autostart enable` | macOS: run the backend at every login (use the app's Settings when installed from Homebrew) |
+| `pr-mon autostart enable` | macOS: run the backend at every login (also: app Settings › General, or `S` in the dashboard) |
 | `pr-mon autostart disable` | Stop running it at login (a running backend keeps running) |
 | `pr-mon autostart status` | Whether autostart is on (exit code 0 if enabled) |
 
 ### Start at login (macOS)
 
-**Installed from Homebrew:** turn on *Start the backend at login* in
-PrMon › Settings › General. The app registers an agent that ships inside the
-bundle, which is what makes System Settings › General › Login Items list it as
-**pr-mon** with its icon. `pr-mon autostart enable` refuses in this case and
-points you at the setting: an agent written by the command line has no bundle
-for macOS to name, so it appears under the name on the signing certificate,
-with no icon.
+Three ways to switch it, all doing the same thing: *Start the backend at login*
+in PrMon › Settings › General, `S` in the dashboard, or `pr-mon autostart
+enable` / `disable`.
+
+**Installed from Homebrew:** the agent ships inside the app bundle and the app
+registers it (the command line and dashboard ask the app, which runs headless
+for this: no window, no Dock icon). That is what makes System Settings ›
+General › Login Items list it as **pr-mon** with its icon; an agent written by
+the command line has no bundle for macOS to name, so it would appear under the
+name on the signing certificate.
 
 **From a checkout:** `pr-mon autostart enable` installs a launchd agent
 (`~/Library/LaunchAgents/com.acheris-labs.pr-mon.plist`) that runs
@@ -108,6 +118,7 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `space` | action menu | Toggle "delete remote branch" |
 | `w` | PR list or action menu | Dependencies: what the PR waits on (`a` add, `d` remove, `g` graph) |
 | `N` | repo tree (on a repo) | Notification settings for that repo |
+| `S` | anywhere | Settings: how often to check GitHub, start the backend at login (macOS) |
 | `r` | anywhere | Refresh now |
 | `q` | anywhere | Quit the dashboard (the backend keeps running) |
 
@@ -141,7 +152,8 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
     the next refresh rather than merged blindly.
   - Any other merge failure cancels it and reports why (toast and the
     "pr-mon auto-merge failed" notification with `{{PR_REASON}}`).
-  - It only runs while the backend does; see `pr-mon autostart enable`.
+  - It only runs while the backend does: all the time with start at login on
+    (`pr-mon autostart enable`), otherwise while the app or a dashboard is open.
 
 Click a PR's link in the details pane to open it in the browser.
 

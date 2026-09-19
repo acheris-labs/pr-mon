@@ -115,8 +115,9 @@ struct GeneralSettings: View {
                 Text("Startup")
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("The backend keeps polling and notifying with no window open; "
-                        + "at login it starts on its own, listed as pr-mon in Login Items.")
+                    Text("On: the backend starts at login and keeps checking GitHub, notifying and "
+                        + "merging all the time, listed as pr-mon in Login Items. Off: it runs while "
+                        + "PrMon or a dashboard is open, and stops two minutes after the last one quits.")
                     if backendAtLogin == .needsApproval {
                         Label("Allow pr-mon in System Settings \u{203A} General \u{203A} Login Items.",
                               systemImage: "exclamationmark.triangle.fill")

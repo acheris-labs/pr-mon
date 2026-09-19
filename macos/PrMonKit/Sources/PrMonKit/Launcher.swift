@@ -78,19 +78,42 @@ public enum Launcher {
         return result.status == 0 ? .enabled : .disabled
     }
 
+    /// `pr-mon autostart`: the one place that knows how to hand the backend to
+    /// launchd. From the bundle it calls back into this app's `--login-agent`.
     public static func setAutostart(_ enabled: Bool) async throws {
+        try await run(["autostart", enabled ? "enable" : "disable"])
+    }
+
+    /// `PrMon --login-agent on|off|status`, run by the bundled command line:
+    /// only this app can register the agent it ships. Prints the state it
+    /// leaves (enabled, disabled or requires-approval) and returns the exit
+    /// status, or nil when the arguments don't ask for this.
+    public static func loginAgentCommand(_ arguments: [String]) -> Int32? {
+        guard let flag = arguments.firstIndex(of: "--login-agent") else { return nil }
+        let action = arguments.indices.contains(flag + 1) ? arguments[flag + 1] : ""
         guard let agent = bundledAgent() else {
-            try await run(["autostart", enabled ? "enable" : "disable"])
-            return
+            FileHandle.standardError.write(Data("this PrMon has no bundled agent\n".utf8))
+            return 1
         }
-        if enabled {
-            // An agent installed earlier by `pr-mon autostart enable` carries the
-            // same label, so clear it out before launchd gets a second one.
-            _ = await output(["autostart", "disable"])
-            try agent.register()
-        } else {
-            try await agent.unregister()
+        do {
+            switch action {
+            case "on": try agent.register()
+            case "off": try agent.unregister()
+            case "status": break
+            default:
+                FileHandle.standardError.write(Data("usage: PrMon --login-agent on|off|status\n".utf8))
+                return 2
+            }
+        } catch {
+            FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+            return 1
         }
+        switch agent.status {
+        case .enabled: print("enabled")
+        case .requiresApproval: print("requires-approval")
+        default: print("disabled")
+        }
+        return 0
     }
 
     static func loginShell() -> String {

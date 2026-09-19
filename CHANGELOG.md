@@ -4,6 +4,28 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc11]
+
+### Fixed
+
+- After quitting the app, it stayed in the Dock as "Running in Background":
+  the backend it had started counted as part of it. On macOS `pr-mon start`
+  now has launchd run the backend as a job of its own.
+
+### Changed
+
+- The backend now runs only while the app or a dashboard is open, and stops
+  two minutes after the last one closes, unless it starts at login (then it
+  runs all the time). An agent written by an older `pr-mon autostart enable`
+  lacks the new `--keep-running` flag: run `pr-mon autostart enable` again.
+
+### Added
+
+- Dashboard settings (`S`): how often to check GitHub and, on macOS, whether
+  the backend starts at login.
+- `pr-mon autostart enable` works in a Homebrew install: it asks the app to
+  register its login item (headless, no window), as the Settings toggle does.
+
 ## [0.2.0-rc10]
 
 ### Added

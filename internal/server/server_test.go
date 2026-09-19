@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -65,6 +66,12 @@ func (f *fakeGitHub) LookupPRs(_ context.Context, repo string, numbers []int) ([
 // serve starts a monitor and server on a short socket path (macOS limits them).
 func serve(t *testing.T) (*server.Server, *service.Monitor, string) {
 	t.Helper()
+	return serveWith(t, 0)
+}
+
+// serveWith is serve with an idle exit; zero never exits.
+func serveWith(t *testing.T, idleExit time.Duration) (*server.Server, *service.Monitor, string) {
+	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "prmon")
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +96,7 @@ func serve(t *testing.T) (*server.Server, *service.Monitor, string) {
 		})
 	socket := filepath.Join(dir, "d.sock")
 	listener := server.New(monitor, socket, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	listener.IdleExit = idleExit
 	if err := listener.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -264,6 +272,56 @@ func TestUnavailableBackend(t *testing.T) {
 	}
 }
 
+func idle(listener *server.Server) bool {
+	select {
+	case <-listener.Idle:
+		return true
+	default:
+		return false
+	}
+}
+
+func TestIdleAfterTheLastFrontEndLeaves(t *testing.T) {
+	const grace = 150 * time.Millisecond
+	listener, _, socket := serveWith(t, grace)
+	app := connect(t, socket, "")
+	dashboard := connect(t, socket, "")
+	app.Close()
+	time.Sleep(2 * grace)
+	if idle(listener) {
+		t.Fatal("a dashboard is still open")
+	}
+
+	// One that leaves and comes back within the grace period pushes it back.
+	dashboard.Close()
+	time.Sleep(grace / 2)
+	again := connect(t, socket, "")
+	time.Sleep(grace)
+	if idle(listener) {
+		t.Fatal("a front end came back in time")
+	}
+	// A client that only asks (like `pr-mon status`) is not a front end.
+	if _, err := daemonHello(socket); err != nil {
+		t.Fatal(err)
+	}
+	again.Close()
+	waitFor(t, func() bool { return idle(listener) })
+}
+
+func TestIdleWhenNobodyEverConnects(t *testing.T) {
+	listener, _, _ := serveWith(t, 50*time.Millisecond)
+	waitFor(t, func() bool { return idle(listener) })
+}
+
+func TestNoIdleExitWhenKeptRunning(t *testing.T) {
+	listener, _, socket := serve(t)
+	connect(t, socket, "").Close()
+	time.Sleep(100 * time.Millisecond)
+	if idle(listener) {
+		t.Error("with no idle exit set the backend stays")
+	}
+}
+
 func TestDisconnectIsReported(t *testing.T) {
 	listener, _, socket := serve(t)
 	remote := connect(t, socket, "")
@@ -361,4 +419,17 @@ func waitFor(t *testing.T, condition func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("condition never became true")
+}
+
+// daemonHello asks once without subscribing, the way `pr-mon status` does.
+func daemonHello(socket string) (string, error) {
+	connection, err := net.Dial("unix", socket)
+	if err != nil {
+		return "", err
+	}
+	defer connection.Close()
+	if _, err := connection.Write([]byte(`{"id":1,"op":"hello","args":{}}` + "\n")); err != nil {
+		return "", err
+	}
+	return bufio.NewReader(connection).ReadString('\n')
 }

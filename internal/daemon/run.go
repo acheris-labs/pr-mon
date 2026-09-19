@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/acheris-labs/pr-mon/internal/github"
 	"github.com/acheris-labs/pr-mon/internal/notify"
@@ -83,7 +84,14 @@ type Options struct {
 	StatePath   string
 	Version     string
 	LogToStderr bool
+	// KeepRunning: started at login, so stay up with no app or dashboard open.
+	// Otherwise the backend exits IdleGrace after the last one closes.
+	KeepRunning bool
 }
+
+// IdleGrace is how long a backend not started at login outlives its last app
+// or dashboard: long enough for a restart, an upgrade or a reconnect.
+const IdleGrace = 2 * time.Minute
 
 // Run is the backend: it holds the lock, serves the socket, and polls until asked
 // to stop.
@@ -117,6 +125,9 @@ func Run(ctx context.Context, paths Paths, client *github.Client, options Option
 		Logger:   logger,
 	})
 	socket := server.New(monitor, paths.Socket(), logger)
+	if !options.KeepRunning {
+		socket.IdleExit = IdleGrace
+	}
 	if err := socket.Start(); err != nil {
 		return err
 	}
@@ -133,6 +144,8 @@ func Run(ctx context.Context, paths Paths, client *github.Client, options Option
 		if err := os.WriteFile(paths.Stopped(), nil, 0o644); err != nil {
 			logger.Warn("could not record the requested stop", "error", err)
 		}
+	case <-socket.Idle:
+		// Not a deliberate stop: the next app or dashboard starts it again.
 	case received := <-signals:
 		logger.Info("stopping", "signal", received.String())
 	}

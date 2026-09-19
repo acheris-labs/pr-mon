@@ -416,7 +416,7 @@ func labelled(label string, refs []models.PRRef, repo string) []string {
 
 func (m *Model) footerView() string {
 	keys := []struct{ key, label string }{
-		{"A", "Add repo"}, {"D", "Remove repo"}, {"N", "Notifications"},
+		{"A", "Add repo"}, {"D", "Remove repo"}, {"N", "Notifications"}, {"S", "Settings"},
 		{"r", "Refresh"}, {"q", "Quit"},
 	}
 	parts := []string{}

@@ -2,7 +2,18 @@ import AppKit
 import PrMonKit
 import SwiftUI
 
+/// `PrMon --login-agent …` does its job and exits before any window or Dock
+/// icon appears; otherwise this is the app.
 @main
+enum Entry {
+    static func main() {
+        if let status = Launcher.loginAgentCommand(CommandLine.arguments) {
+            exit(status)
+        }
+        PrMonApp.main()
+    }
+}
+
 struct PrMonApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     @State private var store: PrMonStore

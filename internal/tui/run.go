@@ -30,6 +30,7 @@ func Run(paths daemon.Paths, version string) error {
 	defer remote.Close()
 
 	model := New(remote, version)
+	model.loginItem = defaultLoginItem(paths)
 	events := model.Events()
 	remote.AddListener(func(event service.Event) {
 		select {

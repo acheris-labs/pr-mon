@@ -31,7 +31,8 @@ cask "pr-mon" do
     terminate_process "pr-mon daemon", match: :full, must_succeed: false
   end
 
-  uninstall quit: "com.acheris-labs.pr-mon.app"
+  uninstall quit:      "com.acheris-labs.pr-mon.app",
+            launchctl: "com.acheris-labs.pr-mon.session"
 
   # `brew uninstall --zap pr-mon` is the full teardown: the repos being watched,
   # what has been seen, armed merges, and the app's own preferences.

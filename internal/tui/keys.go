@@ -1,5 +1,5 @@
-// Keys: A add, D remove, N notifications, r refresh, q quit, enter acts,
-// w dependencies, arrows and tab navigate.
+// Keys: A add, D remove, N notifications, S settings, r refresh, q quit,
+// enter acts, w dependencies, arrows and tab navigate.
 
 package tui
 
@@ -29,6 +29,10 @@ func (m *Model) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.removeRepo()
 	case "N":
 		return m, m.openNotifications()
+	case "S":
+		dialog, cmd := newSettings(m)
+		m.modal = dialog
+		return m, cmd
 	case "tab":
 		m.focus = panePRs
 		if m.focus == panePRs && len(m.prs()) == 0 {

@@ -163,6 +163,7 @@ uninstall:
 		"$$cli" autostart disable >/dev/null 2>&1 || true; \
 		"$$cli" stop 2>/dev/null || true; \
 	fi
+	@launchctl bootout gui/$$(id -u)/com.acheris-labs.pr-mon.session 2>/dev/null || true
 	@if [ -d "$(APP_INSTALLED)" ]; then \
 		$(LSREGISTER) -u "$(APP_INSTALLED)" || true; \
 		rm -rf "$(APP_INSTALLED)"; \

@@ -53,5 +53,9 @@ and the Swift models (`macos/PrMonKit/Sources/PrMonKit/Models.swift`).
 - "Start the backend at login" is the exception: the app registers the agent in
   `Contents/Library/LaunchAgents` through `SMAppService`, because an agent
   written by the command line has no bundle and macOS then lists it under the
-  signing certificate's name with no icon. The command line defers when it is
-  running from inside the bundle.
+  signing certificate's name with no icon. From inside the bundle, `pr-mon
+  autostart` (and so the dashboard's settings) runs `PrMon --login-agent
+  on|off|status`, which registers it and exits before any UI.
+- On macOS `pr-mon start` hands the backend to launchd
+  (`com.acheris-labs.pr-mon.session`) rather than forking it: a child of the app
+  keeps the app in the Dock, "Running in Background", after it quits.

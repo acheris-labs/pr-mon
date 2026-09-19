@@ -182,7 +182,7 @@ func TestDescribe(t *testing.T) {
 
 func TestProgramPointsAtThisExecutable(t *testing.T) {
 	program := autostart.Program()
-	if len(program) != 2 || program[1] != "daemon" {
+	if len(program) != 3 || program[1] != "daemon" || program[2] != "--keep-running" {
 		t.Fatalf("program = %v", program)
 	}
 	if !filepath.IsAbs(program[0]) {
@@ -228,5 +228,34 @@ func TestAppBundleFindsTheEnclosingApp(t *testing.T) {
 		if got := autostart.AppBundle(path); got != want {
 			t.Errorf("AppBundle(%q) = %q, want %q", path, got, want)
 		}
+	}
+}
+
+func TestAppLoginItemAsksTheApp(t *testing.T) {
+	bundle := filepath.Join(t.TempDir(), "PrMon.app")
+	macOS := filepath.Join(bundle, "Contents", "MacOS")
+	if err := os.MkdirAll(macOS, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Stands in for the app's headless mode: echoes the state an action leaves.
+	script := `#!/bin/sh
+[ "$1" = --login-agent ] || exit 2
+case "$2" in
+  on) echo enabled ;;
+  off|status) echo disabled ;;
+  *) echo "unknown action $2" >&2; exit 2 ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(macOS, "PrMon"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for action, want := range map[string]string{"on": "enabled", "off": "disabled", "status": "disabled"} {
+		if got, err := autostart.AppLoginItem(bundle, action); err != nil || got != want {
+			t.Errorf("AppLoginItem(%s) = %q, %v; want %q", action, got, err, want)
+		}
+	}
+	_, err := autostart.AppLoginItem(bundle, "sideways")
+	if err == nil || !strings.Contains(err.Error(), "unknown action sideways") {
+		t.Errorf("a failure should carry the app's message, got %v", err)
 	}
 }

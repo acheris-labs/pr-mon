@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -223,6 +224,9 @@ func Spawn(paths Paths, timeout time.Duration) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if runtime.GOOS == "darwin" {
+		return spawnSession(paths, executable, timeout)
+	}
 	logFile, err := os.OpenFile(paths.Log(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return 0, err
@@ -260,6 +264,28 @@ func Spawn(paths Paths, timeout time.Duration) (int, error) {
 				code, TailLog(paths))
 		case <-time.After(50 * time.Millisecond):
 		}
+	}
+	return 0, fmt.Errorf("backend did not start within %s\n%s", timeout, TailLog(paths))
+}
+
+// spawnSession is Spawn on macOS: launchd runs the backend, so it belongs to
+// no app or terminal, and whatever started it can go away cleanly.
+func spawnSession(paths Paths, executable string, timeout time.Duration) (int, error) {
+	if err := launchSession(paths, executable); err != nil {
+		return 0, err
+	}
+	deadline := time.Now().Add(timeout)
+	for check := 0; time.Now().Before(deadline); check++ {
+		if hello := Info(paths); hello != nil && hello.PID != nil {
+			return *hello.PID, nil
+		}
+		// Asking launchd costs a process, so only every few rounds.
+		if check%5 == 4 {
+			if code, exited := sessionExited(); exited {
+				return 0, fmt.Errorf("backend exited with code %d\n%s", code, TailLog(paths))
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	return 0, fmt.Errorf("backend did not start within %s\n%s", timeout, TailLog(paths))
 }

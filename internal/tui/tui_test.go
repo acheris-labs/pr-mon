@@ -154,6 +154,26 @@ func (f *fakeBackend) Perform(repo string, number int, action models.Action) err
 	return nil
 }
 
+func (f *fakeBackend) SetPollInterval(seconds int) error {
+	f.record("interval " + itoa(seconds))
+	f.config.PollInterval = seconds
+	return nil
+}
+
+// fakeLoginItem records changes to the login item.
+type fakeLoginItem struct {
+	backend *fakeBackend
+	enabled bool
+}
+
+func (f *fakeLoginItem) Enabled() (bool, error) { return f.enabled, nil }
+
+func (f *fakeLoginItem) SetEnabled(enabled bool) error {
+	f.backend.record("login " + boolText(enabled))
+	f.enabled = enabled
+	return nil
+}
+
 func (f *fakeBackend) SaveNotifications(repo string, settings config.NotifyConfig) error {
 	f.record("save " + repo + " " + strings.Join(settings.Events, ",") + " " + settings.Message)
 	return nil
@@ -680,5 +700,37 @@ func TestWaitingPRDetails(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Errorf("the details are missing %q:\n%s", want, view)
 		}
+	}
+}
+
+func TestSettingsDialog(t *testing.T) {
+	model, backend := newModel()
+	model.loginItem = &fakeLoginItem{backend: backend}
+	press(t, model, "S")
+	view := model.View()
+	if !strings.Contains(view, "Check GitHub:  ◀ every 1 min ▶") ||
+		!strings.Contains(view, "[ ] Start the backend at login") {
+		t.Fatalf("dialog = \n%s", view)
+	}
+	press(t, model, "right", "right", "left")
+	press(t, model, "down", "space")
+	want := []string{"interval 120", "interval 300", "interval 120", "login true"}
+	if got := backend.recorded(); strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("calls = %v, want %v", got, want)
+	}
+	if !strings.Contains(model.View(), "[x] Start the backend at login") {
+		t.Errorf("the toggle should follow the login item:\n%s", model.View())
+	}
+	press(t, model, "esc")
+	if model.modal != nil {
+		t.Error("escape should close the dialog")
+	}
+}
+
+func TestSettingsWithoutLoginItem(t *testing.T) {
+	model, _ := newModel()
+	press(t, model, "S")
+	if strings.Contains(model.View(), "Start the backend at login") {
+		t.Errorf("no login item, no toggle:\n%s", model.View())
 	}
 }

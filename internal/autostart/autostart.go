@@ -15,12 +15,9 @@ import (
 )
 
 const (
-	Label = "com.acheris-labs.pr-mon"
-	// launchd starts jobs with a bare environment; keep what the backend needs (gh on PATH).
+	Label        = "com.acheris-labs.pr-mon"
 	readyTimeout = 20 * time.Second
 )
-
-var keptEnv = []string{"PATH", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "LANG"}
 
 // Error is an autostart problem whose message is for the user.
 type Error struct{ Message string }
@@ -112,7 +109,7 @@ func programFrom(text string) []string {
 	for _, line := range strings.Split(rest[open:close], "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "<string>") && strings.HasSuffix(line, "</string>") {
-			program = append(program, unescapeXML(strings.TrimSuffix(
+			program = append(program, daemon.UnescapeXML(strings.TrimSuffix(
 				strings.TrimPrefix(line, "<string>"), "</string>")))
 		}
 	}
@@ -168,70 +165,24 @@ func (a *Agent) bootout() error {
 }
 
 func plist(program []string, environment map[string]string, logPath string) string {
-	var builder strings.Builder
-	builder.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-	builder.WriteString(`<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ` +
-		`"http://www.apple.com/DTDs/PropertyList-1.0.dtd">` + "\n")
-	builder.WriteString("<plist version=\"1.0\">\n<dict>\n")
-	builder.WriteString("  <key>Label</key>\n  <string>" + Label + "</string>\n")
-	builder.WriteString("  <key>ProgramArguments</key>\n  <array>\n")
-	for _, argument := range program {
-		builder.WriteString("    <string>" + escapeXML(argument) + "</string>\n")
-	}
-	builder.WriteString("  </array>\n")
-	builder.WriteString("  <key>RunAtLoad</key>\n  <true/>\n")
-	// Restart after a crash, but not after a requested shutdown (exit 0).
-	builder.WriteString("  <key>KeepAlive</key>\n  <dict>\n" +
-		"    <key>SuccessfulExit</key>\n    <false/>\n  </dict>\n")
-	builder.WriteString("  <key>EnvironmentVariables</key>\n  <dict>\n")
-	for _, name := range keptEnv {
-		if value, found := environment[name]; found {
-			builder.WriteString("    <key>" + name + "</key>\n    <string>" +
-				escapeXML(value) + "</string>\n")
-		}
-	}
-	builder.WriteString("  </dict>\n")
-	// Output before the backend's own logging starts (a crash, say) lands here too.
-	builder.WriteString("  <key>StandardOutPath</key>\n  <string>" + escapeXML(logPath) + "</string>\n")
-	builder.WriteString("  <key>StandardErrorPath</key>\n  <string>" + escapeXML(logPath) + "</string>\n")
-	builder.WriteString("</dict>\n</plist>\n")
-	return builder.String()
+	return daemon.JobPlist(Label, program, environment, logPath, true)
 }
 
-func escapeXML(text string) string {
-	replacer := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
-	return replacer.Replace(text)
-}
-
-func unescapeXML(text string) string {
-	replacer := strings.NewReplacer("&amp;", "&", "&lt;", "<", "&gt;", ">")
-	return replacer.Replace(text)
-}
-
-// Program is the command launchd should run: this pr-mon executable, as a daemon.
+// Program is the command launchd should run at login: this pr-mon executable,
+// as a backend that stays up with no app or dashboard open.
 func Program() []string {
 	executable, err := os.Executable()
 	if err != nil {
 		if found, lookErr := exec.LookPath("pr-mon"); lookErr == nil {
-			return []string{found, "daemon"}
+			return []string{found, "daemon", "--keep-running"}
 		}
-		return []string{"pr-mon", "daemon"}
+		return []string{"pr-mon", "daemon", "--keep-running"}
 	}
 	resolved, err := filepath.EvalSymlinks(executable)
 	if err == nil {
 		executable = resolved
 	}
-	return []string{executable, "daemon"}
-}
-
-func environment() map[string]string {
-	kept := map[string]string{}
-	for _, name := range keptEnv {
-		if value, found := os.LookupEnv(name); found {
-			kept[name] = value
-		}
-	}
-	return kept
+	return []string{executable, "daemon", "--keep-running"}
 }
 
 func requireMacOS() error {
@@ -252,27 +203,43 @@ func Enable(paths daemon.Paths, agent *Agent, program []string) ([]string, error
 	if program == nil {
 		program = Program()
 	}
-	if bundle := AppBundle(program[0]); bundle != "" {
-		return nil, &Error{Message: "this copy of pr-mon lives in " +
-			filepath.Base(bundle) + ", which registers the login item itself.\n" +
-			"Turn on \"Start the backend at login\" in PrMon › Settings › General,\n" +
-			"so macOS lists it as pr-mon rather than the developer who signed it."}
-	}
+	bundle := AppBundle(program[0])
 	lines := []string{}
 	// launchd should own the only backend; a second one would just exit.
 	if _, err := daemon.Stop(paths, daemon.StopTimeout); err != nil {
 		return nil, err
 	}
-	if err := agent.Install(program, environment(), paths.Log()); err != nil {
+	if bundle != "" {
+		// An agent this command wrote earlier has the same label; clear it first.
+		if _, err := agent.Uninstall(); err != nil {
+			return nil, err
+		}
+		state, err := AppLoginItem(bundle, "on")
+		if err != nil {
+			return nil, err
+		}
+		if state == "requires-approval" {
+			return []string{"autostart registered, but macOS needs you to allow it:\n" +
+				"System Settings › General › Login Items › pr-mon"}, nil
+		}
+	} else if err := agent.Install(program, daemon.Environment(), paths.Log()); err != nil {
 		return nil, err
 	}
 	check, err := waitUntilReady(paths, readyTimeout)
 	if err != nil {
 		// Don't leave launchd restarting a backend that can't start.
-		agent.Uninstall()
+		if bundle != "" {
+			AppLoginItem(bundle, "off")
+		} else {
+			agent.Uninstall()
+		}
 		return nil, err
 	}
-	lines = append(lines, "autostart enabled: runs `"+strings.Join(program, " ")+"` at login", check)
+	what := "runs `" + strings.Join(program, " ") + "`"
+	if bundle != "" {
+		what = "listed as pr-mon in Login Items"
+	}
+	lines = append(lines, "autostart enabled: "+what+" at login", check)
 	return lines, nil
 }
 
@@ -320,10 +287,26 @@ func waitUntilReady(paths daemon.Paths, timeout time.Duration) (string, error) {
 	}
 }
 
+// AppLoginItem has the app register ("on"), remove ("off") or report ("status")
+// its login item, and returns the state it reports: "enabled", "disabled" or
+// "requires-approval". Only the app can register the agent it ships, through
+// ServiceManagement, which is what makes Login Items name it pr-mon with its
+// icon; run headless like this it opens no window and no Dock icon.
+func AppLoginItem(bundle, action string) (string, error) {
+	executable := filepath.Join(bundle, "Contents", "MacOS", "PrMon")
+	output, err := exec.Command(executable, "--login-agent", action).CombinedOutput()
+	text := strings.TrimSpace(string(output))
+	if err != nil {
+		if text == "" {
+			text = err.Error()
+		}
+		return "", &Error{Message: "PrMon couldn't change its login item: " + text}
+	}
+	return text, nil
+}
+
 // AppBundle is the .app this path sits inside, or "" when it is a plain
-// binary. The app registers the login item through ServiceManagement, which is
-// what makes macOS name and illustrate it, so the command line leaves that to
-// the app rather than writing an agent of its own.
+// binary: a bundled pr-mon leaves the login item to the app (AppLoginItem).
 func AppBundle(path string) string {
 	resolved := path
 	if link, err := filepath.EvalSymlinks(path); err == nil {
@@ -339,8 +322,8 @@ func AppBundle(path string) string {
 	}
 }
 
-// Disable removes the login agent; a backend that was running keeps running.
-// It never defers to the app: whatever installed an agent, this takes it away.
+// Disable removes the login agent, whichever kind is installed; a backend that
+// was running keeps running.
 func Disable(paths daemon.Paths, agent *Agent) (string, error) {
 	if err := requireMacOS(); err != nil {
 		return "", err
@@ -352,6 +335,18 @@ func Disable(paths daemon.Paths, agent *Agent) (string, error) {
 	existed, err := agent.Uninstall()
 	if err != nil {
 		return "", err
+	}
+	if bundle := AppBundle(Program()[0]); bundle != "" {
+		state, err := AppLoginItem(bundle, "status")
+		if err != nil {
+			return "", err
+		}
+		if state != "disabled" {
+			if _, err := AppLoginItem(bundle, "off"); err != nil {
+				return "", err
+			}
+			existed = true
+		}
 	}
 	if !existed {
 		return "autostart was not enabled", nil
@@ -375,6 +370,18 @@ func Describe(agent *Agent) (bool, string, error) {
 		agent = NewAgent()
 	}
 	status := agent.Status()
+	if bundle := AppBundle(Program()[0]); bundle != "" && !status.Installed {
+		state, err := AppLoginItem(bundle, "status")
+		switch {
+		case err != nil:
+			return false, "", err
+		case state == "enabled":
+			return true, "enabled (listed as pr-mon in Login Items)", nil
+		case state == "requires-approval":
+			return true, "enabled, waiting for approval in System Settings › General › Login Items", nil
+		}
+		return false, "disabled", nil
+	}
 	if !status.Installed {
 		return false, "disabled", nil
 	}

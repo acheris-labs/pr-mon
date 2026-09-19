@@ -24,7 +24,8 @@ Usage: pr-mon [command]
 
 Commands:
   (none)     open the dashboard; starts the backend if needed
-  daemon     run the backend in the foreground
+  daemon     run the backend in the foreground; it exits 2 minutes after the
+             last app or dashboard closes, unless given --keep-running
   start      start the backend in the background
   stop       stop the background backend
   restart    restart the backend
@@ -44,7 +45,7 @@ func main() {
 	case "", "tui":
 		err = runTUI(paths)
 	case "daemon":
-		err = runDaemon(paths)
+		err = runDaemon(paths, len(os.Args) > 2 && os.Args[2] == "--keep-running")
 	case "start":
 		err = startBackend(paths)
 	case "stop":
@@ -73,7 +74,7 @@ func main() {
 	}
 }
 
-func runDaemon(paths daemon.Paths) error {
+func runDaemon(paths daemon.Paths, keepRunning bool) error {
 	// Before anything looks up a tool: gh, the desktop notifier, scripts.
 	os.Setenv("PATH", daemon.ToolPath(os.Getenv("PATH")))
 	client, err := github.NewClient(github.GetToken)
@@ -87,6 +88,7 @@ func runDaemon(paths daemon.Paths) error {
 		Version:    Version,
 		// When spawned, stderr already goes to the log file.
 		LogToStderr: stat != nil && stat.Mode()&os.ModeCharDevice != 0,
+		KeepRunning: keepRunning,
 	})
 	var running *daemon.AlreadyRunningError
 	if err != nil && asAlreadyRunning(err, &running) {

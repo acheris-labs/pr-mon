@@ -37,6 +37,7 @@ type Backend interface {
 	AddDependency(repo string, number int, on string) error
 	RemoveDependency(repo string, number int, on string) error
 	DependencyGraph(repo string, number int) (models.DependencyGraph, error)
+	SetPollInterval(seconds int) error
 	SaveNotifications(repo string, settings config.NotifyConfig) error
 	SendTest(repo string, settings config.NotifyConfig) error
 	NotificationForm() (notify.Form, error)
@@ -90,6 +91,8 @@ type Model struct {
 	events chan service.Event
 	// reconnect is called when the connection drops; nil in tests.
 	reconnect func() tea.Cmd
+	// loginItem starts the backend at login; nil where there is none.
+	loginItem LoginItem
 }
 
 // New builds a dashboard around a backend.
@@ -191,6 +194,14 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if typed.err != nil {
 				dialog.graphErr = typed.err.Error()
 			}
+		}
+		return m, nil
+
+	case loginChecked:
+		if dialog, ok := m.modal.(*settingsModal); ok {
+			dialog.checked(typed)
+		} else if typed.err != nil {
+			m.addToast(typed.err.Error(), "error")
 		}
 		return m, nil
 
