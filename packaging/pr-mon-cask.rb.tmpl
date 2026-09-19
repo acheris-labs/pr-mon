@@ -31,8 +31,10 @@ cask "pr-mon" do
     terminate_process "pr-mon daemon", match: :full, must_succeed: false
   end
 
-  uninstall quit:      "com.acheris-labs.pr-mon.app",
-            launchctl: "com.acheris-labs.pr-mon.session"
+  # No launchctl step for the backend's on-demand job: an upgrade runs this
+  # too, and unloading the job the app registered would leave it registered
+  # but gone until the next login. Deleting the app removes the registration.
+  uninstall quit: "com.acheris-labs.pr-mon.app"
 
   # `brew uninstall --zap pr-mon` is the full teardown: the repos being watched,
   # what has been seen, armed merges, and the app's own preferences.

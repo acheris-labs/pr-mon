@@ -24,11 +24,29 @@ public enum Launcher {
         return SMAppService.agent(plistName: plistName)
     }
 
-    /// Registers the on-demand backend job once; later launches find it in
-    /// place. Failing is harmless: `pr-mon start` then loads a job itself.
+    /// Registers the on-demand backend job, or registers it again when macOS
+    /// says it is registered but launchd doesn't have it (something unloaded
+    /// it, like an older uninstall step during an upgrade). Failing is
+    /// harmless: `pr-mon start` then loads a job itself.
     public static func registerSessionAgent() {
-        guard let agent = bundledAgent(sessionPlistName), agent.status != .enabled else { return }
+        guard let agent = bundledAgent(sessionPlistName) else { return }
+        if agent.status == .enabled {
+            if jobLoaded(sessionPlistName.replacingOccurrences(of: ".plist", with: "")) { return }
+            try? agent.unregister()
+        }
         try? agent.register()
+    }
+
+    /// Whether launchd has a job with this label in the user's GUI domain.
+    static func jobLoaded(_ label: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        process.arguments = ["print", "gui/\(getuid())/\(label)"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return false }
+        process.waitUntilExit()
+        return process.terminationStatus == 0
     }
     public struct Failure: Error, LocalizedError {
         public var output: String

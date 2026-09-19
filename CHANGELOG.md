@@ -4,6 +4,15 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc14]
+
+### Fixed
+
+- An upgrade unloaded the backend job the app registers (the cask's
+  uninstall step runs during upgrades too), leaving it registered but gone
+  until the next login. The cask no longer unloads it, and the app registers
+  it again at launch when macOS has it registered but not loaded.
+
 ## [0.2.0-rc13]
 
 ### Fixed
