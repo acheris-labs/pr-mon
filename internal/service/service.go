@@ -523,12 +523,15 @@ func (m *Monitor) checkArmed(name string, repo models.Repo) {
 		}
 		key := prKey{repo: name, number: number}
 		m.mutex.Lock()
-		inFlight := m.merging[key]
-		if !inFlight {
+		// Check again under the lock: another refresh may have merged and
+		// disarmed it since `armed` was read.
+		_, stillArmed := m.armedLocked(name)[number]
+		claimed := stillArmed && !m.merging[key]
+		if claimed {
 			m.merging[key] = true
 		}
 		m.mutex.Unlock()
-		if inFlight {
+		if !claimed {
 			continue
 		}
 		m.spawn(func() { m.autoMerge(name, pr, merge) })
