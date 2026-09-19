@@ -26,6 +26,7 @@ struct PrMonApp: App {
         store.unseenTotalChanged = { count in
             NSApp.dockTile.badgeLabel = count > 0 ? String(count) : nil
         }
+        Launcher.registerSessionAgent()
         store.start()
         _store = State(initialValue: store)
     }

@@ -56,6 +56,9 @@ and the Swift models (`macos/PrMonKit/Sources/PrMonKit/Models.swift`).
   signing certificate's name with no icon. From inside the bundle, `pr-mon
   autostart` (and so the dashboard's settings) runs `PrMon --login-agent
   on|off|status`, which registers it and exits before any UI.
-- On macOS `pr-mon start` hands the backend to launchd
-  (`com.acheris-labs.pr-mon.session`) rather than forking it: a child of the app
-  keeps the app in the Dock, "Running in Background", after it quits.
+- On macOS `pr-mon start` never forks the backend or loads a job itself when
+  it can help it: macOS charges both to the app that did it (its coalition) and
+  keeps that app in the Dock, "Running in Background", after it quits. The app
+  registers `com.acheris-labs.pr-mon.session` (an on-demand agent in the bundle)
+  through `SMAppService`, which macOS loads, and `pr-mon start` kickstarts it.
+  Without that job (a source install) it loads one itself.

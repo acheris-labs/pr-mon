@@ -75,6 +75,32 @@ func main() {
 }
 
 func runDaemon(paths daemon.Paths, keepRunning bool) error {
+	err := serveBackend(paths, keepRunning)
+	if err != nil {
+		logStartupError(paths, err)
+	}
+	return err
+}
+
+// logStartupError puts why the backend couldn't run (gh missing, say) in its
+// log, where `pr-mon start` and the app look for it. A job launchd runs from
+// the app bundle has nowhere else for stderr to go.
+func logStartupError(paths daemon.Paths, err error) {
+	if stat, statErr := os.Stderr.Stat(); statErr == nil && stat.Mode().IsRegular() {
+		return // stderr is the log already
+	}
+	if os.MkdirAll(paths.Directory, 0o755) != nil {
+		return
+	}
+	file, openErr := os.OpenFile(paths.Log(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if openErr != nil {
+		return
+	}
+	defer file.Close()
+	fmt.Fprintf(file, "pr-mon: %v\n", err)
+}
+
+func serveBackend(paths daemon.Paths, keepRunning bool) error {
 	// Before anything looks up a tool: gh, the desktop notifier, scripts.
 	os.Setenv("PATH", daemon.ToolPath(os.Getenv("PATH")))
 	client, err := github.NewClient(github.GetToken)

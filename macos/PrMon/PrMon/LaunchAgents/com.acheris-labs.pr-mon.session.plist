@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The backend on demand, registered by the app through SMAppService.
+
+  Nothing starts it at load: `pr-mon start` (the app, a dashboard) runs it with
+  `launchctl kickstart`, and it exits by itself once no app or dashboard has been
+  open for a while. macOS charges a launchd job to whoever loads it, and keeps
+  an app in the Dock, "Running in Background", after it quits while a job it
+  loaded lives on. Registered here, the job is loaded by macOS at login, never
+  by the app, so quitting the app leaves nothing behind.
+
+  The login agent (com.acheris-labs.pr-mon.plist) is the always-on variant.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.acheris-labs.pr-mon.session</string>
+  <key>BundleProgram</key>
+  <string>Contents/Resources/bin/pr-mon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>pr-mon</string>
+    <string>daemon</string>
+  </array>
+  <!-- launchd's bare PATH lacks Homebrew, where gh usually lives. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>

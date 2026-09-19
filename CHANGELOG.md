@@ -4,6 +4,23 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc12]
+
+### Fixed
+
+- Quitting the app still left it in the Dock, "Running in Background", while
+  the backend ran on: macOS charges a launchd job to the app that loads it.
+  The app now registers an on-demand backend job (once, like the login item),
+  which macOS loads, and `pr-mon start` only kickstarts it. System Settings ›
+  Login Items lists pr-mon under "Allow in the Background" as a result.
+- A backend that can't start (gh missing or logged out) writes why to its log
+  even when launchd gives it nowhere else to write.
+
+### Changed
+
+- The PR list shows auto-merge as a coloured chip under the status: green for
+  GitHub's auto-merge, the accent colour for pr-mon's merge when ready.
+
 ## [0.2.0-rc11]
 
 ### Fixed

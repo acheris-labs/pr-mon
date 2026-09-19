@@ -357,16 +357,36 @@ private struct PRRow: View {
                     Text(verbatim: "#\(pr.number)")
                     Text(pr.author)
                     Text(pr.status.title).foregroundStyle(pr.status.color)
-                    if pr.autoMerge != nil || armed {
-                        Image(systemName: "arrow.triangle.merge")
-                            .help(pr.autoMerge != nil ? "GitHub auto-merge is on" : "pr-mon merges when ready")
-                    }
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                if pr.autoMerge != nil {
+                    MergeChip(text: "Auto-merge", tint: .green)
+                        .help("GitHub auto-merge is on")
+                } else if armed {
+                    MergeChip(text: "Merge when ready", tint: .accentColor)
+                        .help("pr-mon merges it once it's ready")
+                }
             }
         }
         .padding(.vertical, 3)
+    }
+}
+
+/// A merge waiting to happen, in a colour of its own so it stands out in the
+/// list: green for GitHub's auto-merge, the accent colour for pr-mon's.
+private struct MergeChip: View {
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Label(text, systemImage: "arrow.triangle.merge")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.vertical, 1)
+            .padding(.horizontal, 6)
+            .background(tint.opacity(0.15), in: Capsule())
+            .fixedSize()
     }
 }
 

@@ -10,15 +10,25 @@ public enum Launcher {
     /// its icon: a plain agent in ~/Library/LaunchAgents has no bundle to name,
     /// so macOS falls back to whoever signed the binary.
     static let agentPlistName = "com.acheris-labs.pr-mon.plist"
+    /// The on-demand backend `pr-mon start` kickstarts: loaded by macOS, not by
+    /// the app, so the app doesn't linger in the Dock after it quits.
+    static let sessionPlistName = "com.acheris-labs.pr-mon.session.plist"
 
     /// Non-nil when this build carries the agent, i.e. anything but a source
     /// checkout running the command line on its own.
-    static func bundledAgent() -> SMAppService? {
-        guard let path = Bundle.main.bundleURL
+    static func bundledAgent(_ plistName: String = agentPlistName) -> SMAppService? {
+        let path = Bundle.main.bundleURL
             .appendingPathComponent("Contents/Library/LaunchAgents")
-            .appendingPathComponent(agentPlistName).path as String?,
-            FileManager.default.fileExists(atPath: path) else { return nil }
-        return SMAppService.agent(plistName: agentPlistName)
+            .appendingPathComponent(plistName).path
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        return SMAppService.agent(plistName: plistName)
+    }
+
+    /// Registers the on-demand backend job once; later launches find it in
+    /// place. Failing is harmless: `pr-mon start` then loads a job itself.
+    public static func registerSessionAgent() {
+        guard let agent = bundledAgent(sessionPlistName), agent.status != .enabled else { return }
+        try? agent.register()
     }
     public struct Failure: Error, LocalizedError {
         public var output: String
@@ -88,10 +98,12 @@ public enum Launcher {
     /// only this app can register the agent it ships. Prints the state it
     /// leaves (enabled, disabled or requires-approval) and returns the exit
     /// status, or nil when the arguments don't ask for this.
+    /// `--session-agent` does the same for the on-demand job.
     public static func loginAgentCommand(_ arguments: [String]) -> Int32? {
-        guard let flag = arguments.firstIndex(of: "--login-agent") else { return nil }
+        let flags = ["--login-agent": agentPlistName, "--session-agent": sessionPlistName]
+        guard let flag = arguments.firstIndex(where: { flags[$0] != nil }) else { return nil }
         let action = arguments.indices.contains(flag + 1) ? arguments[flag + 1] : ""
-        guard let agent = bundledAgent() else {
+        guard let agent = bundledAgent(flags[arguments[flag]]!) else {
             FileHandle.standardError.write(Data("this PrMon has no bundled agent\n".utf8))
             return 1
         }
@@ -101,7 +113,8 @@ public enum Launcher {
             case "off": try agent.unregister()
             case "status": break
             default:
-                FileHandle.standardError.write(Data("usage: PrMon --login-agent on|off|status\n".utf8))
+                FileHandle.standardError.write(
+                    Data("usage: PrMon --login-agent|--session-agent on|off|status\n".utf8))
                 return 2
             }
         } catch {

@@ -88,7 +88,14 @@ func launchSession(paths Paths, executable string) error {
 	if err := os.WriteFile(plistPath, []byte(text), 0o644); err != nil {
 		return err
 	}
-	exec.Command("launchctl", "bootout", sessionTarget()).Run()
+	// Already loaded (on demand): just run it. Loading is what macOS charges to
+	// the caller, and an app charged with a job stays in the Dock.
+	if exec.Command("launchctl", "print", sessionTarget()).Run() == nil {
+		if output, err := exec.Command("launchctl", "kickstart", sessionTarget()).CombinedOutput(); err != nil {
+			return fmt.Errorf("launchctl kickstart failed: %s", strings.TrimSpace(string(output)))
+		}
+		return nil
+	}
 	domain := fmt.Sprintf("gui/%d", os.Getuid())
 	output, err := exec.Command("launchctl", "bootstrap", domain, plistPath).CombinedOutput()
 	if err != nil {

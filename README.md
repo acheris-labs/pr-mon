@@ -47,8 +47,10 @@ saves state, sends notifications, and performs merges. The dashboard is just a
 window onto it, so notifications keep coming after you close the window.
 
 - `pr-mon` opens the dashboard and starts the backend if it isn't running.
-- On macOS the backend is started as its own launchd job, so it belongs to no
-  app or terminal: the app leaves the Dock when you quit it.
+- On macOS the backend runs as a launchd job the app registers with the
+  system (System Settings › Login Items lists pr-mon under "Allow in the
+  Background"), so it belongs to no app or terminal and the app leaves the
+  Dock the moment you quit it.
 - **How long it runs** depends on *Start the backend at login*: on, it runs all
   the time from login; off, it runs while the app or a dashboard is open and
   stops two minutes after the last one closes (merge when ready and
