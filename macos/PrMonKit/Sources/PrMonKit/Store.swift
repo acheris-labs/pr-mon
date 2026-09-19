@@ -219,6 +219,19 @@ public final class PrMonStore {
         run { try await $0.perform(repo: repo, number: number, action: action) }
     }
 
+    public func removeDependency(repo: String, number: Int, on: String) {
+        run { try await $0.removeDependency(repo: repo, number: number, on: on) }
+    }
+
+    /// Throws with a message for the user, so a picker can show why.
+    public func addDependency(repo: String, number: Int, on: String) async throws {
+        try await client.addDependency(repo: repo, number: number, on: on)
+    }
+
+    public func dependencyGraph(repo: String, number: Int) async throws -> DependencyGraph {
+        try await client.dependencyGraph(repo: repo, number: number)
+    }
+
     public func setPollInterval(_ seconds: Int) {
         run { try await $0.setPollInterval(seconds) }
     }

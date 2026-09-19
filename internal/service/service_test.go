@@ -31,6 +31,9 @@ type fakeGitHub struct {
 	deleteErr   error
 	mergeGate   chan struct{}
 	fetchCounts map[string]int
+	// States of PRs outside the fake repos, by "owner/repo#n"; a PR in a fake
+	// repo is open. Anything else is not found.
+	states map[string]string
 }
 
 func newFakeGitHub(repos ...models.Repo) *fakeGitHub {
@@ -38,6 +41,7 @@ func newFakeGitHub(repos ...models.Repo) *fakeGitHub {
 		repos:       map[string]models.Repo{},
 		fetchErr:    map[string]error{},
 		fetchCounts: map[string]int{},
+		states:      map[string]string{},
 	}
 	for _, repo := range repos {
 		fake.repos[repo.Name] = repo
@@ -123,6 +127,34 @@ func (f *fakeGitHub) DeleteBranch(_ context.Context, refID string) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	return f.deleteErr
+}
+
+func (f *fakeGitHub) setState(key, state string) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.states[key] = state
+}
+
+func (f *fakeGitHub) LookupPRs(_ context.Context, repo string, numbers []int) ([]models.PRRef, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.calls = append(f.calls, fmt.Sprintf("lookup %s %v", repo, numbers))
+	refs := []models.PRRef{}
+	for _, number := range numbers {
+		key := models.PRKey(repo, number)
+		ref := models.PRRef{Repo: repo, Number: number, Title: "Elsewhere",
+			URL: "https://github.com/" + repo, State: f.states[key]}
+		for _, pr := range f.repos[repo].PRs {
+			if pr.Number == number && ref.State == "" {
+				ref.Title, ref.State = pr.Title, models.PROpen
+			}
+		}
+		if ref.State == "" {
+			return nil, &github.NotFoundError{Message: key + " not found"}
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
 }
 
 // harness is a monitor with temp files, a fake GitHub and recorded events.

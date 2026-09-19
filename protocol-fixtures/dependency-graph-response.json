@@ -1,0 +1,42 @@
+{
+  "id": 6,
+  "ok": true,
+  "result": {
+    "pr": {
+      "repo": "acme/api",
+      "number": 2,
+      "title": "PR 2",
+      "url": "https://github.com/acme/api/pull/2",
+      "state": "OPEN",
+      "status": "PENDING"
+    },
+    "waits_on": [
+      {
+        "pr": {
+          "repo": "acme/lib",
+          "number": 3,
+          "title": "Parser groundwork",
+          "url": "https://github.com/acme/lib/pull/3",
+          "state": "UNKNOWN",
+          "status": null
+        },
+        "children": [],
+        "repeated": false
+      }
+    ],
+    "required_by": [
+      {
+        "pr": {
+          "repo": "acme/api",
+          "number": 9,
+          "title": "Release 2.0",
+          "url": "https://github.com/acme/api/pull/9",
+          "state": "OPEN",
+          "status": "WAITING"
+        },
+        "children": [],
+        "repeated": false
+      }
+    ]
+  }
+}

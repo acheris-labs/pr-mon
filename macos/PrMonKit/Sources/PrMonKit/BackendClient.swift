@@ -89,6 +89,19 @@ public actor BackendClient {
         try await command("perform", PerformArgs(repo: repo, number: number, action: action))
     }
 
+    /// Makes a PR wait for `on` ("owner/repo#12" or a pull request URL) to merge first.
+    public func addDependency(repo: String, number: Int, on: String) async throws {
+        try await command("add_dependency", DependencyArgs(repo: repo, number: number, on: on))
+    }
+
+    public func removeDependency(repo: String, number: Int, on: String) async throws {
+        try await command("remove_dependency", DependencyArgs(repo: repo, number: number, on: on))
+    }
+
+    public func dependencyGraph(repo: String, number: Int) async throws -> DependencyGraph {
+        try await request("dependency_graph", PRArgs(repo: repo, number: number))
+    }
+
     /// Returns the repo name as GitHub spells it.
     public func addRepo(_ name: String) async throws -> String {
         try await request("add_repo", NameArgs(name: name))

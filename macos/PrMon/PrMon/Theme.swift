@@ -14,6 +14,7 @@ extension PRStatus {
         case .behind: "Behind Base"
         case .pending: "Checks Running"
         case .draft: "Draft"
+        case .waiting: "Waiting on Other PRs"
         case .checking: "Checking Mergeability"
         case .unknown: "Unknown"
         }
@@ -28,6 +29,7 @@ extension PRStatus {
         case .behind: "arrow.down.circle.fill"
         case .pending: "clock.fill"
         case .draft: "pencil.circle"
+        case .waiting: "hourglass.circle.fill"
         case .checking, .unknown: "questionmark.circle"
         }
     }
@@ -37,7 +39,38 @@ extension PRStatus {
         case .ready: .green
         case .failing, .conflict: .red
         case .blocked, .behind: .orange
+        case .waiting: .cyan
         case .pending, .draft, .checking, .unknown: .secondary
+        }
+    }
+}
+
+extension PRRef {
+    /// Merged or closed first: that is what matters about a PR something waits on.
+    var stateTitle: String {
+        switch state {
+        case .merged: "Merged"
+        case .closed: "Closed without merging"
+        case .open: status?.title ?? "Open"
+        case .unknown: "Not looked up yet"
+        }
+    }
+
+    var symbol: String {
+        switch state {
+        case .merged: "checkmark.circle.fill"
+        case .closed: "xmark.circle.fill"
+        case .open: status?.symbol ?? "circle"
+        case .unknown: "questionmark.circle"
+        }
+    }
+
+    var color: Color {
+        switch state {
+        case .merged: .purple
+        case .closed: .red
+        case .open: status?.color ?? .secondary
+        case .unknown: .secondary
         }
     }
 }

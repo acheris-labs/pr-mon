@@ -157,5 +157,31 @@
     },
     "id": 16,
     "op": "set_poll_interval"
+  },
+  {
+    "args": {
+      "number": 9,
+      "on": "acme/api#2",
+      "repo": "acme/api"
+    },
+    "id": 17,
+    "op": "add_dependency"
+  },
+  {
+    "args": {
+      "number": 9,
+      "on": "acme/lib#5",
+      "repo": "acme/api"
+    },
+    "id": 18,
+    "op": "remove_dependency"
+  },
+  {
+    "args": {
+      "number": 2,
+      "repo": "acme/api"
+    },
+    "id": 19,
+    "op": "dependency_graph"
   }
 ]

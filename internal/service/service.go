@@ -16,9 +16,11 @@ import (
 
 	"github.com/acheris-labs/pr-mon/internal/actions"
 	"github.com/acheris-labs/pr-mon/internal/config"
+	"github.com/acheris-labs/pr-mon/internal/dependencies"
 	"github.com/acheris-labs/pr-mon/internal/github"
 	"github.com/acheris-labs/pr-mon/internal/models"
 	"github.com/acheris-labs/pr-mon/internal/notify"
+	"github.com/acheris-labs/pr-mon/internal/readiness"
 	"github.com/acheris-labs/pr-mon/internal/state"
 	"github.com/acheris-labs/pr-mon/internal/tracker"
 )
@@ -68,6 +70,7 @@ type GitHub interface {
 	EnableAutoMerge(ctx context.Context, prID string, method models.MergeMethod) error
 	DisableAutoMerge(ctx context.Context, prID string) error
 	DeleteBranch(ctx context.Context, refID string) error
+	LookupPRs(ctx context.Context, repo string, numbers []int) ([]models.PRRef, error)
 }
 
 // Deliverer sends one notification; the monitor calls it in the background.
@@ -93,13 +96,21 @@ type Monitor struct {
 	state  state.AppState
 	track  *tracker.Tracker
 	repos  map[string]models.Repo
-	errs   map[string]string
-	status Status
+	// Repos as fetched, before dependencies and actions were worked out, so
+	// those can be redone when a dependency changes between polls.
+	fetched map[string]models.Repo
+	errs    map[string]string
+	// The last known state of every PR something waits on, by key.
+	waitedOn map[string]models.PRRef
+	status   Status
 	// Repos whose first load finished this session; only they can notify.
 	loaded      map[string]bool
 	pausedUntil time.Time
 	merging     map[prKey]bool
-	listeners   []Listener
+	// Waiting PRs being moved off GitHub's auto-merge, and ones that couldn't be.
+	holding    map[prKey]bool
+	holdFailed map[prKey]bool
+	listeners  []Listener
 
 	busy     sync.WaitGroup
 	ctx      context.Context
@@ -137,9 +148,13 @@ func New(client GitHub, configPath, statePath string, options Options) *Monitor 
 		config:     config.New(),
 		state:      state.New(),
 		repos:      map[string]models.Repo{},
+		fetched:    map[string]models.Repo{},
 		errs:       map[string]string{},
+		waitedOn:   map[string]models.PRRef{},
 		loaded:     map[string]bool{},
 		merging:    map[prKey]bool{},
+		holding:    map[prKey]bool{},
+		holdFailed: map[prKey]bool{},
 		pollWake:   make(chan struct{}, 1),
 		stopped:    make(chan struct{}),
 		Shutdown:   make(chan struct{}),
@@ -345,6 +360,9 @@ func (m *Monitor) PollOnce(ctx context.Context) {
 	names := append([]string{}, m.config.Repos...)
 	m.mutex.Unlock()
 
+	// First, so this poll's repos are judged against fresh dependency states.
+	m.refreshWaitedOn(ctx)
+
 	var group sync.WaitGroup
 	for _, name := range names {
 		group.Add(1)
@@ -439,7 +457,9 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 		m.mutex.Unlock()
 		return
 	}
-	repo = actions.WithActions(repo, m.armedLocked(name))
+	m.fetched[name] = repo
+	m.pruneDependenciesLocked(repo)
+	repo = m.decorateLocked(repo)
 	m.repos[name] = repo
 	changes := m.track.Changes(repo)
 	settings, configured := m.config.Notifications[name]
@@ -470,6 +490,7 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 	if opened {
 		m.emit(Event{Kind: "collapsed"})
 	}
+	m.holdForDependencies(name)
 	m.checkArmed(name, repo)
 	m.emit(Event{Kind: "repo", Name: name})
 }
@@ -522,15 +543,48 @@ func (m *Monitor) disarm(name string, number int) {
 		delete(m.state.Armed, name)
 	}
 	m.saveStateLocked()
-	m.updateActionsLocked(name)
+	m.rebuildLocked(name)
 	m.mutex.Unlock()
 }
 
-// updateActionsLocked rebuilds a repo's action menus after its armed merges changed.
-func (m *Monitor) updateActionsLocked(name string) {
-	if repo, found := m.repos[name]; found {
-		m.repos[name] = actions.WithActions(repo, m.armedLocked(name))
+// arm records a PR for pr-mon to merge once it is strictly ready.
+func (m *Monitor) arm(name string, number int, merge models.ArmedMerge) error {
+	encoded, err := json.Marshal(merge)
+	if err != nil {
+		return err
 	}
+	m.mutex.Lock()
+	if m.state.Armed[name] == nil {
+		m.state.Armed[name] = map[string]json.RawMessage{}
+	}
+	m.state.Armed[name][strconv.Itoa(number)] = encoded
+	m.saveStateLocked()
+	m.rebuildLocked(name)
+	m.mutex.Unlock()
+	return nil
+}
+
+// rebuildLocked works out a repo's dependencies and action menus again, after
+// its armed merges or dependencies changed.
+func (m *Monitor) rebuildLocked(name string) {
+	if repo, found := m.fetched[name]; found {
+		m.repos[name] = m.decorateLocked(repo)
+	}
+}
+
+// decorateLocked adds what the backend knows beyond GitHub to a fetched repo:
+// what each PR waits on (holding it back until those merge), and its actions.
+func (m *Monitor) decorateLocked(repo models.Repo) models.Repo {
+	graph := dependencies.Graph(m.state.Dependencies)
+	prs := make([]models.PullRequest, len(repo.PRs))
+	for i, pr := range repo.PRs {
+		key := models.PRKey(repo.Name, pr.Number)
+		pr.WaitsOn = m.refsLocked(graph.WaitsOn(key))
+		pr.RequiredBy = m.refsLocked(graph.RequiredBy(key))
+		prs[i] = readiness.Wait(pr)
+	}
+	repo.PRs = prs
+	return actions.WithActions(repo, m.armedLocked(repo.Name))
 }
 
 func (m *Monitor) autoMerge(name string, pr models.PullRequest, merge models.ArmedMerge) {
@@ -559,6 +613,7 @@ func (m *Monitor) autoMerge(name string, pr models.PullRequest, merge models.Arm
 	}
 	m.log.Info("auto-merged", "pr", label)
 	m.disarm(name, pr.Number)
+	m.merged(name, pr)
 	m.toast(fmt.Sprintf("Merged %s (pr-mon auto-merge, %s)", label, merge.Method.Lower()))
 	if merge.DeleteBranch && pr.HeadRefID != nil {
 		if err := m.client.DeleteBranch(m.ctx, *pr.HeadRefID); err != nil {
@@ -568,6 +623,7 @@ func (m *Monitor) autoMerge(name string, pr models.PullRequest, merge models.Arm
 	}
 	m.notifyResult(name, pr, "MERGED", "")
 	m.RefreshRepo(m.ctx, name, 0)
+	m.refreshWaiting(m.ctx, name, pr.Number)
 }
 
 // notifyResult reports a merge the user asked for, so the first-load gate doesn't apply.

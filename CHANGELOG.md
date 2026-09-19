@@ -4,6 +4,26 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc9]
+
+### Added
+
+- PR dependencies: a PR can wait for any number of other PRs to merge first,
+  in any repo, including ones pr-mon doesn't monitor. Until they have merged it
+  shows `WAITING` (or `BLOCKED` if one closed without merging), can't be merged,
+  and pr-mon's merge when ready holds it; after the last one merges, an armed
+  PR merges on its own. A waiting PR with GitHub's auto-merge on moves to
+  pr-mon's, since GitHub wouldn't wait.
+- TUI: `w` (or `w` in the action menu) lists what a PR waits on; `a` adds one
+  from a search of every monitored PR, or `owner/repo#12`, or a URL; `d`
+  removes; `g` shows the whole graph. The details pane lists "Waits on" and
+  "Required by".
+- App: "Wait for Another Pull Request…" (⌥⌘W) and "Show Dependency Graph…"
+  (⌥⌘G) in the Pull Request menu, the right-click menu and the toolbar;
+  "Waits On" and "Required By" sections in the details.
+- Protocol: `add_dependency`, `remove_dependency` and `dependency_graph` ops,
+  `waits_on` and `required_by` on each PR, and the `WAITING` status.
+
 ## [0.2.0-rc8]
 
 ### Changed

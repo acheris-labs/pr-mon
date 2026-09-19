@@ -366,6 +366,23 @@ func (c *Client) Perform(repo string, number int, action models.Action) error {
 		map[string]any{"repo": repo, "number": number, "action": action}, nil)
 }
 
+// AddDependency makes a PR wait for `on` ("owner/repo#12" or a URL) to merge first.
+func (c *Client) AddDependency(repo string, number int, on string) error {
+	return c.request("add_dependency",
+		map[string]any{"repo": repo, "number": number, "on": on}, nil)
+}
+
+func (c *Client) RemoveDependency(repo string, number int, on string) error {
+	return c.request("remove_dependency",
+		map[string]any{"repo": repo, "number": number, "on": on}, nil)
+}
+
+func (c *Client) DependencyGraph(repo string, number int) (models.DependencyGraph, error) {
+	var graph models.DependencyGraph
+	err := c.request("dependency_graph", map[string]any{"repo": repo, "number": number}, &graph)
+	return graph, err
+}
+
 func (c *Client) SaveNotifications(repo string, settings config.NotifyConfig) error {
 	return c.request("save_notifications",
 		map[string]any{"repo": repo, "settings": settings}, nil)

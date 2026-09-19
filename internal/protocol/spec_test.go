@@ -166,6 +166,10 @@ func TestSpecObjects(t *testing.T) {
 		{"Repo", models.Repo{}},
 		{"PullRequest", models.PullRequest{}},
 		{"Check", models.Check{}},
+		{"LinkedIssue", models.LinkedIssue{}},
+		{"PRRef", models.PRRef{}},
+		{"DependencyGraph", models.DependencyGraph{}},
+		{"DependencyNode", models.DependencyNode{}},
 		{"AutoMerge", models.AutoMerge{}},
 		{"Reason", models.Reason{}},
 		{"ArmedMerge", models.ArmedMerge{}},
@@ -185,7 +189,7 @@ func TestSpecEnumerations(t *testing.T) {
 	text := spec(t)
 	groups := [][]string{
 		config.EventNames,
-		{"DRAFT", "CHECKING", "CONFLICT", "FAILING", "PENDING", "BEHIND", "BLOCKED", "READY"},
+		{"DRAFT", "CHECKING", "CONFLICT", "FAILING", "PENDING", "BEHIND", "BLOCKED", "WAITING", "READY"},
 		{"SQUASH", "MERGE", "REBASE"},
 	}
 	for _, values := range groups {

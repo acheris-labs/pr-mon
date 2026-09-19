@@ -229,6 +229,49 @@ func TestLastCheckStartedAt(t *testing.T) {
 	}
 }
 
+func waitingOn(pr models.PullRequest, states ...string) models.PullRequest {
+	for i, state := range states {
+		pr.WaitsOn = append(pr.WaitsOn, models.PRRef{Repo: "acme/lib", Number: i + 1, State: state})
+	}
+	return readiness.Wait(pr)
+}
+
+func TestWait(t *testing.T) {
+	ready := assess()
+	cases := []struct {
+		name    string
+		pr      models.PullRequest
+		status  models.Status
+		reasons []string
+	}{
+		{"nothing to wait on", waitingOn(ready), models.StatusReady, []string{}},
+		{"all merged", waitingOn(ready, models.PRMerged, models.PRMerged),
+			models.StatusReady, []string{}},
+		{"one open", waitingOn(ready, models.PRMerged, models.PROpen),
+			models.StatusWaiting, []string{"Waiting on acme/lib#2"}},
+		{"not looked up yet", waitingOn(ready, models.PRUnknown),
+			models.StatusWaiting, []string{"Waiting on acme/lib#1"}},
+		{"one closed", waitingOn(ready, models.PROpen, models.PRClosed), models.StatusBlocked,
+			[]string{"Waiting on acme/lib#1", "acme/lib#2 was closed without merging"}},
+		{"failing keeps its own status", waitingOn(assess(testfixtures.Failing), models.PROpen),
+			models.StatusFailing, []string{"Waiting on acme/lib#1"}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if test.pr.Status != test.status {
+				t.Errorf("status = %s, want %s", test.pr.Status, test.status)
+			}
+			if got := reasonTexts(test.pr); len(got) < len(test.reasons) ||
+				!equal(got[:len(test.reasons)], test.reasons) {
+				t.Errorf("reasons = %v, want them to start with %v", got, test.reasons)
+			}
+			if test.status != models.StatusReady && test.pr.StrictlyReady {
+				t.Error("a waiting PR must not be strictly ready")
+			}
+		})
+	}
+}
+
 func equal(got, want []string) bool {
 	if len(got) != len(want) {
 		return false

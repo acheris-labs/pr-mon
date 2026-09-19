@@ -37,6 +37,8 @@ func PR(number int, mutate ...func(*models.PullRequest)) models.PullRequest {
 		HeadSha:       models.Ptr(HeadSha),
 		Reasons:       []models.Reason{},
 		Actions:       []models.ActionOption{},
+		WaitsOn:       []models.PRRef{},
+		RequiredBy:    []models.PRRef{},
 	}
 	for _, apply := range mutate {
 		apply(&pr)

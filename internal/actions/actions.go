@@ -12,6 +12,7 @@ import (
 const (
 	noMethods   = "no merge methods allowed"
 	keepsBranch = "branch won't be deleted: repo doesn't auto-delete"
+	afterWaits  = "after the PRs it waits on have merged"
 )
 
 // WithActions returns the repo with every PR's action menu filled in.
@@ -72,7 +73,8 @@ func mergeOption(repo models.Repo, pr models.PullRequest, deletable bool) models
 }
 
 // autoMergeOption offers GitHub's native auto-merge where the repo allows it,
-// else pr-mon's own merge when ready.
+// else pr-mon's own merge when ready. A PR waiting on others always gets
+// pr-mon's: GitHub would merge it without waiting.
 func autoMergeOption(
 	repo models.Repo, pr models.PullRequest, armed *models.ArmedMerge, deletable bool,
 ) models.ActionOption {
@@ -87,7 +89,7 @@ func autoMergeOption(
 			Label: "Cancel merge when ready (pr-mon)", Available: true,
 		}
 	}
-	native := repo.AutoMergeAllowed
+	native := repo.AutoMergeAllowed && !pr.Waiting()
 	kind := "arm_merge"
 	if native {
 		kind = "auto_merge_on"
@@ -102,10 +104,14 @@ func autoMergeOption(
 		}
 	}
 	if !native {
-		return models.ActionOption{
+		option := models.ActionOption{
 			Key: "auto_merge", Kind: kind, Label: "Merge when ready (pr-mon)", Available: true,
 			NeedsMethod: true, OffersDeleteBranch: deletable,
 		}
+		if pr.Waiting() {
+			option.Note = models.Ptr(afterWaits)
+		}
+		return option
 	}
 	option := models.ActionOption{
 		Key: "auto_merge", Kind: kind, Label: "Enable auto-merge", Available: true,

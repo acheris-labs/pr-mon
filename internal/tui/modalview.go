@@ -11,9 +11,14 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/models"
 )
 
+// modalWidth is a dialog's width, padding included; modalInner is its text's.
+func (m *Model) modalWidth() int { return min(max(50, m.width-10), 90) }
+
+func (m *Model) modalInner() int { return m.modalWidth() - 4 }
+
 func (m *Model) modalView() string {
 	body := m.modal.view(m)
-	width := min(max(50, m.width-10), 90)
+	width := m.modalWidth()
 	return lipgloss.NewStyle().
 		Border(lipgloss.ThickBorder()).
 		BorderForeground(blue).
@@ -58,6 +63,11 @@ func (a *actionMenu) view(model *Model) string {
 			lines = append(lines, key(slot.shortcut, option.Label))
 		}
 	}
+	dependencies := key("w", "Dependencies…")
+	if waits := len(a.pr.WaitsOn); waits > 0 {
+		dependencies += dim.Render(fmt.Sprintf(" (waits on %d)", waits))
+	}
+	lines = append(lines, dependencies)
 	hint := "esc: close"
 	if a.offersDelete() {
 		box := "[ ]"

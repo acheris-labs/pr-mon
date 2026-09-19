@@ -59,7 +59,7 @@ enum Fixtures {
         #expect(api.prTotal == 60)
         #expect(api.mergeMethods == [.squash, .merge, .rebase])
         #expect(Set(api.prs.map(\.status))
-            == [.ready, .pending, .failing, .conflict, .behind, .draft, .checking])
+            == [.ready, .pending, .failing, .conflict, .behind, .draft, .checking, .waiting])
         #expect(api.prs[0].title == "Ready to go 🚀")
         #expect(api.prs[5].title == "WIP\u{2028}with a line separator")
 
@@ -84,6 +84,29 @@ enum Fixtures {
         #expect(api.prs[1].closingIssues.isEmpty)
     }
 
+    @Test func dependencies() throws {
+        let api = try #require(try Fixtures.snapshot().repos["acme/api"])
+        let waiting = api.prs[8]
+        #expect(waiting.status == .waiting)
+        #expect(waiting.waitsOn.map(\.key) == ["acme/api#2", "acme/lib#5"])
+        #expect(waiting.waitsOn[0].status == .pending && waiting.waitsOn[0].state == .open)
+        #expect(waiting.waitsOn[1].state == .merged && waiting.waitsOn[1].status == nil)
+        #expect(waiting.waitsOn[0].label(in: "acme/api") == "#2")
+        #expect(waiting.waitsOn[1].label(in: "acme/api") == "acme/lib#5")
+        #expect(waiting.actions[1].kind == "arm_merge")
+        #expect(api.prs[1].requiredBy.map(\.key) == ["acme/api#9"])
+        #expect(api.prs[0].waitsOn.isEmpty && api.prs[0].requiredBy.isEmpty)
+
+        let graph = try JSONDecoder().decode(
+            ResultBox<DependencyGraph>.self, from: Fixtures.data("dependency-graph-response.json")
+        ).result
+        #expect(graph.pr.key == "acme/api#2")
+        #expect(graph.waitsOn.map(\.pr.state) == [.unknown])
+        #expect(graph.waitsOn[0].branches == nil)
+        #expect(graph.requiredBy.map(\.pr.key) == ["acme/api#9"])
+        #expect(graph.requiredBy[0].repeated == false)
+    }
+
     @Test func actions() throws {
         let snapshot = try Fixtures.snapshot()
         let api = try #require(snapshot.repos["acme/api"])
@@ -105,7 +128,7 @@ enum Fixtures {
         case let ("repos", .repos(snapshot)): #expect(snapshot == (try Fixtures.snapshot()))
         case let ("repo", .repo(update)):
             #expect(update.name == "acme/api")
-            #expect(update.repo?.prs.count == 8)
+            #expect(update.repo?.prs.count == 9)
             #expect(update.unseen == [1, 5])
         case let ("seen", .seen(update)): #expect(update.unseen == [1, 5])
         case let ("collapsed", .collapsed(owners)): #expect(owners == ["textualize"])
@@ -175,6 +198,12 @@ enum Fixtures {
             try Wire.encode(Request(id: 15, op: "preview_notification",
                                     args: PreviewArgs(repo: "acme/api", message: "{{PR_NUM}}"))),
             try Wire.encode(Request(id: 16, op: "set_poll_interval", args: SecondsArgs(seconds: 120))),
+            try Wire.encode(Request(id: 17, op: "add_dependency",
+                                    args: DependencyArgs(repo: "acme/api", number: 9, on: "acme/api#2"))),
+            try Wire.encode(Request(id: 18, op: "remove_dependency",
+                                    args: DependencyArgs(repo: "acme/api", number: 9, on: "acme/lib#5"))),
+            try Wire.encode(Request(id: 19, op: "dependency_graph",
+                                    args: PRArgs(repo: "acme/api", number: 2))),
         ]
         #expect(encoded.count == expected.count)
         for (data, expectedRequest) in zip(encoded, expected) {

@@ -1,5 +1,6 @@
 // Package state persists what the UI remembers: per-PR status and seen flags,
-// collapsed repo groups, and PRs armed for merge-when-ready.
+// collapsed repo groups, PRs armed for merge-when-ready, and which PRs wait on
+// which.
 package state
 
 import (
@@ -25,15 +26,18 @@ type AppState struct {
 	// Armed PRs: {repo: {"<number>": {...}}}
 	Armed     map[string]map[string]json.RawMessage `json:"armed"`
 	Collapsed []string                              `json:"collapsed"` // lower-cased owners
+	// {"owner/repo#12": ["other/repo#3", …]}: PRs that must merge first.
+	Dependencies map[string][]string `json:"dependencies"`
 	// Tracker records: {repo: {"<number>": {"status": …, "seen": …}}}
 	PRs map[string]map[string]Record `json:"prs"`
 }
 
 func New() AppState {
 	return AppState{
-		Armed:     map[string]map[string]json.RawMessage{},
-		Collapsed: []string{},
-		PRs:       map[string]map[string]Record{},
+		Armed:        map[string]map[string]json.RawMessage{},
+		Collapsed:    []string{},
+		Dependencies: map[string][]string{},
+		PRs:          map[string]map[string]Record{},
 	}
 }
 
@@ -53,9 +57,10 @@ func Load(path string) (AppState, string) {
 	}
 	// Each part is read on its own, so one bad section doesn't lose the rest.
 	var parts struct {
-		Armed     json.RawMessage `json:"armed"`
-		Collapsed json.RawMessage `json:"collapsed"`
-		PRs       json.RawMessage `json:"prs"`
+		Armed        json.RawMessage `json:"armed"`
+		Collapsed    json.RawMessage `json:"collapsed"`
+		Dependencies json.RawMessage `json:"dependencies"`
+		PRs          json.RawMessage `json:"prs"`
 	}
 	if err := json.Unmarshal(text, &parts); err != nil {
 		return New(), fmt.Sprintf("Ignoring invalid state %s: expected an object", path)
@@ -77,6 +82,12 @@ func Load(path string) (AppState, string) {
 		var armed map[string]map[string]json.RawMessage
 		if json.Unmarshal(parts.Armed, &armed) == nil && allObjects(armed) {
 			loaded.Armed = armed
+		}
+	}
+	if len(parts.Dependencies) > 0 {
+		var dependencies map[string][]string
+		if json.Unmarshal(parts.Dependencies, &dependencies) == nil && dependencies != nil {
+			loaded.Dependencies = dependencies
 		}
 	}
 	return loaded, ""
@@ -102,6 +113,9 @@ func Save(path string, state AppState) error {
 	}
 	if state.Collapsed == nil {
 		state.Collapsed = []string{}
+	}
+	if state.Dependencies == nil {
+		state.Dependencies = map[string][]string{}
 	}
 	if state.PRs == nil {
 		state.PRs = map[string]map[string]Record{}

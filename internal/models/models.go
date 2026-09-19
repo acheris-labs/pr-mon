@@ -2,7 +2,10 @@
 // JSON names match docs/protocol.md exactly; the fixtures test that.
 package models
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Status is how mergeable a PR is.
 type Status string
@@ -15,7 +18,9 @@ const (
 	StatusPending  Status = "PENDING"
 	StatusBehind   Status = "BEHIND"
 	StatusBlocked  Status = "BLOCKED"
-	StatusReady    Status = "READY"
+	// Mergeable as far as GitHub is concerned, but waiting on other PRs to merge first.
+	StatusWaiting Status = "WAITING"
+	StatusReady   Status = "READY"
 )
 
 // IsAlert reports whether a status needs the user's attention.
@@ -57,6 +62,48 @@ type AutoMerge struct {
 type Reason struct {
 	Text  string `json:"text"`
 	Level string `json:"level"` // "error" | "warning" | "info"
+}
+
+// PR states GitHub reports for any pull request, plus Unknown for one pr-mon
+// hasn't been able to look up yet.
+const (
+	PROpen    = "OPEN"
+	PRMerged  = "MERGED"
+	PRClosed  = "CLOSED"
+	PRUnknown = "UNKNOWN"
+)
+
+// PRRef is a pull request anywhere on GitHub, as a dependency names it: one a
+// PR waits on, or one waiting on it. It may be in a repo pr-mon doesn't monitor.
+type PRRef struct {
+	Repo   string `json:"repo"`
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	State  string `json:"state"` // PROpen, PRMerged, PRClosed or PRUnknown
+	// pr-mon's status for an open PR in a monitored repo; nil otherwise.
+	Status *Status `json:"status"`
+}
+
+// Key names the PR as "owner/repo#12", the form dependencies are stored in.
+func (r PRRef) Key() string { return PRKey(r.Repo, r.Number) }
+
+func PRKey(repo string, number int) string { return fmt.Sprintf("%s#%d", repo, number) }
+
+// DependencyNode is one PR in a dependency tree, with the PRs it leads to.
+type DependencyNode struct {
+	PR       PRRef            `json:"pr"`
+	Children []DependencyNode `json:"children"`
+	// Already shown elsewhere in the same tree, so its children are left out.
+	Repeated bool `json:"repeated"`
+}
+
+// DependencyGraph is everything connected to one PR: what it waits on (and what
+// those wait on, and so on), and what waits on it.
+type DependencyGraph struct {
+	PR         PRRef            `json:"pr"`
+	WaitsOn    []DependencyNode `json:"waits_on"`
+	RequiredBy []DependencyNode `json:"required_by"`
 }
 
 // ArmedMerge is a PR pr-mon will merge itself once it is strictly ready.
@@ -106,6 +153,19 @@ type PullRequest struct {
 	StrictlyReady      bool           `json:"strictly_ready"`
 	LastCheckStartedAt *string        `json:"last_check_started_at"`
 	Actions            []ActionOption `json:"actions"`
+	// PRs that must merge before this one, and PRs waiting for this one.
+	WaitsOn    []PRRef `json:"waits_on"`
+	RequiredBy []PRRef `json:"required_by"`
+}
+
+// Waiting reports whether anything this PR waits on hasn't merged.
+func (pr PullRequest) Waiting() bool {
+	for _, ref := range pr.WaitsOn {
+		if ref.State != PRMerged {
+			return true
+		}
+	}
+	return false
 }
 
 type Repo struct {

@@ -519,3 +519,45 @@ func TestParsesClosingIssues(t *testing.T) {
 		t.Error("the query should ask for closing issues")
 	}
 }
+
+func TestLookupPRs(t *testing.T) {
+	client, rec := serve(t, always(okData(map[string]any{"repository": map[string]any{
+		"nameWithOwner": "Acme/Lib",
+		"pr3": map[string]any{"number": 3, "title": "Base", "url": "https://github.com/Acme/Lib/pull/3",
+			"state": "MERGED"},
+		"pr9": map[string]any{"number": 9, "title": "Next", "url": "https://github.com/Acme/Lib/pull/9",
+			"state": "OPEN"},
+	}})))
+	refs, err := client.LookupPRs(context.Background(), "acme/lib", []int{3, 9})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []models.PRRef{
+		{Repo: "Acme/Lib", Number: 3, Title: "Base", URL: "https://github.com/Acme/Lib/pull/3",
+			State: models.PRMerged},
+		{Repo: "Acme/Lib", Number: 9, Title: "Next", URL: "https://github.com/Acme/Lib/pull/9",
+			State: models.PROpen},
+	}
+	if !reflect.DeepEqual(refs, want) {
+		t.Errorf("refs = %+v", refs)
+	}
+	sent := query(rec.last())
+	if !strings.Contains(sent, "pr3: pullRequest(number: 3)") ||
+		!strings.Contains(sent, "pr9: pullRequest(number: 9)") {
+		t.Errorf("query = %s", sent)
+	}
+	if variables := rec.last()["variables"].(map[string]any); variables["owner"] != "acme" ||
+		variables["name"] != "lib" {
+		t.Errorf("variables = %v", variables)
+	}
+}
+
+func TestLookupPRsNotFound(t *testing.T) {
+	client, _ := serve(t, always(graphqlError("NOT_FOUND",
+		"Could not resolve to a PullRequest with the number of 99.")))
+	_, err := client.LookupPRs(context.Background(), "acme/lib", []int{99})
+	var missing *github.NotFoundError
+	if !errors.As(err, &missing) {
+		t.Errorf("err = %v, want NotFoundError", err)
+	}
+}

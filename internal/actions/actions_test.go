@@ -143,3 +143,22 @@ func TestWithActionsUsesEachPRsArmedState(t *testing.T) {
 		}
 	}
 }
+
+func TestWaitingPRUsesPrMonsMergeWhenReady(t *testing.T) {
+	pr := readiness.Assess(testfixtures.PR(1))
+	pr.WaitsOn = []models.PRRef{{Repo: "acme/lib", Number: 3, State: models.PROpen}}
+	pr = readiness.Wait(pr)
+	repo := testfixtures.Repo("acme/api", []models.PullRequest{pr})
+	options := map[string]models.ActionOption{}
+	for _, option := range actions.Available(repo, pr, nil) {
+		options[option.Key] = option
+	}
+	if merge := options["merge"]; merge.Available || *merge.Reason != "WAITING: Waiting on acme/lib#3" {
+		t.Errorf("merge = %+v", merge)
+	}
+	auto := options["auto_merge"]
+	if auto.Kind != "arm_merge" || !auto.Available || auto.Note == nil ||
+		*auto.Note != "after the PRs it waits on have merged" {
+		t.Errorf("auto_merge = %+v", auto)
+	}
+}

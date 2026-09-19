@@ -4,10 +4,8 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -95,10 +93,12 @@ func (m *Monitor) RemoveRepo(name string) error {
 	m.config.Repos = kept
 	delete(m.config.Notifications, name)
 	delete(m.repos, name)
+	delete(m.fetched, name)
 	delete(m.errs, name)
 	delete(m.loaded, name)
 	m.track.Forget(name)
 	delete(m.state.Armed, name)
+	m.forgetWaitingLocked(func(repo string, _ int) bool { return repo == name })
 	m.saveConfigLocked()
 	m.saveStateLocked()
 	m.mutex.Unlock()
@@ -165,6 +165,16 @@ func (m *Monitor) Perform(ctx context.Context, repoName string, number int, acti
 		return &Error{Message: fmt.Sprintf("%s#%d is not an open PR", repoName, number)}
 	}
 	label := fmt.Sprintf("%s#%d", repoName, number)
+	if pr.Waiting() {
+		switch action.Kind {
+		case "merge":
+			return &Error{Message: fmt.Sprintf(
+				"%s waits on PRs that haven't merged; remove them to merge it now", label)}
+		case "auto_merge_on":
+			// GitHub would merge it without waiting; pr-mon's merge when ready waits.
+			action.Kind = "arm_merge"
+		}
+	}
 
 	switch action.Kind {
 	case "arm_merge":
@@ -174,21 +184,14 @@ func (m *Monitor) Perform(ctx context.Context, repoName string, number int, acti
 		merge := models.ArmedMerge{
 			Method: *action.Method, DeleteBranch: action.DeleteBranch, ArmedAt: nowISO(),
 		}
-		encoded, err := json.Marshal(merge)
-		if err != nil {
+		if err := m.arm(repoName, number, merge); err != nil {
 			return &Error{Message: err.Error()}
 		}
-		m.mutex.Lock()
-		if m.state.Armed[repoName] == nil {
-			m.state.Armed[repoName] = map[string]json.RawMessage{}
-		}
-		m.state.Armed[repoName][strconv.Itoa(number)] = encoded
-		m.saveStateLocked()
-		m.updateActionsLocked(repoName)
-		m.mutex.Unlock()
 		m.toast(fmt.Sprintf("pr-mon will merge %s when it's ready (%s)", label, merge.Method.Lower()))
 		m.emit(Event{Kind: "repo", Name: repoName})
-		m.checkArmed(repoName, repo)
+		if repo, found := m.Repo(repoName); found {
+			m.checkArmed(repoName, repo)
+		}
 		return nil
 	case "disarm_merge":
 		m.disarm(repoName, number)
@@ -232,6 +235,8 @@ func (m *Monitor) runAction(ctx context.Context, repoName string, pr models.Pull
 			return err
 		}
 		m.toast(fmt.Sprintf("Merged %s (%s)", label, action.Method.Lower()))
+		m.merged(repoName, pr)
+		defer m.refreshWaiting(ctx, repoName, pr.Number)
 		if action.DeleteBranch && pr.HeadRefID != nil {
 			if err := m.client.DeleteBranch(ctx, *pr.HeadRefID); err != nil {
 				m.toast(fmt.Sprintf("Merged %s, but couldn't delete %s: %v", label, pr.HeadRef, err),

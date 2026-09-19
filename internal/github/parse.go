@@ -139,6 +139,8 @@ func (p prNode) toPullRequest() models.PullRequest {
 		ClosingIssues:  []models.LinkedIssue{},
 		Reasons:        []models.Reason{},
 		Actions:        []models.ActionOption{},
+		WaitsOn:        []models.PRRef{},
+		RequiredBy:     []models.PRRef{},
 	}
 	if p.Author != nil && p.Author.Login != "" {
 		pr.Author = p.Author.Login

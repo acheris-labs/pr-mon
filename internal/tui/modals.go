@@ -86,6 +86,10 @@ func (a *actionMenu) update(model *Model, key tea.KeyMsg) (modal, tea.Cmd) {
 			a.deleteBranch = !a.deleteBranch
 			return a, nil
 		}
+	case "w":
+		if a.choosing == nil {
+			return newDependencies(a.repo.Name, a.pr.Number), nil
+		}
 	}
 	if a.choosing != nil {
 		for _, choice := range methodKeys {

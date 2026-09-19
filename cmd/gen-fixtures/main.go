@@ -30,8 +30,39 @@ const (
 
 var armed = models.ArmedMerge{Method: models.MergeSquash, DeleteBranch: true, ArmedAt: armedAt}
 
+// The dependencies in the fixtures: acme/api#9 waits on #2 and on a PR in a
+// repo pr-mon doesn't monitor, which has merged.
+var (
+	waiting = models.PRRef{Repo: "acme/api", Number: 9, Title: "Release 2.0",
+		URL: "https://github.com/acme/api/pull/9", State: models.PROpen,
+		Status: models.Ptr(models.StatusWaiting)}
+	pending = models.PRRef{Repo: "acme/api", Number: 2, Title: "PR 2",
+		URL: "https://github.com/acme/api/pull/2", State: models.PROpen,
+		Status: models.Ptr(models.StatusPending)}
+	elsewhere = models.PRRef{Repo: "acme/lib", Number: 5, Title: "Shared parser",
+		URL: "https://github.com/acme/lib/pull/5", State: models.PRMerged}
+	upstream = models.PRRef{Repo: "acme/lib", Number: 3, Title: "Parser groundwork",
+		URL: "https://github.com/acme/lib/pull/3", State: models.PRUnknown}
+)
+
+// graph is acme/api#2's dependency graph, reaching one step further out.
+func graph() models.DependencyGraph {
+	leaf := func(ref models.PRRef, children ...models.DependencyNode) models.DependencyNode {
+		if children == nil {
+			children = []models.DependencyNode{}
+		}
+		return models.DependencyNode{PR: ref, Children: children}
+	}
+	return models.DependencyGraph{
+		PR:         pending,
+		WaitsOn:    []models.DependencyNode{leaf(upstream)},
+		RequiredBy: []models.DependencyNode{leaf(waiting)},
+	}
+}
+
 // state is a backend in a representative state: every status, an armed merge,
-// a repo that failed to load, and GitHub's own auto-merge.
+// a repo that failed to load, GitHub's own auto-merge, and a PR waiting on two
+// others (one in a repo pr-mon doesn't monitor).
 func state() protocol.Snapshot {
 	api := testfixtures.Repo("acme/api", []models.PullRequest{
 		pr(1, func(p *models.PullRequest) {
@@ -47,6 +78,7 @@ func state() protocol.Snapshot {
 			testfixtures.Pending(p)
 			p.Checks = []models.Check{{Name: "ci", State: "PENDING", StartedAt: models.Ptr(checkStarted)}}
 			p.ChecksTotal = 1
+			p.RequiredBy = []models.PRRef{waiting}
 		}),
 		pr(3, func(p *models.PullRequest) {
 			testfixtures.Failing(p)
@@ -75,6 +107,10 @@ func state() protocol.Snapshot {
 			p.AutoMerge = &models.AutoMerge{Method: models.MergeRebase, EnabledBy: "carol"}
 			p.HeadRefID = nil
 		}),
+		readiness.Wait(pr(9, func(p *models.PullRequest) {
+			p.Title = "Release 2.0"
+			p.WaitsOn = []models.PRRef{pending, elsewhere}
+		})),
 	}, func(repo *models.Repo) { repo.PRTotal = 60 })
 
 	rich := testfixtures.Repo("Textualize/rich", []models.PullRequest{
@@ -151,12 +187,13 @@ func files() map[string]any {
 			ID: 4, OK: true, Result: notify.NotificationForm()},
 		"preview-notification-response.json": protocol.Response{ID: 5, OK: true,
 			Result: notify.PreviewMessage("acme/api", "{{PR_REPO}}#{{PR_NUM}} {{PR_OOPS}}")},
-		"event-repos.json":     protocol.EventMessage{Event: "repos", Data: snapshot},
-		"event-repo.json":      protocol.EventMessage{Event: "repo", Data: repoUpdate},
-		"event-seen.json":      protocol.EventMessage{Event: "seen", Data: protocol.SeenUpdate{Name: "acme/api", Unseen: snapshot.Unseen["acme/api"]}},
-		"event-collapsed.json": protocol.EventMessage{Event: "collapsed", Data: protocol.CollapsedUpdate{Collapsed: snapshot.Collapsed}},
-		"event-config.json":    protocol.EventMessage{Event: "config", Data: protocol.ConfigUpdate{Config: snapshot.Config}},
-		"event-status.json":    protocol.EventMessage{Event: "status", Data: protocol.StatusUpdate{Status: snapshot.Status}},
+		"dependency-graph-response.json": protocol.Response{ID: 6, OK: true, Result: graph()},
+		"event-repos.json":               protocol.EventMessage{Event: "repos", Data: snapshot},
+		"event-repo.json":                protocol.EventMessage{Event: "repo", Data: repoUpdate},
+		"event-seen.json":                protocol.EventMessage{Event: "seen", Data: protocol.SeenUpdate{Name: "acme/api", Unseen: snapshot.Unseen["acme/api"]}},
+		"event-collapsed.json":           protocol.EventMessage{Event: "collapsed", Data: protocol.CollapsedUpdate{Collapsed: snapshot.Collapsed}},
+		"event-config.json":              protocol.EventMessage{Event: "config", Data: protocol.ConfigUpdate{Config: snapshot.Config}},
+		"event-status.json":              protocol.EventMessage{Event: "status", Data: protocol.StatusUpdate{Status: snapshot.Status}},
 		"event-toast.json": protocol.EventMessage{Event: "toast", Data: protocol.Toast{
 			Message: "Merged acme/api#1 (squash)", Severity: "information"}},
 		"requests.json":     requests(squash, merge),
@@ -193,6 +230,12 @@ func requests(squash, merge models.MergeMethod) []map[string]any {
 		{"id": 15, "op": "preview_notification",
 			"args": map[string]any{"repo": "acme/api", "message": "{{PR_NUM}}"}},
 		{"id": 16, "op": "set_poll_interval", "args": map[string]any{"seconds": 120}},
+		{"id": 17, "op": "add_dependency",
+			"args": map[string]any{"repo": "acme/api", "number": 9, "on": "acme/api#2"}},
+		{"id": 18, "op": "remove_dependency",
+			"args": map[string]any{"repo": "acme/api", "number": 9, "on": "acme/lib#5"}},
+		{"id": 19, "op": "dependency_graph",
+			"args": map[string]any{"repo": "acme/api", "number": 2}},
 	}
 }
 

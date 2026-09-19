@@ -98,11 +98,17 @@ struct ActionSheet: View {
     }
 }
 
+/// What a PR's menus can ask for beyond its actions: its dependencies.
+enum DependencyCommand {
+    case waitFor, showGraph
+}
+
 /// Menu items for a PR, shared by the context menu and the menu bar.
 struct PRMenuItems: View {
     let repo: Repo
     let pr: PullRequest
     let act: (ActionOption) -> Void
+    let depend: (DependencyCommand) -> Void
 
     var body: some View {
         Button("Open in Browser") { Browser.open(pr.url) }
@@ -112,6 +118,9 @@ struct PRMenuItems: View {
             Button(ActionRequest(repo: repo, pr: pr, option: option).menuTitle) { act(option) }
                 .disabled(!option.available)
         }
+        Divider()
+        Button("Wait for Another Pull Request…") { depend(.waitFor) }
+        Button("Show Dependency Graph…") { depend(.showGraph) }
     }
 }
 
@@ -121,6 +130,7 @@ struct PullRequestContext {
     var repo: Repo
     var pr: PullRequest
     var act: (ActionOption) -> Void
+    var depend: (DependencyCommand) -> Void
 }
 
 extension FocusedValues {
@@ -145,6 +155,11 @@ struct PullRequestCommands: Commands {
                         .disabled(!option.available)
                         .keyboardShortcut(Self.shortcut(option.key), modifiers: [.command, .option])
                 }
+                Divider()
+                Button("Wait for Another Pull Request…") { context.depend(.waitFor) }
+                    .keyboardShortcut("w", modifiers: [.command, .option])
+                Button("Show Dependency Graph…") { context.depend(.showGraph) }
+                    .keyboardShortcut("g", modifiers: [.command, .option])
             } else {
                 Button("Open in Browser") {}.disabled(true)
                     .keyboardShortcut("o")

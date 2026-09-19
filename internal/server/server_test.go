@@ -3,6 +3,7 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -50,6 +51,16 @@ func (f *fakeGitHub) EnableAutoMerge(context.Context, string, models.MergeMethod
 func (f *fakeGitHub) DisableAutoMerge(context.Context, string) error { return nil }
 
 func (f *fakeGitHub) DeleteBranch(context.Context, string) error { return nil }
+
+// LookupPRs reports every PR as open.
+func (f *fakeGitHub) LookupPRs(_ context.Context, repo string, numbers []int) ([]models.PRRef, error) {
+	refs := []models.PRRef{}
+	for _, number := range numbers {
+		refs = append(refs, models.PRRef{Repo: repo, Number: number, Title: "Elsewhere",
+			URL: fmt.Sprintf("https://github.com/%s/pull/%d", repo, number), State: models.PROpen})
+	}
+	return refs, nil
+}
 
 // serve starts a monitor and server on a short socket path (macOS limits them).
 func serve(t *testing.T) (*server.Server, *service.Monitor, string) {
@@ -185,6 +196,39 @@ func TestCommandsReachTheMonitor(t *testing.T) {
 	}
 }
 
+func TestDependenciesOverTheSocket(t *testing.T) {
+	_, monitor, socket := serve(t)
+	remote := connect(t, socket, "")
+
+	if err := remote.AddDependency("acme/api", 1, "other/lib#5"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		repo, _ := remote.Repo("acme/api")
+		return repo.PRs[0].Status == models.StatusWaiting
+	})
+	graph, err := remote.DependencyGraph("acme/api", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.WaitsOn) != 1 || graph.WaitsOn[0].PR.Key() != "other/lib#5" ||
+		graph.WaitsOn[0].PR.Title != "Elsewhere" {
+		t.Errorf("graph = %+v", graph)
+	}
+	if err := remote.AddDependency("acme/api", 1, "other/lib#5"); err == nil ||
+		err.Error() != "acme/api#1 already waits on other/lib#5" {
+		t.Errorf("adding it twice = %v", err)
+	}
+	if err := remote.RemoveDependency("acme/api", 1, "other/lib#5"); err != nil {
+		t.Fatal(err)
+	}
+	monitor.WaitIdle()
+	waitFor(t, func() bool {
+		repo, _ := remote.Repo("acme/api")
+		return repo.PRs[0].Status == models.StatusReady
+	})
+}
+
 func TestErrorsComeBackAsErrors(t *testing.T) {
 	_, _, socket := serve(t)
 	remote := connect(t, socket, "")
@@ -276,7 +320,8 @@ func TestUnknownOp(t *testing.T) {
 func TestOpsCoverTheDocumentedRequests(t *testing.T) {
 	documented := []string{
 		"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-		"set_collapsed", "perform", "save_notifications", "send_test", "set_poll_interval",
+		"set_collapsed", "perform", "add_dependency", "remove_dependency", "dependency_graph",
+		"save_notifications", "send_test", "set_poll_interval",
 		"notification_form", "preview_notification", "shutdown",
 	}
 	if !reflect.DeepEqual(server.Ops, documented) {

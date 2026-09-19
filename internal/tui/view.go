@@ -51,6 +51,8 @@ func statusStyle(status models.Status) (string, lipgloss.Style) {
 		return "⋯", lipgloss.NewStyle().Foreground(yellow)
 	case models.StatusDraft:
 		return "◌", dim
+	case models.StatusWaiting:
+		return "⧗", lipgloss.NewStyle().Foreground(cyan)
 	}
 	return "?", dim
 }
@@ -366,6 +368,8 @@ func (m *Model) detailsView(width int) string {
 		}
 		lines = append(lines, dim.Render(label)+issueLabel(issue, name)+" "+issue.Title)
 	}
+	lines = append(lines, labelled("Waits on:    ", pr.WaitsOn, name)...)
+	lines = append(lines, labelled("Required by: ", pr.RequiredBy, name)...)
 	lines = append(lines, lipgloss.NewStyle().Underline(true).Foreground(blue).Render(pr.URL), "")
 	lines = append(lines, style.Render(icon+" "+string(pr.Status)))
 	armed := m.backend.Armed(name)[pr.Number]
@@ -398,6 +402,18 @@ func (m *Model) detailsView(width int) string {
 	return strings.Join(lines, "\n")
 }
 
+// labelled lists PRs under a label that shows on the first line only.
+func labelled(label string, refs []models.PRRef, repo string) []string {
+	lines := []string{}
+	for index, ref := range refs {
+		if index > 0 {
+			label = strings.Repeat(" ", len(label))
+		}
+		lines = append(lines, dim.Render(label)+refLine(ref, repo, 0))
+	}
+	return lines
+}
+
 func (m *Model) footerView() string {
 	keys := []struct{ key, label string }{
 		{"A", "Add repo"}, {"D", "Remove repo"}, {"N", "Notifications"},
@@ -408,7 +424,7 @@ func (m *Model) footerView() string {
 		parts = append(parts, keyStyle.Render(" "+item.key+" ")+" "+item.label)
 	}
 	left := strings.Join(parts, "  ")
-	right := keyStyle.Render(" ⏎ ") + " Actions"
+	right := keyStyle.Render(" w ") + " Dependencies  " + keyStyle.Render(" ⏎ ") + " Actions"
 	gap := max(1, m.width-lipgloss.Width(left)-lipgloss.Width(right))
 	return left + strings.Repeat(" ", gap) + right
 }

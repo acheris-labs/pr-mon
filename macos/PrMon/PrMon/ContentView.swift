@@ -12,6 +12,8 @@ struct ContentView: View {
     @State private var repoName: String?
     @State private var prID: PullRequest.ID?
     @State private var request: ActionRequest?
+    @State private var waitingTarget: PRTarget?
+    @State private var graphTarget: PRTarget?
     @State private var columns = NavigationSplitViewVisibility.all
 
     private var state: BackendState? { store.state }
@@ -37,13 +39,19 @@ struct ContentView: View {
                 } content: {
                     PRList(
                         entry: entry, state: state, selection: $prID,
-                        act: { pr, option in act(on: pr, option) }
+                        act: { pr, option in act(on: pr, option) },
+                        depend: { pr, command in depend(pr, command) }
                     )
                     .navigationSplitViewColumnWidth(min: 300, ideal: 420)
                 } detail: {
                     PRDetailColumn(
                         entry: entry, pr: selectedPR, state: state,
-                        act: { pr, option in act(on: pr, option) }
+                        act: { pr, option in act(on: pr, option) },
+                        depend: { pr, command in depend(pr, command) },
+                        stopWaiting: { pr, ref in
+                            guard let repo = entry?.name else { return }
+                            store.removeDependency(repo: repo, number: pr.number, on: ref.key)
+                        }
                     )
                 }
             } else {
@@ -65,6 +73,8 @@ struct ContentView: View {
                 store.perform(repo: request.repo.name, number: request.pr.number, action: action)
             }
         }
+        .sheet(item: $waitingTarget) { DependencyPicker(store: store, target: $0) }
+        .sheet(item: $graphTarget) { DependencyGraphSheet(store: store, target: $0) }
         .focusedSceneValue(\.pullRequest, focusedContext)
         .onChange(of: repoName) {
             selection.repo = repoName
@@ -85,7 +95,19 @@ struct ContentView: View {
 
     private var focusedContext: PullRequestContext? {
         guard let repo = entry?.repo, let pr = selectedPR else { return nil }
-        return PullRequestContext(repo: repo, pr: pr) { option in act(on: pr, option) }
+        return PullRequestContext(
+            repo: repo, pr: pr, act: { option in act(on: pr, option) },
+            depend: { command in depend(pr, command) }
+        )
+    }
+
+    private func depend(_ pr: PullRequest, _ command: DependencyCommand) {
+        guard let repo = entry?.name else { return }
+        let target = PRTarget(repo: repo, number: pr.number, title: pr.title)
+        switch command {
+        case .waitFor: waitingTarget = target
+        case .showGraph: graphTarget = target
+        }
     }
 
     /// Open Settings on one repo's notifications.
@@ -263,6 +285,7 @@ private struct PRList: View {
     let state: BackendState
     @Binding var selection: PullRequest.ID?
     let act: (PullRequest, ActionOption) -> Void
+    let depend: (PullRequest, DependencyCommand) -> Void
 
     var body: some View {
         let prs = entry?.repo?.prs ?? []
@@ -275,7 +298,7 @@ private struct PRList: View {
         }
         .contextMenu(forSelectionType: PullRequest.ID.self) { ids in
             if let id = ids.first, let pr = prs.first(where: { $0.id == id }), let repo = entry?.repo {
-                PRMenuItems(repo: repo, pr: pr) { act(pr, $0) }
+                PRMenuItems(repo: repo, pr: pr, act: { act(pr, $0) }, depend: { depend(pr, $0) })
             }
         } primaryAction: { ids in
             if let id = ids.first, let pr = prs.first(where: { $0.id == id }) {
@@ -354,10 +377,15 @@ private struct PRDetailColumn: View {
     let pr: PullRequest?
     let state: BackendState
     let act: (PullRequest, ActionOption) -> Void
+    let depend: (PullRequest, DependencyCommand) -> Void
+    let stopWaiting: (PullRequest, PRRef) -> Void
 
     var body: some View {
         if let pr, let repo = entry?.repo {
-            PRDetail(repo: repo, pr: pr, armed: state.armed(repo: repo.name, number: pr.number))
+            PRDetail(
+                repo: repo, pr: pr, armed: state.armed(repo: repo.name, number: pr.number),
+                depend: { depend(pr, $0) }, stopWaiting: { stopWaiting(pr, $0) }
+            )
                 .toolbar {
                     ToolbarItemGroup {
                         ForEach(pr.actions) { option in
@@ -365,6 +393,13 @@ private struct PRDetailColumn: View {
                                 .disabled(!option.available)
                                 .help(option.available ? (option.note ?? option.label) : (option.reason ?? ""))
                         }
+                        Menu {
+                            Button("Wait for Another Pull Request…") { depend(pr, .waitFor) }
+                            Button("Show Dependency Graph…") { depend(pr, .showGraph) }
+                        } label: {
+                            Label("Dependencies", systemImage: "point.3.connected.trianglepath.dotted")
+                        }
+                        .help("What this pull request waits on")
                         Button { Browser.open(pr.url) } label: {
                             Label("Open in Browser", systemImage: "safari")
                         }
@@ -381,6 +416,8 @@ private struct PRDetail: View {
     let repo: Repo
     let pr: PullRequest
     let armed: ArmedMerge?
+    let depend: (DependencyCommand) -> Void
+    let stopWaiting: (PRRef) -> Void
 
     var body: some View {
         ScrollView {
@@ -399,6 +436,38 @@ private struct PRDetail: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(4)
+                    }
+                }
+                if !pr.waitsOn.isEmpty {
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(pr.waitsOn) { ref in
+                                HStack {
+                                    PRRefRow(ref: ref, repo: repo.name)
+                                    Spacer()
+                                    Button { stopWaiting(ref) } label: {
+                                        Image(systemName: "minus.circle")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Stop waiting on \(ref.label(in: repo.name))")
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(4)
+                    } label: {
+                        dependencyHeading("Waits On")
+                    }
+                }
+                if !pr.requiredBy.isEmpty {
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(pr.requiredBy) { PRRefRow(ref: $0, repo: repo.name) }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(4)
+                    } label: {
+                        dependencyHeading("Required By")
                     }
                 }
                 if !pr.closingIssues.isEmpty {
@@ -455,6 +524,17 @@ private struct PRDetail: View {
                 }
             }
         }
+    }
+
+    private func dependencyHeading(_ title: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Button("Add…") { depend(.waitFor) }
+            Button("Show Graph…") { depend(.showGraph) }
+        }
+        .buttonStyle(.link)
+        .font(.callout)
     }
 
     private func chip(_ text: String, tint: Color) -> some View {

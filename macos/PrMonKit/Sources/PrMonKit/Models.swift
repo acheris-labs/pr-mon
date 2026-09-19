@@ -24,6 +24,8 @@ public enum PRStatus: String, LenientEnum {
     case pending = "PENDING"
     case behind = "BEHIND"
     case blocked = "BLOCKED"
+    /// Mergeable, but waiting on other PRs to merge first.
+    case waiting = "WAITING"
     case ready = "READY"
     case unknown = "UNKNOWN"
     public static let unknownValue = PRStatus.unknown
@@ -196,6 +198,72 @@ public struct LinkedIssue: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+/// Where a PR a dependency names stands on GitHub.
+public enum PRState: String, LenientEnum {
+    case open = "OPEN"
+    case merged = "MERGED"
+    case closed = "CLOSED"
+    /// Not looked up yet.
+    case unknown = "UNKNOWN"
+    public static let unknownValue = PRState.unknown
+}
+
+/// A pull request anywhere on GitHub, named by a dependency. It may be in a
+/// repo pr-mon doesn't monitor.
+public struct PRRef: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public var repo: String
+    public var number: Int
+    public var title: String
+    public var url: String
+    public var state: PRState
+    /// pr-mon's status, for an open PR in a monitored repo.
+    public var status: PRStatus?
+
+    public init(repo: String, number: Int, title: String, url: String, state: PRState,
+                status: PRStatus? = nil) {
+        self.repo = repo
+        self.number = number
+        self.title = title
+        self.url = url
+        self.state = state
+        self.status = status
+    }
+
+    /// "owner/repo#12": how the backend names it in `add_dependency` and friends.
+    public var key: String { "\(repo)#\(number)" }
+    public var id: String { key }
+
+    /// "#12", or "other/repo#12" for a PR outside `repo`.
+    public func label(in repo: String) -> String {
+        self.repo == repo ? "#\(number)" : key
+    }
+}
+
+/// One PR in a dependency tree, with the next step in the same direction.
+public struct DependencyNode: Codable, Sendable, Equatable, Identifiable {
+    public var pr: PRRef
+    public var children: [DependencyNode]
+    /// Shown in full elsewhere in the tree, so `children` is empty.
+    public var repeated: Bool
+
+    public var id: String { pr.key }
+    /// For outline views: nil for a leaf.
+    public var branches: [DependencyNode]? { children.isEmpty ? nil : children }
+}
+
+/// Everything connected to one PR: what it waits on, and what waits on it.
+public struct DependencyGraph: Codable, Sendable, Equatable {
+    public var pr: PRRef
+    public var waitsOn: [DependencyNode]
+    public var requiredBy: [DependencyNode]
+
+    enum CodingKeys: String, CodingKey {
+        case pr
+        case waitsOn = "waits_on"
+        case requiredBy = "required_by"
+    }
+}
+
 public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     public var number: Int
@@ -223,9 +291,17 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public var strictlyReady: Bool
     public var lastCheckStartedAt: String?
     public var actions: [ActionOption]
+    /// PRs that must merge before this one, and PRs waiting for this one.
+    public var waitsOn: [PRRef]
+    public var requiredBy: [PRRef]
+
+    /// "owner/repo#12" of this PR.
+    public func key(in repo: String) -> String { "\(repo)#\(number)" }
 
     enum CodingKeys: String, CodingKey {
         case id, number, title, url, author, mergeable, checks, status, reasons, actions
+        case waitsOn = "waits_on"
+        case requiredBy = "required_by"
         case createdAt = "created_at"
         case isDraft = "is_draft"
         case headRef = "head_ref"

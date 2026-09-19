@@ -34,6 +34,9 @@ type Backend interface {
 	MarkSeen(name string, number int) error
 	SetCollapsed(owner string, collapsed bool) error
 	Perform(repo string, number int, action models.Action) error
+	AddDependency(repo string, number int, on string) error
+	RemoveDependency(repo string, number int, on string) error
+	DependencyGraph(repo string, number int) (models.DependencyGraph, error)
 	SaveNotifications(repo string, settings config.NotifyConfig) error
 	SendTest(repo string, settings config.NotifyConfig) error
 	NotificationForm() (notify.Form, error)
@@ -168,6 +171,25 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			dialog.previewErr = ""
 			if typed.err != nil {
 				dialog.previewErr = typed.err.Error()
+			}
+		}
+		return m, nil
+
+	case dependencyDone:
+		if dialog, ok := m.modal.(*dependencyModal); ok {
+			dialog.finished(m, typed)
+		} else if typed.err != nil {
+			m.addToast(typed.err.Error(), "error")
+		}
+		return m, nil
+
+	case graphReady:
+		if dialog, ok := m.modal.(*dependencyModal); ok {
+			graph := typed.graph
+			dialog.graph = &graph
+			dialog.graphErr = ""
+			if typed.err != nil {
+				dialog.graphErr = typed.err.Error()
 			}
 		}
 		return m, nil

@@ -104,6 +104,22 @@ func batchQuery(numbers []int) string {
 		"}\n" + prFields
 }
 
+// lookupQuery asks for just enough about PRs in one repo to know whether they
+// merged: what a dependency on them needs, monitored repo or not.
+func lookupQuery(numbers []int) string {
+	fields := make([]string, len(numbers))
+	for i, number := range numbers {
+		fields[i] = fmt.Sprintf("    pr%d: pullRequest(number: %d) { number title url state }",
+			number, number)
+	}
+	return "query($owner: String!, $name: String!) {\n" +
+		"  repository(owner: $owner, name: $name) {\n" +
+		"    nameWithOwner\n" +
+		strings.Join(fields, "\n") + "\n" +
+		"  }\n" +
+		"}\n"
+}
+
 const (
 	mergeMutation = `
 mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID) {
@@ -435,6 +451,45 @@ func (c *Client) fetchPages(ctx context.Context, variables map[string]any, numbe
 		}
 	}
 	return found, nil
+}
+
+// LookupPRs returns the state of PRs in one repo, named as GitHub spells the repo.
+func (c *Client) LookupPRs(ctx context.Context, name string, numbers []int) ([]models.PRRef, error) {
+	owner, repo, found := strings.Cut(name, "/")
+	if !found || owner == "" || repo == "" || strings.Contains(repo, "/") || len(numbers) == 0 {
+		return nil, &NotFoundError{Message: fmt.Sprintf("Expected owner/name, got %q", name)}
+	}
+	data, err := c.graphql(ctx, lookupQuery(numbers), map[string]any{"owner": owner, "name": repo})
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]json.RawMessage
+	if raw, ok := data["repository"]; !ok || string(raw) == "null" {
+		return nil, &NotFoundError{Message: fmt.Sprintf("Repository %s not found", name)}
+	} else if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, &Error{Message: fmt.Sprintf("GitHub sent an unreadable repository: %v", err)}
+	}
+	var canonical string
+	json.Unmarshal(payload["nameWithOwner"], &canonical)
+	refs := []models.PRRef{}
+	for _, number := range numbers {
+		var node *struct {
+			Number int    `json:"number"`
+			Title  string `json:"title"`
+			URL    string `json:"url"`
+			State  string `json:"state"`
+		}
+		if raw, ok := payload[fmt.Sprintf("pr%d", number)]; ok {
+			json.Unmarshal(raw, &node)
+		}
+		if node == nil {
+			return nil, &NotFoundError{Message: fmt.Sprintf("%s#%d not found", name, number)}
+		}
+		refs = append(refs, models.PRRef{
+			Repo: canonical, Number: node.Number, Title: node.Title, URL: node.URL, State: node.State,
+		})
+	}
+	return refs, nil
 }
 
 // Merge merges the PR; with expectedHeadOid, GitHub refuses if the head has moved.

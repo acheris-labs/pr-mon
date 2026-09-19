@@ -106,6 +106,7 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `a` | action menu | Toggle auto-merge: GitHub's if the repo allows it, otherwise pr-mon's "merge when ready" (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
 | `space` | action menu | Toggle "delete remote branch" |
+| `w` | PR list or action menu | Dependencies: what the PR waits on (`a` add, `d` remove, `g` graph) |
 | `N` | repo tree (on a repo) | Notification settings for that repo |
 | `r` | anywhere | Refresh now |
 | `q` | anywhere | Quit the dashboard (the backend keeps running) |
@@ -119,8 +120,9 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
   collapsed group still shows alerts; a new alert expands its group.
   Collapsed groups are remembered.
 - Selecting a PR in the PR list marks it seen.
-- PR statuses: `READY`, `CONFLICT`, `FAILING`, `BLOCKED`, `BEHIND`, `PENDING`,
-  `CHECKING` (GitHub still computing), `DRAFT`. The details pane lists every
+- PR statuses: `READY`, `WAITING` (ready, but waiting on other PRs), `CONFLICT`,
+  `FAILING`, `BLOCKED`, `BEHIND`, `PENDING`, `CHECKING` (GitHub still
+  computing), `DRAFT`. The details pane lists every
   blocking reason. `auto` after a status means GitHub auto-merge is on.
 
 ## Auto-merge
@@ -142,6 +144,24 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
   - It only runs while the backend does; see `pr-mon autostart enable`.
 
 Click a PR's link in the details pane to open it in the browser.
+
+## Dependencies
+
+A PR can wait for other PRs to merge first: select a release PR and add the
+feature PRs it needs. Any number, in any repo, monitored or not.
+
+- **Add:** TUI `w` then `a`, search the monitored PRs or type `owner/repo#12`
+  or a PR URL. App: Pull Request › Wait for Another Pull Request… (⌥⌘W).
+- **While any is unmerged** the PR shows `WAITING` (`BLOCKED` if one was closed
+  without merging), Merge is unavailable, and merge when ready waits. Auto-merge
+  on a waiting PR is always pr-mon's: GitHub's would merge it without waiting,
+  so a waiting PR that has it on is switched over.
+- **When the last one merges** the PR becomes `READY` (your READY notification,
+  if the repo has one) and, if armed, pr-mon merges it.
+- **Graph:** TUI `w` then `g`; app ⌥⌘G. Shows what the PR waits on, what those
+  wait on, and what waits on it.
+- A PR's dependencies are forgotten once it merges or closes. They live in
+  `state.json`.
 
 ## Notifications
 
@@ -192,7 +212,7 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
   desktop_enabled = false
   ```
 
-- State (seen PRs, collapsed groups): `~/.local/state/pr-mon/state.json` (respects `XDG_STATE_HOME`)
+- State (seen PRs, collapsed groups, armed merges, dependencies): `~/.local/state/pr-mon/state.json` (respects `XDG_STATE_HOME`)
 - Backend files, next to the state: `daemon.log` (rotated at 1 MB), `daemon.lock`
   (holds the pid), `daemon.sock`. If that path is too long for a Unix socket,
   the socket lives in `/tmp/pr-mon-<uid>/` instead.

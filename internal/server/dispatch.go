@@ -26,6 +26,12 @@ type performArgs struct {
 	Action json.RawMessage `json:"action"`
 }
 
+type dependencyArgs struct {
+	Repo   string `json:"repo"`
+	Number int    `json:"number"`
+	On     string `json:"on"`
+}
+
 type settingsArgs struct {
 	Repo     string          `json:"repo"`
 	Settings json.RawMessage `json:"settings"`
@@ -54,7 +60,8 @@ func decodeArgs[T any](raw json.RawMessage, op string) (T, error) {
 // Ops are every request the backend answers, in the order docs/protocol.md lists them.
 var Ops = []string{
 	"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-	"set_collapsed", "perform", "save_notifications", "send_test", "set_poll_interval",
+	"set_collapsed", "perform", "add_dependency", "remove_dependency", "dependency_graph",
+	"save_notifications", "send_test", "set_poll_interval",
 	"notification_form", "preview_notification", "shutdown",
 }
 
@@ -129,6 +136,27 @@ func (s *Server) dispatch(connection net.Conn, request protocol.Request) (any, e
 			return nil, err
 		}
 		return nil, s.monitor.Perform(ctx, args.Repo, args.Number, action)
+
+	case "add_dependency":
+		args, err := decodeArgs[dependencyArgs](request.Args, request.Op)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.monitor.AddDependency(ctx, args.Repo, args.Number, args.On)
+
+	case "remove_dependency":
+		args, err := decodeArgs[dependencyArgs](request.Args, request.Op)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.monitor.RemoveDependency(args.Repo, args.Number, args.On)
+
+	case "dependency_graph":
+		args, err := decodeArgs[dependencyArgs](request.Args, request.Op)
+		if err != nil {
+			return nil, err
+		}
+		return s.monitor.DependencyGraph(args.Repo, args.Number), nil
 
 	case "save_notifications":
 		args, err := decodeArgs[settingsArgs](request.Args, request.Op)

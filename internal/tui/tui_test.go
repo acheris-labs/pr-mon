@@ -179,6 +179,61 @@ func (f *fakeBackend) PreviewNotification(repo, message string) (notify.Preview,
 	return notify.PreviewMessage(repo, message), nil
 }
 
+// AddDependency records the call and adds the edge the way the backend would,
+// so the dialog sees it; "bad" is refused.
+func (f *fakeBackend) AddDependency(repo string, number int, on string) error {
+	f.record("depend " + repo + " " + itoa(number) + " " + on)
+	if on == "bad" {
+		return errors.New(`expected owner/repo#number or a pull request URL, got "bad"`)
+	}
+	f.editPR(repo, number, func(pr *models.PullRequest) {
+		pr.WaitsOn = append(pr.WaitsOn, models.PRRef{Repo: "acme/web", Number: 7,
+			Title: "Failing thing", State: models.PROpen, Status: models.Ptr(models.StatusFailing)})
+	})
+	return nil
+}
+
+func (f *fakeBackend) RemoveDependency(repo string, number int, on string) error {
+	f.record("undepend " + repo + " " + itoa(number) + " " + on)
+	f.editPR(repo, number, func(pr *models.PullRequest) {
+		kept := []models.PRRef{}
+		for _, ref := range pr.WaitsOn {
+			if ref.Key() != on {
+				kept = append(kept, ref)
+			}
+		}
+		pr.WaitsOn = kept
+	})
+	return nil
+}
+
+func (f *fakeBackend) DependencyGraph(repo string, number int) (models.DependencyGraph, error) {
+	f.record("graph " + repo + " " + itoa(number))
+	merged := models.PRRef{Repo: "acme/lib", Number: 3, Title: "Groundwork", State: models.PRMerged}
+	return models.DependencyGraph{
+		PR: models.PRRef{Repo: repo, Number: number, Title: "A change", State: models.PROpen,
+			Status: models.Ptr(models.StatusWaiting)},
+		WaitsOn: []models.DependencyNode{{
+			PR: models.PRRef{Repo: "acme/web", Number: 7, Title: "Failing thing",
+				State: models.PROpen, Status: models.Ptr(models.StatusFailing)},
+			Children: []models.DependencyNode{{PR: merged, Children: []models.DependencyNode{}}},
+		}},
+		RequiredBy: []models.DependencyNode{},
+	}, nil
+}
+
+func (f *fakeBackend) editPR(repo string, number int, edit func(*models.PullRequest)) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	loaded := f.repos[repo]
+	for i := range loaded.PRs {
+		if loaded.PRs[i].Number == number {
+			edit(&loaded.PRs[i])
+		}
+	}
+	f.repos[repo] = loaded
+}
+
 func itoa(number int) string { return strconv.Itoa(number) }
 
 func boolText(value bool) string {
@@ -541,4 +596,89 @@ func contains2(items []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestDependenciesDialog(t *testing.T) {
+	model, backend := newModel()
+	press(t, model, "enter", "w") // PR 1's dependencies
+	if !strings.Contains(model.View(), "Doesn't wait on any other PR") {
+		t.Fatalf("dialog = \n%s", model.View())
+	}
+
+	// Add one through the picker: it lists open PRs in every monitored repo.
+	press(t, model, "a")
+	view := model.View()
+	for _, want := range []string{"#2 A change", "acme/web#7 A change"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the picker is missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "#1 A change") {
+		t.Errorf("a PR can't wait on itself:\n%s", view)
+	}
+	press(t, model, "w", "e", "b") // narrows to acme/web#7
+	press(t, model, "enter")
+	if !contains2(backend.recorded(), "depend acme/api 1 acme/web#7") {
+		t.Fatalf("calls = %v", backend.recorded())
+	}
+	view = model.View()
+	if !strings.Contains(view, "Waits on:") || !strings.Contains(view, "acme/web#7 Failing thing FAILING") {
+		t.Errorf("the list should show it:\n%s", view)
+	}
+
+	// Anything else typed goes to the backend as is; its refusal stays on screen.
+	press(t, model, "a", "b", "a", "d", "enter")
+	if !strings.Contains(model.View(), `got "bad"`) {
+		t.Errorf("the refusal should show:\n%s", model.View())
+	}
+	press(t, model, "esc")
+
+	press(t, model, "g")
+	view = model.View()
+	for _, want := range []string{"Dependency graph", "└─ ✗ acme/web#7 Failing thing",
+		"✓ acme/lib#3 Groundwork merged", "▶ ⧗ #1 A change WAITING"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the graph is missing %q:\n%s", want, view)
+		}
+	}
+	press(t, model, "esc", "d")
+	if !contains2(backend.recorded(), "undepend acme/api 1 acme/web#7") {
+		t.Errorf("calls = %v", backend.recorded())
+	}
+	press(t, model, "esc")
+	if model.modal != nil {
+		t.Error("escape should close the dialog")
+	}
+}
+
+func TestDependenciesFromTheActionMenu(t *testing.T) {
+	model, _ := newModel()
+	press(t, model, "enter", "enter")
+	if !strings.Contains(model.View(), "[w] Dependencies…") {
+		t.Fatalf("menu = \n%s", model.View())
+	}
+	press(t, model, "w")
+	if _, ok := model.modal.(*dependencyModal); !ok {
+		t.Errorf("w should open the dependencies dialog, got %T", model.modal)
+	}
+}
+
+func TestWaitingPRDetails(t *testing.T) {
+	model, backend := newModel()
+	backend.editPR("acme/api", 2, func(pr *models.PullRequest) {
+		pr.WaitsOn = []models.PRRef{
+			{Repo: "acme/api", Number: 1, Title: "A change", State: models.PROpen,
+				Status: models.Ptr(models.StatusReady)},
+			{Repo: "acme/lib", Number: 5, Title: "Shared parser", State: models.PRMerged},
+		}
+		pr.Status = models.StatusWaiting
+	})
+	press(t, model, "enter", "down")
+	view := model.View()
+	for _, want := range []string{"⧗ WAITING", "Waits on:    ✓ #1 A change READY",
+		"✓ acme/lib#5 Shared parser merged"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the details are missing %q:\n%s", want, view)
+		}
+	}
 }

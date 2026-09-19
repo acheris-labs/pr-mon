@@ -50,7 +50,7 @@ func TestRulesMatchTheFixtures(t *testing.T) {
 			}
 			armed[parsed] = merge
 		}
-		// Recompute from the raw GitHub-derived fields only.
+		// Recompute from the raw GitHub-derived fields and what each PR waits on.
 		bare := repo
 		bare.PRs = nil
 		for _, pr := range repo.PRs {
@@ -60,7 +60,7 @@ func TestRulesMatchTheFixtures(t *testing.T) {
 			stripped.StrictlyReady = false
 			stripped.LastCheckStartedAt = nil
 			stripped.Actions = nil
-			bare.PRs = append(bare.PRs, readiness.Assess(stripped))
+			bare.PRs = append(bare.PRs, readiness.Wait(readiness.Assess(stripped)))
 		}
 		computed := actions.WithActions(bare, armed)
 		for i, pr := range computed.PRs {

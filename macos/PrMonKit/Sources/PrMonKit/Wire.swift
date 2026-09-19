@@ -80,6 +80,17 @@ struct PreviewArgs: Encodable, Sendable {
     var message: String
 }
 
+public struct DependencyArgs: Encodable, Sendable {
+    var repo: String
+    var number: Int
+    var on: String
+}
+
+public struct PRArgs: Encodable, Sendable {
+    var repo: String
+    var number: Int
+}
+
 public struct PerformArgs: Encodable, Sendable {
     var repo: String
     var number: Int

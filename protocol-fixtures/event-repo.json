@@ -71,7 +71,9 @@
               "needs_method": false,
               "offers_delete_branch": false
             }
-          ]
+          ],
+          "waits_on": [],
+          "required_by": []
         },
         {
           "id": "PR_2",
@@ -130,6 +132,17 @@
               "note": "branch won't be deleted: repo doesn't auto-delete",
               "needs_method": true,
               "offers_delete_branch": false
+            }
+          ],
+          "waits_on": [],
+          "required_by": [
+            {
+              "repo": "acme/api",
+              "number": 9,
+              "title": "Release 2.0",
+              "url": "https://github.com/acme/api/pull/9",
+              "state": "OPEN",
+              "status": "WAITING"
             }
           ]
         },
@@ -200,7 +213,9 @@
               "needs_method": true,
               "offers_delete_branch": false
             }
-          ]
+          ],
+          "waits_on": [],
+          "required_by": []
         },
         {
           "id": "PR_4",
@@ -254,7 +269,9 @@
               "needs_method": true,
               "offers_delete_branch": false
             }
-          ]
+          ],
+          "waits_on": [],
+          "required_by": []
         },
         {
           "id": "PR_5",
@@ -322,7 +339,9 @@
               "needs_method": false,
               "offers_delete_branch": false
             }
-          ]
+          ],
+          "waits_on": [],
+          "required_by": []
         },
         {
           "id": "PR_6",
@@ -376,7 +395,9 @@
               "needs_method": false,
               "offers_delete_branch": false
             }
-          ]
+          ],
+          "waits_on": [],
+          "required_by": []
         },
         {
           "id": "PR_7",
@@ -430,7 +451,9 @@
               "needs_method": true,
               "offers_delete_branch": false
             }
-          ]
+          ],
+          "waits_on": [],
+          "required_by": []
         },
         {
           "id": "PR_8",
@@ -482,7 +505,82 @@
               "needs_method": false,
               "offers_delete_branch": false
             }
-          ]
+          ],
+          "waits_on": [],
+          "required_by": []
+        },
+        {
+          "id": "PR_9",
+          "number": 9,
+          "title": "Release 2.0",
+          "url": "https://github.com/acme/api/pull/9",
+          "author": "alice",
+          "created_at": "2026-09-15T01:28:54Z",
+          "is_draft": false,
+          "head_ref": "feature-9",
+          "base_ref": "main",
+          "head_ref_id": "REF_1",
+          "head_repo": "acme/api",
+          "mergeable": "MERGEABLE",
+          "merge_state": "CLEAN",
+          "review_decision": null,
+          "check_state": "SUCCESS",
+          "checks": [],
+          "checks_total": 0,
+          "auto_merge": null,
+          "closing_issues": [],
+          "last_commit_at": "2026-09-15T02:00:00Z",
+          "head_sha": "abc1234def5678abc1234def5678abc1234def56",
+          "status": "WAITING",
+          "reasons": [
+            {
+              "text": "Waiting on acme/api#2",
+              "level": "warning"
+            }
+          ],
+          "strictly_ready": false,
+          "last_check_started_at": null,
+          "actions": [
+            {
+              "key": "merge",
+              "kind": "merge",
+              "label": "Merge",
+              "available": false,
+              "reason": "WAITING: Waiting on acme/api#2",
+              "note": null,
+              "needs_method": false,
+              "offers_delete_branch": false
+            },
+            {
+              "key": "auto_merge",
+              "kind": "arm_merge",
+              "label": "Merge when ready (pr-mon)",
+              "available": true,
+              "reason": null,
+              "note": "after the PRs it waits on have merged",
+              "needs_method": true,
+              "offers_delete_branch": true
+            }
+          ],
+          "waits_on": [
+            {
+              "repo": "acme/api",
+              "number": 2,
+              "title": "PR 2",
+              "url": "https://github.com/acme/api/pull/2",
+              "state": "OPEN",
+              "status": "PENDING"
+            },
+            {
+              "repo": "acme/lib",
+              "number": 5,
+              "title": "Shared parser",
+              "url": "https://github.com/acme/lib/pull/5",
+              "state": "MERGED",
+              "status": null
+            }
+          ],
+          "required_by": []
         }
       ],
       "pr_total": 60,

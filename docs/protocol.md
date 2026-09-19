@@ -76,6 +76,9 @@ upgrade, a crash, a signal) and starting it again is the right thing to do.
 | `mark_seen` | `name`, `number` | `null` | Clears the PR's "new" marker. |
 | `set_collapsed` | `owner`, `collapsed`: bool | `null` | `owner` is lowercase (the tree grouping key). |
 | `perform` | `repo`, `number`, `action`: `Action` | `null` | GitHub failures are reported as `toast` events, not errors. |
+| `add_dependency` | `repo`, `number`, `on`: string | `null` | The PR waits for `on` to merge first. `on` is `"owner/repo#12"` or a pull request URL, in any repo. Errors if `on` is missing, merged or closed, or the edge would make a loop. |
+| `remove_dependency` | `repo`, `number`, `on` | `null` | Undoes `add_dependency`. |
+| `dependency_graph` | `repo`, `number` | `DependencyGraph` | Everything connected to the PR, both ways. |
 | `save_notifications` | `repo`, `settings`: `NotifyConfig` | `null` | |
 | `send_test` | `repo`, `settings`: `NotifyConfig` | `null` | Sends a sample notification with these unsaved settings. |
 | `set_poll_interval` | `seconds`: int | `null` | How often the backend checks GitHub (10–3600). |
@@ -85,6 +88,13 @@ upgrade, a crash, a signal) and starting it again is the right thing to do.
 
 Errors (`ok: false`) carry a message meant for the user, for example
 `"acme/api#12 is not an open PR"`.
+
+A PR with dependencies isn't merged, by pr-mon or by hand, until everything it
+waits on has merged: until then its `status` is `WAITING` (or `BLOCKED` when
+one closed without merging) and its `auto_merge` action is pr-mon's
+`arm_merge`, because GitHub's own auto-merge wouldn't wait. A waiting PR that
+already has GitHub's auto-merge on is moved to `arm_merge` with the same
+method. Dependencies are dropped when the waiting PR merges or closes.
 
 ## Events
 
@@ -192,7 +202,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 
 ### Object: `PullRequest`
 
-The backend computes the last five fields; clients display them rather than
+The backend computes the last seven fields; clients display them rather than
 reimplement the rules.
 
 | Field | Type | Meaning |
@@ -218,11 +228,13 @@ reimplement the rules.
 | `closing_issues` | [`LinkedIssue`] | Issues this PR closes on merge; empty when none are linked. |
 | `last_commit_at` | timestamp or null | |
 | `head_sha` | string or null | |
-| `status` | string | One of `DRAFT`, `CHECKING`, `CONFLICT`, `FAILING`, `PENDING`, `BEHIND`, `BLOCKED`, `READY`. |
+| `status` | string | One of `DRAFT`, `CHECKING`, `CONFLICT`, `FAILING`, `PENDING`, `BEHIND`, `BLOCKED`, `WAITING`, `READY`. `WAITING`: mergeable, but waiting on other PRs to merge first. |
 | `reasons` | [`Reason`] | Why it is (or isn't) mergeable, in display order. |
 | `strictly_ready` | bool | Safe to merge unattended (what merge when ready waits for). |
 | `last_check_started_at` | timestamp or null | |
 | `actions` | [`ActionOption`] | The PR's action menu, in display order. |
+| `waits_on` | [`PRRef`] | PRs that must merge before this one, in the order they were added. |
+| `required_by` | [`PRRef`] | PRs waiting for this one to merge. |
 
 ### Object: `Check`
 
@@ -240,6 +252,36 @@ reimplement the rules.
 | `title` | string | |
 | `url` | string | |
 | `repo` | string | The issue's own repository, which may not be the PR's. |
+
+### Object: `PRRef`
+
+A pull request anywhere on GitHub, named by a dependency. It may be in a repo
+pr-mon doesn't monitor.
+
+| Field | Type | Meaning |
+|:------|:-----|:--------|
+| `repo` | string | `owner/repo`. |
+| `number` | int | |
+| `title` | string | Empty until the backend has looked it up. |
+| `url` | string | |
+| `state` | string | `OPEN`, `MERGED`, `CLOSED`, or `UNKNOWN` before it has been looked up. |
+| `status` | string or null | pr-mon's `PullRequest.status`, for an open PR in a monitored repo. |
+
+### Object: `DependencyGraph`
+
+| Field | Type | Meaning |
+|:------|:-----|:--------|
+| `pr` | `PRRef` | The PR asked about. |
+| `waits_on` | [`DependencyNode`] | What it waits on; each node's children are what that PR waits on. |
+| `required_by` | [`DependencyNode`] | What waits on it; each node's children are what waits on that PR. |
+
+### Object: `DependencyNode`
+
+| Field | Type | Meaning |
+|:------|:-----|:--------|
+| `pr` | `PRRef` | |
+| `children` | [`DependencyNode`] | The next step in the same direction. |
+| `repeated` | bool | Shown in full elsewhere in this tree, so `children` is empty. |
 
 ### Object: `AutoMerge`
 

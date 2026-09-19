@@ -156,6 +156,39 @@ func PRReasons(pr models.PullRequest, status models.Status) []models.Reason {
 	return reasons
 }
 
+// Wait holds back a PR that waits on others, whatever GitHub says about it: it
+// isn't ready until each one has merged. A PR that is otherwise ready shows
+// WAITING, or BLOCKED when one it waits on closed without merging. pr.WaitsOn
+// must be filled in, and the rest of the PR already assessed.
+func Wait(pr models.PullRequest) models.PullRequest {
+	reasons := []models.Reason{}
+	closed := false
+	for _, ref := range pr.WaitsOn {
+		switch ref.State {
+		case models.PRMerged:
+		case models.PRClosed:
+			closed = true
+			reasons = append(reasons, models.Reason{
+				Text: fmt.Sprintf("%s was closed without merging", ref.Key()), Level: "error"})
+		default:
+			reasons = append(reasons, models.Reason{
+				Text: fmt.Sprintf("Waiting on %s", ref.Key()), Level: "warning"})
+		}
+	}
+	if len(reasons) == 0 {
+		return pr
+	}
+	pr.Reasons = append(reasons, pr.Reasons...)
+	pr.StrictlyReady = false
+	if pr.Status == models.StatusReady {
+		pr.Status = models.StatusWaiting
+		if closed {
+			pr.Status = models.StatusBlocked
+		}
+	}
+	return pr
+}
+
 func hasProblem(reasons []models.Reason) bool {
 	for _, reason := range reasons {
 		if reason.Level == "error" || reason.Level == "warning" {

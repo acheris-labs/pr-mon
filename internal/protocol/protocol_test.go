@@ -92,11 +92,15 @@ func TestSnapshotFixtureIsUnderstood(t *testing.T) {
 		t.Errorf("armed = %+v", snapshot.Armed)
 	}
 	api := snapshot.Repos["acme/api"]
-	if len(api.PRs) != 8 || api.PRTotal != 60 {
+	if len(api.PRs) != 9 || api.PRTotal != 60 {
 		t.Errorf("repo = %+v", api)
 	}
 	if api.PRs[0].Status != models.StatusReady || len(api.PRs[0].Actions) == 0 {
 		t.Errorf("pr = %+v", api.PRs[0])
+	}
+	if waiting := api.PRs[8]; waiting.Status != models.StatusWaiting || len(waiting.WaitsOn) != 2 ||
+		waiting.WaitsOn[1].State != models.PRMerged || waiting.WaitsOn[0].Status == nil {
+		t.Errorf("waiting pr = %+v", waiting)
 	}
 }
 
@@ -173,7 +177,8 @@ func known(op string) bool {
 // serverOps mirrors server.Ops; the server's own test checks they agree.
 var serverOps = []string{
 	"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-	"set_collapsed", "perform", "save_notifications", "send_test", "set_poll_interval",
+	"set_collapsed", "perform", "add_dependency", "remove_dependency", "dependency_graph",
+	"save_notifications", "send_test", "set_poll_interval",
 	"notification_form", "preview_notification", "shutdown",
 }
 

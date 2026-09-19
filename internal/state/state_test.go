@@ -44,6 +44,7 @@ func TestRoundTrip(t *testing.T) {
 		"acme/api": {"12": json.RawMessage(
 			`{"method":"SQUASH","delete_branch":true,"armed_at":"2026-09-17"}`)},
 	}
+	saved.Dependencies = map[string][]string{"acme/api#12": {"acme/lib#3", "other/x#9"}}
 	if err := state.Save(file, saved); err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +57,9 @@ func TestRoundTrip(t *testing.T) {
 	}
 	if len(loaded.Armed["acme/api"]) != 1 {
 		t.Errorf("armed = %v", loaded.Armed)
+	}
+	if !reflect.DeepEqual(loaded.Dependencies, saved.Dependencies) {
+		t.Errorf("dependencies = %v", loaded.Dependencies)
 	}
 	// The atomic write leaves no temporary files behind.
 	entries, err := os.ReadDir(filepath.Dir(file))

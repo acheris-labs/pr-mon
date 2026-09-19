@@ -1,5 +1,5 @@
 // Keys: A add, D remove, N notifications, r refresh, q quit, enter acts,
-// arrows and tab navigate.
+// w dependencies, arrows and tab navigate.
 
 package tui
 
@@ -155,8 +155,20 @@ func (m *Model) handlePRKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		return m, m.openActions()
+	case "w":
+		return m, m.openDependencies()
 	}
 	return m, nil
+}
+
+func (m *Model) openDependencies() tea.Cmd {
+	name := m.selectedRepo()
+	pr, ok := m.selectedPR()
+	if name == "" || !ok {
+		return nil
+	}
+	m.modal = newDependencies(name, pr.Number)
+	return nil
 }
 
 func (m *Model) openActions() tea.Cmd {
