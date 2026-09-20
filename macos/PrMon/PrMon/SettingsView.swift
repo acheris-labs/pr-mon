@@ -198,6 +198,20 @@ struct BackendSettings: View {
                 LabeledContent("Socket") {
                     Text(store.socketPath).textSelection(.enabled).foregroundStyle(.secondary)
                 }
+                LabeledContent("Settings file") {
+                    HStack {
+                        Text(configPath)
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(configPath)
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting(
+                                [URL(fileURLWithPath: configPath)])
+                        }
+                    }
+                }
                 LabeledContent("Log") {
                     HStack {
                         Text(logPath).textSelection(.enabled).foregroundStyle(.secondary)
@@ -252,6 +266,8 @@ struct BackendSettings: View {
             Text("Polling, notifications and merge-when-ready stop until it runs again.")
         }
     }
+
+    private var configPath: String { SocketPath.configFile() }
 
     private var logPath: String {
         (SocketPath.stateDirectory() as NSString).appendingPathComponent("daemon.log")

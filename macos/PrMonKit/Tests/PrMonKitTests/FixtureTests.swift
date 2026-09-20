@@ -230,6 +230,15 @@ enum Fixtures {
         }
     }
 
+    @Test func configFile() {
+        #expect(SocketPath.configFile(environment: [:], home: "/Users/a")
+            == "/Users/a/.config/pr-mon/config.toml")
+        #expect(SocketPath.configFile(environment: ["XDG_CONFIG_HOME": "/x/config"], home: "/Users/a")
+            == "/x/config/pr-mon/config.toml")
+        #expect(SocketPath.configFile(environment: ["XDG_CONFIG_HOME": ""], home: "/Users/a")
+            == "/Users/a/.config/pr-mon/config.toml")
+    }
+
     @Test func stateDirectory() {
         #expect(SocketPath.stateDirectory(environment: [:], home: "/Users/a")
             == "/Users/a/.local/state/pr-mon")

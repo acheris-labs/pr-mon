@@ -18,6 +18,18 @@ public enum SocketPath {
         return (home as NSString).appendingPathComponent(".local/state/pr-mon")
     }
 
+    /// The backend's config file: `$XDG_CONFIG_HOME/pr-mon/config.toml` or
+    /// `~/.config/pr-mon/config.toml`. Shown in Settings, so "which settings is
+    /// it reading?" has an answer.
+    public static func configFile(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        home: String = NSHomeDirectory()
+    ) -> String {
+        let base = environment["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : $0 }
+            ?? (home as NSString).appendingPathComponent(".config")
+        return (base as NSString).appendingPathComponent("pr-mon/config.toml")
+    }
+
     public static func socket(stateDirectory: String, uid: uid_t = getuid()) -> String {
         let path = (stateDirectory as NSString).appendingPathComponent("daemon.sock")
         if path.utf8.count <= limit {

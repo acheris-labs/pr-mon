@@ -165,13 +165,25 @@ private struct Sidebar: View {
         }
         .listStyle(.sidebar)
         .overlay {
+            // Only when the backend has said so: with none connected, an empty
+            // list means "nothing to show yet", not "you monitor nothing".
             if state.snapshot.config.repos.isEmpty {
-                ContentUnavailableView {
-                    Label("No Repositories", systemImage: "tray")
-                } description: {
-                    Text("Add repositories to monitor in Settings.")
-                } actions: {
-                    Button("Open Settings…") { openRepoSettings(nil) }
+                if store.isConnected {
+                    ContentUnavailableView {
+                        Label("No Repositories", systemImage: "tray")
+                    } description: {
+                        Text("Add repositories to monitor in Settings.")
+                    } actions: {
+                        Button("Open Settings…") { openRepoSettings(nil) }
+                    }
+                } else {
+                    ContentUnavailableView {
+                        Label(store.phase == .startingBackend
+                              ? "Starting the Backend…" : "Not Connected",
+                              systemImage: "bolt.horizontal.circle")
+                    } description: {
+                        Text("Your repositories are listed once the backend answers.")
+                    }
                 }
             }
         }

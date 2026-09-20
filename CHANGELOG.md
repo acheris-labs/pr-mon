@@ -4,6 +4,19 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc15]
+
+### Added
+
+- Settings › Backend shows the settings file the backend reads, with Show in
+  Finder, so "which config is it using?" is answerable from the app.
+
+### Fixed
+
+- The app only says "No Repositories" when it is connected; otherwise it says
+  it is starting the backend or not connected, rather than looking like the
+  repositories are gone.
+
 ## [0.2.0-rc14]
 
 ### Fixed
