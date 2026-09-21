@@ -48,6 +48,12 @@ public final class PrMonStore {
     private let stoppedOnPurpose: @Sendable () -> Bool
     private var loop: Task<Void, Never>?
     private var wake: CheckedContinuation<Void, Never>?
+    private struct Focus: Equatable {
+        var repo: String
+        var number: Int
+    }
+
+    @ObservationIgnored private var lastFocus = Focus(repo: "", number: 0)
     /// Whether the backend has been started since the last good connection:
     /// each time one goes away it gets one restart, not a loop of them.
     private var triedStarting = false
@@ -213,6 +219,15 @@ public final class PrMonStore {
     public func setCollapsed(owner: String, collapsed: Bool) {
         state?.setCollapsedLocally(owner: owner, collapsed: collapsed)
         run { try await $0.setCollapsed(owner: owner, collapsed: collapsed) }
+    }
+
+    /// Tells the backend what the window is showing; repeated calls with the
+    /// same thing are dropped.
+    public func setFocus(repo: String?, number: Int?) {
+        let focus = Focus(repo: repo ?? "", number: number ?? 0)
+        guard focus != lastFocus else { return }
+        lastFocus = focus
+        run { try await $0.setFocus(repo: focus.repo, number: focus.number) }
     }
 
     public func perform(repo: String, number: Int, action: Action) {

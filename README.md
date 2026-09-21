@@ -51,6 +51,11 @@ window onto it, so notifications keep coming after you close the window.
   system (System Settings › Login Items lists pr-mon under "Allow in the
   Background"), so it belongs to no app or terminal and the app leaves the
   Dock the moment you quit it.
+- **How often it checks** depends on what you are looking at: the repo selected
+  in the app or dashboard every `focus_interval`, PRs with checks running or
+  armed to merge every `active_interval`, everything else every
+  `poll_interval`. Checks that change nothing cost nothing against GitHub's
+  rate limit.
 - **How long it runs** depends on *Start the backend at login*: on, it runs all
   the time from login; off, it runs while the app or a dashboard is open and
   stops two minutes after the last one closes (merge when ready and
@@ -212,7 +217,9 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
 - Config (repos, poll interval, per-repo notifications): `~/.config/pr-mon/config.toml` (respects `XDG_CONFIG_HOME`)
 
   ```toml
-  poll_interval = 60
+  poll_interval = 120     # seconds between looks at a repo nobody has selected
+  focus_interval = 60     # the repo the app or dashboard is showing
+  active_interval = 10    # PRs with checks running, or armed to merge
   repos = [
       "owner/repo",
   ]

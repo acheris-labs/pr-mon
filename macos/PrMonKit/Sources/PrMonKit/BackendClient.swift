@@ -85,6 +85,12 @@ public actor BackendClient {
         try await command("mark_seen", RepoNumberArgs(name: repo, number: number))
     }
 
+    /// What this client is showing, so the backend looks at that repo more
+    /// often than the rest. An empty repo clears it.
+    public func setFocus(repo: String, number: Int) async throws {
+        try await command("set_focus", FocusArgs(repo: repo, number: number))
+    }
+
     public func perform(repo: String, number: Int, action: Action) async throws {
         try await command("perform", PerformArgs(repo: repo, number: number, action: action))
     }

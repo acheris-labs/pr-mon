@@ -37,6 +37,7 @@ type Backend interface {
 	AddDependency(repo string, number int, on string) error
 	RemoveDependency(repo string, number int, on string) error
 	DependencyGraph(repo string, number int) (models.DependencyGraph, error)
+	SetFocus(repo string, number int) error
 	SetPollInterval(seconds int) error
 	SaveNotifications(repo string, settings config.NotifyConfig) error
 	SendTest(repo string, settings config.NotifyConfig) error
@@ -93,6 +94,11 @@ type Model struct {
 	reconnect func() tea.Cmd
 	// loginItem starts the backend at login; nil where there is none.
 	loginItem LoginItem
+	// What the backend was last told this dashboard is showing.
+	told struct {
+		repo   string
+		number int
+	}
 }
 
 // New builds a dashboard around a backend.
@@ -212,7 +218,11 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		return m.handleKey(typed)
+		model, cmd := m.handleKey(typed)
+		if m.quitting {
+			return model, cmd
+		}
+		return model, tea.Batch(cmd, m.reportFocus())
 	}
 	return m, nil
 }
@@ -359,6 +369,21 @@ func (m *Model) expireToasts() {
 // run performs a backend command in the background and reports failures as toasts.
 func run(work func() error) tea.Cmd {
 	return func() tea.Msg { return commandDone{err: work()} }
+}
+
+// reportFocus tells the backend what this dashboard is showing, so that repo
+// is checked more often than the rest. Only when it changed.
+func (m *Model) reportFocus() tea.Cmd {
+	repo := m.selectedRepo()
+	number := 0
+	if pr, ok := m.selectedPR(); ok && m.focus == panePRs {
+		number = pr.Number
+	}
+	if repo == m.told.repo && number == m.told.number {
+		return nil
+	}
+	m.told.repo, m.told.number = repo, number
+	return run(func() error { return m.backend.SetFocus(repo, number) })
 }
 
 // markSeen clears the marker on the PR the cursor sits on.

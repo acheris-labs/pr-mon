@@ -17,6 +17,7 @@ import (
 
 	"github.com/acheris-labs/pr-mon/internal/client"
 	"github.com/acheris-labs/pr-mon/internal/config"
+	"github.com/acheris-labs/pr-mon/internal/github"
 	"github.com/acheris-labs/pr-mon/internal/models"
 	"github.com/acheris-labs/pr-mon/internal/protocol"
 	"github.com/acheris-labs/pr-mon/internal/readiness"
@@ -52,6 +53,40 @@ func (f *fakeGitHub) EnableAutoMerge(context.Context, string, models.MergeMethod
 func (f *fakeGitHub) DisableAutoMerge(context.Context, string) error { return nil }
 
 func (f *fakeGitHub) DeleteBranch(context.Context, string) error { return nil }
+
+func (f *fakeGitHub) ListOpenPRs(_ context.Context, _, etag string) (github.OpenPRs, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	if etag == "etag" {
+		return github.OpenPRs{Changed: false, ETag: etag}, nil
+	}
+	listed := github.OpenPRs{Changed: true, ETag: "etag", Updated: map[int]string{}}
+	for _, pr := range f.repo.PRs {
+		listed.Numbers = append(listed.Numbers, pr.Number)
+		listed.Updated[pr.Number] = "2026-09-15T01:28:54Z"
+	}
+	return listed, nil
+}
+
+func (f *fakeGitHub) BaseMoved(context.Context, string, string) (bool, string, error) {
+	return false, "base", nil
+}
+
+func (f *fakeGitHub) FetchPRs(_ context.Context, _ string, numbers []int) ([]models.PullRequest, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	wanted := map[int]bool{}
+	for _, number := range numbers {
+		wanted[number] = true
+	}
+	found := []models.PullRequest{}
+	for _, pr := range f.repo.PRs {
+		if wanted[pr.Number] {
+			found = append(found, pr)
+		}
+	}
+	return found, nil
+}
 
 // LookupPRs reports every PR as open.
 func (f *fakeGitHub) LookupPRs(_ context.Context, repo string, numbers []int) ([]models.PRRef, error) {
@@ -237,6 +272,27 @@ func TestDependenciesOverTheSocket(t *testing.T) {
 	})
 }
 
+func TestFocusFollowsTheClient(t *testing.T) {
+	_, monitor, socket := serve(t)
+	remote := connect(t, socket, "")
+	if err := remote.SetFocus("acme/api", 3); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return reflect.DeepEqual(monitor.Focused(), []string{"acme/api"}) })
+
+	// Clearing it, and hanging up, both leave the backend with nothing focused.
+	if err := remote.SetFocus("", 0); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return len(monitor.Focused()) == 0 })
+	if err := remote.SetFocus("acme/api", 3); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return len(monitor.Focused()) == 1 })
+	remote.Close()
+	waitFor(t, func() bool { return len(monitor.Focused()) == 0 })
+}
+
 func TestErrorsComeBackAsErrors(t *testing.T) {
 	_, _, socket := serve(t)
 	remote := connect(t, socket, "")
@@ -322,6 +378,37 @@ func TestNoIdleExitWhenKeptRunning(t *testing.T) {
 	}
 }
 
+func TestAClientThatStopsReadingIsDropped(t *testing.T) {
+	listener, monitor, socket := serve(t)
+	listener.WriteTimeout = 100 * time.Millisecond
+
+	// Subscribes, then never reads again.
+	deaf, err := net.Dial("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deaf.Close()
+	if _, err := deaf.Write([]byte(`{"id":1,"op":"snapshot","args":{}}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return listener.Subscribers() == 1 })
+
+	// Fill its socket with events until the server gives up on it.
+	for range 200 {
+		monitor.RefreshAll()
+		if listener.Subscribers() == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	waitFor(t, func() bool { return listener.Subscribers() == 0 })
+
+	// The backend still answers everyone else.
+	if _, err := daemonHello(socket); err != nil {
+		t.Fatalf("the backend should still answer: %v", err)
+	}
+}
+
 func TestDisconnectIsReported(t *testing.T) {
 	listener, _, socket := serve(t)
 	remote := connect(t, socket, "")
@@ -378,8 +465,8 @@ func TestUnknownOp(t *testing.T) {
 func TestOpsCoverTheDocumentedRequests(t *testing.T) {
 	documented := []string{
 		"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-		"set_collapsed", "perform", "add_dependency", "remove_dependency", "dependency_graph",
-		"save_notifications", "send_test", "set_poll_interval",
+		"set_collapsed", "set_focus", "perform", "add_dependency", "remove_dependency",
+		"dependency_graph", "save_notifications", "send_test", "set_poll_interval",
 		"notification_form", "preview_notification", "shutdown",
 	}
 	if !reflect.DeepEqual(server.Ops, documented) {

@@ -17,8 +17,12 @@ import (
 )
 
 const (
-	DefaultPollInterval = 60
-	DefaultMessage      = "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}"
+	// How often the backend looks at a repo nobody is looking at, the repo a
+	// client has selected, and PRs that are moving (checks running, armed).
+	DefaultPollInterval   = 120
+	DefaultFocusInterval  = 60
+	DefaultActiveInterval = 10
+	DefaultMessage        = "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}"
 )
 
 // TOML rejects a raw DEL, the one control character JSON leaves unescaped.
@@ -67,15 +71,21 @@ func (n NotifyConfig) Equal(other NotifyConfig) bool {
 type Config struct {
 	Repos        []string `json:"repos"`
 	PollInterval int      `json:"poll_interval"`
+	// The repo a client has selected, and PRs in flight, are looked at more
+	// often; unchanged repos cost nothing (the checks are conditional).
+	FocusInterval  int `json:"focus_interval"`
+	ActiveInterval int `json:"active_interval"`
 	// A repo without an entry never notifies.
 	Notifications map[string]NotifyConfig `json:"notifications"`
 }
 
 func New() Config {
 	return Config{
-		Repos:         []string{},
-		PollInterval:  DefaultPollInterval,
-		Notifications: map[string]NotifyConfig{},
+		Repos:          []string{},
+		PollInterval:   DefaultPollInterval,
+		FocusInterval:  DefaultFocusInterval,
+		ActiveInterval: DefaultActiveInterval,
+		Notifications:  map[string]NotifyConfig{},
 	}
 }
 
@@ -86,9 +96,11 @@ func DefaultPath() string {
 
 // raw mirrors the file so unset keys can be told from zero values.
 type raw struct {
-	Repos         []string                  `toml:"repos"`
-	PollInterval  *int                      `toml:"poll_interval"`
-	Notifications map[string]toml.Primitive `toml:"notifications"`
+	Repos          []string                  `toml:"repos"`
+	PollInterval   *int                      `toml:"poll_interval"`
+	FocusInterval  *int                      `toml:"focus_interval"`
+	ActiveInterval *int                      `toml:"active_interval"`
+	Notifications  map[string]toml.Primitive `toml:"notifications"`
 }
 
 // Load returns the config and a warning if the file was unusable.
@@ -114,6 +126,12 @@ func Load(path string) (Config, string) {
 	}
 	if parsed.PollInterval != nil {
 		config.PollInterval = *parsed.PollInterval
+	}
+	if parsed.FocusInterval != nil && *parsed.FocusInterval > 0 {
+		config.FocusInterval = *parsed.FocusInterval
+	}
+	if parsed.ActiveInterval != nil && *parsed.ActiveInterval > 0 {
+		config.ActiveInterval = *parsed.ActiveInterval
 	}
 	problems := []string{}
 	for repo, table := range parsed.Notifications {
@@ -167,7 +185,12 @@ func tomlValue(value any) string {
 }
 
 func Save(path string, config Config) error {
-	lines := []string{fmt.Sprintf("poll_interval = %d", config.PollInterval), "repos = ["}
+	lines := []string{
+		fmt.Sprintf("poll_interval = %d", config.PollInterval),
+		fmt.Sprintf("focus_interval = %d", config.FocusInterval),
+		fmt.Sprintf("active_interval = %d", config.ActiveInterval),
+		"repos = [",
+	}
 	for _, repo := range config.Repos {
 		lines = append(lines, fmt.Sprintf("    %s,", tomlValue(repo)))
 	}

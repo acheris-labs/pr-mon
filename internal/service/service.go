@@ -26,10 +26,8 @@ import (
 )
 
 const (
-	MinPollInterval    = 10
-	MaxPollInterval    = 3600
-	checkingRetryDelay = 5 * time.Second
-	checkingRetries    = 3
+	MinPollInterval = 10
+	MaxPollInterval = 3600
 	// GitHub's wording when the head or base moves under a merge ("Head branch was
 	// modified. Review and try the merge again."); such merges are retried next refresh.
 	retryableMergeError = "was modified"
@@ -71,6 +69,10 @@ type GitHub interface {
 	DisableAutoMerge(ctx context.Context, prID string) error
 	DeleteBranch(ctx context.Context, refID string) error
 	LookupPRs(ctx context.Context, repo string, numbers []int) ([]models.PRRef, error)
+	// The cheap side: conditional requests and fetches of named PRs only.
+	ListOpenPRs(ctx context.Context, repo, etag string) (github.OpenPRs, error)
+	BaseMoved(ctx context.Context, repo, etag string) (bool, string, error)
+	FetchPRs(ctx context.Context, repo string, numbers []int) ([]models.PullRequest, error)
 }
 
 // Deliverer sends one notification; the monitor calls it in the background.
@@ -102,7 +104,12 @@ type Monitor struct {
 	errs    map[string]string
 	// The last known state of every PR something waits on, by key.
 	waitedOn map[string]models.PRRef
-	status   Status
+	// What each repo's last look found, for the conditional requests.
+	watches map[string]*watch
+	// What each connected client has selected, by client id.
+	focus      map[string]Focus
+	lastActive time.Time
+	status     Status
 	// Repos whose first load finished this session; only they can notify.
 	loaded      map[string]bool
 	pausedUntil time.Time
@@ -151,6 +158,8 @@ func New(client GitHub, configPath, statePath string, options Options) *Monitor 
 		fetched:    map[string]models.Repo{},
 		errs:       map[string]string{},
 		waitedOn:   map[string]models.PRRef{},
+		watches:    map[string]*watch{},
+		focus:      map[string]Focus{},
 		loaded:     map[string]bool{},
 		merging:    map[prKey]bool{},
 		holding:    map[prKey]bool{},
@@ -213,26 +222,6 @@ func (m *Monitor) spawn(work func()) {
 		defer m.busy.Done()
 		work()
 	}()
-}
-
-func (m *Monitor) pollLoop() {
-	for {
-		m.mutex.Lock()
-		interval := time.Duration(m.config.PollInterval) * time.Second
-		m.mutex.Unlock()
-		select {
-		case <-m.stopped:
-			return
-		case <-m.pollWake:
-		case <-time.After(interval):
-		}
-		select {
-		case <-m.stopped:
-			return
-		default:
-		}
-		m.PollOnce(m.ctx)
-	}
 }
 
 // ----- events -----
@@ -374,34 +363,46 @@ func (m *Monitor) PollOnce(ctx context.Context) {
 	group.Wait()
 }
 
-// RefreshRepo fetches one repo and applies the result.
+// RefreshRepo fetches one repo in full and applies the result. The scheduler
+// does this on the first look and every github.Stale; in between it asks for
+// less (see poll.go).
 func (m *Monitor) RefreshRepo(ctx context.Context, name string, attempt int) {
 	repo, err := m.client.FetchRepo(ctx, name)
 	if err != nil {
 		m.handleFetchError(name, err)
 		return
 	}
+	now := time.Now()
 	m.mutex.Lock()
 	delete(m.errs, name)
+	state := m.watchLocked(name)
+	state.lastFull = now
 	m.mutex.Unlock()
 	m.apply(name, repo)
+	m.syncList(ctx, name)
+	m.noteFresh(name)
+}
 
-	checking := false
-	for _, pr := range repo.PRs {
-		if pr.Status == models.StatusChecking {
-			checking = true
-			break
-		}
+// syncList records what the PR list looks like now, so the next conditional
+// check can tell what moved since this full fetch.
+func (m *Monitor) syncList(ctx context.Context, name string) {
+	listed, err := m.client.ListOpenPRs(ctx, name, "")
+	if err != nil || !listed.Changed {
+		return
 	}
-	if attempt < checkingRetries && checking {
-		m.scheduleRetry(name, attempt+1)
+	_, baseETag, err := m.client.BaseMoved(ctx, name, "")
+	if err != nil {
+		return
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
 	m.mutex.Lock()
-	m.status.LastUpdate = &now
-	m.status.RateLimitedUntil = nil
-	m.mutex.Unlock()
-	m.emit(Event{Kind: "status"})
+	defer m.mutex.Unlock()
+	state := m.watchLocked(name)
+	state.listETag = listed.ETag
+	state.baseETag = baseETag
+	state.updated = map[int]string{}
+	for number, stamp := range listed.Updated {
+		state.updated[number] = stamp
+	}
 }
 
 func (m *Monitor) handleFetchError(name string, err error) {
@@ -430,17 +431,6 @@ func (m *Monitor) handleFetchError(name string, err error) {
 	if monitored {
 		m.emit(Event{Kind: "repo", Name: name})
 	}
-}
-
-// scheduleRetry looks again shortly, because GitHub is still computing mergeability.
-func (m *Monitor) scheduleRetry(name string, attempt int) {
-	m.spawn(func() {
-		select {
-		case <-m.stopped:
-		case <-time.After(checkingRetryDelay):
-			m.RefreshRepo(m.ctx, name, attempt)
-		}
-	})
 }
 
 // apply records a fetched repo: notifications, change tracking and armed merges.

@@ -79,16 +79,19 @@ struct ContentView: View {
         .onChange(of: repoName) {
             selection.repo = repoName
             prID = nil
+            store.setFocus(repo: repoName, number: nil)
         }
         .onChange(of: prID) {
             if let repoName, let pr = selectedPR {
                 store.markSeen(repo: repoName, number: pr.number)
+                store.setFocus(repo: repoName, number: pr.number)
             }
         }
         .onChange(of: state?.snapshot.config.repos) { keepSelectionValid() }
         .onChange(of: appearance) { NSApp.appearance = appearance.nsAppearance }
         .onAppear {
             keepSelectionValid()
+            store.setFocus(repo: repoName, number: nil)
             NSApp.appearance = appearance.nsAppearance
         }
     }

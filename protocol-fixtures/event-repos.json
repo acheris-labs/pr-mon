@@ -7,7 +7,9 @@
         "acme/web",
         "Textualize/rich"
       ],
-      "poll_interval": 60,
+      "poll_interval": 120,
+      "focus_interval": 60,
+      "active_interval": 10,
       "notifications": {
         "acme/api": {
           "message": "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}",

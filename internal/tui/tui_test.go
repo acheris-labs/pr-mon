@@ -154,6 +154,11 @@ func (f *fakeBackend) Perform(repo string, number int, action models.Action) err
 	return nil
 }
 
+func (f *fakeBackend) SetFocus(repo string, number int) error {
+	f.record("focus " + repo + " " + itoa(number))
+	return nil
+}
+
 func (f *fakeBackend) SetPollInterval(seconds int) error {
 	f.record("interval " + itoa(seconds))
 	f.config.PollInterval = seconds
@@ -609,6 +614,17 @@ func TestArmedPRsAreMarked(t *testing.T) {
 	}
 }
 
+// without drops calls that start with prefix, so a test can ignore them.
+func without(items []string, prefix string) []string {
+	kept := []string{}
+	for _, item := range items {
+		if !strings.HasPrefix(item, prefix) {
+			kept = append(kept, item)
+		}
+	}
+	return kept
+}
+
 func contains2(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {
@@ -708,14 +724,14 @@ func TestSettingsDialog(t *testing.T) {
 	model.loginItem = &fakeLoginItem{backend: backend}
 	press(t, model, "S")
 	view := model.View()
-	if !strings.Contains(view, "Check GitHub:  ◀ every 1 min ▶") ||
+	if !strings.Contains(view, "Check GitHub:  ◀ every 2 min ▶") ||
 		!strings.Contains(view, "[ ] Start the backend at login") {
 		t.Fatalf("dialog = \n%s", view)
 	}
 	press(t, model, "right", "right", "left")
 	press(t, model, "down", "space")
-	want := []string{"interval 120", "interval 300", "interval 120", "login true"}
-	if got := backend.recorded(); strings.Join(got, ",") != strings.Join(want, ",") {
+	want := []string{"interval 300", "interval 600", "interval 300", "login true"}
+	if got := without(backend.recorded(), "focus "); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("calls = %v, want %v", got, want)
 	}
 	if !strings.Contains(model.View(), "[x] Start the backend at login") {
@@ -732,5 +748,26 @@ func TestSettingsWithoutLoginItem(t *testing.T) {
 	press(t, model, "S")
 	if strings.Contains(model.View(), "Start the backend at login") {
 		t.Errorf("no login item, no toggle:\n%s", model.View())
+	}
+}
+
+func TestFocusFollowsTheSelection(t *testing.T) {
+	model, backend := newModel()
+	press(t, model, "down")  // acme/web in the tree
+	press(t, model, "enter") // into its PRs
+	want := []string{"focus acme/web 0", "focus acme/web 7"}
+	got := []string{}
+	for _, call := range backend.recorded() {
+		if strings.HasPrefix(call, "focus ") {
+			got = append(got, call)
+		}
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("focus calls = %v, want %v", got, want)
+	}
+	// Moving within the same PR says nothing new.
+	press(t, model, "up")
+	if len(got) != 2 {
+		t.Errorf("calls = %v", got)
 	}
 }

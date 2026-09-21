@@ -22,6 +22,9 @@ const LineLimit = 64 * 1024 * 1024
 // mergeRecheck is how soon an idle backend looks again when a merge held it up.
 const mergeRecheck = 10 * time.Second
 
+// DefaultWriteTimeout is how long one client may take to accept a message.
+const DefaultWriteTimeout = 10 * time.Second
+
 type Server struct {
 	monitor    *service.Monitor
 	socketPath string
@@ -34,6 +37,8 @@ type Server struct {
 	connections sync.WaitGroup
 	closed      bool
 
+	// WriteTimeout is how long one client may take to accept a message.
+	WriteTimeout time.Duration
 	// IdleExit, when set, closes Idle once no front end (a connection that sent
 	// snapshot) has been connected for that long; zero means never.
 	IdleExit time.Duration
@@ -48,11 +53,12 @@ func New(monitor *service.Monitor, socketPath string, logger *slog.Logger) *Serv
 		logger = slog.Default()
 	}
 	return &Server{
-		monitor:     monitor,
-		socketPath:  socketPath,
-		log:         logger,
-		subscribers: map[net.Conn]bool{},
-		Idle:        make(chan struct{}),
+		monitor:      monitor,
+		socketPath:   socketPath,
+		log:          logger,
+		subscribers:  map[net.Conn]bool{},
+		Idle:         make(chan struct{}),
+		WriteTimeout: DefaultWriteTimeout,
 	}
 }
 
@@ -151,6 +157,7 @@ func (s *Server) serve(connection net.Conn) {
 		}
 		s.mutex.Unlock()
 		connection.Close()
+		s.monitor.ClearFocus(clientID(connection))
 		if vacated {
 			s.checkIdleIn(s.IdleExit)
 		}
@@ -186,9 +193,23 @@ func (s *Server) write(connection net.Conn, message any) {
 	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	// A failed write is left to the connection's reader, which notices the
-	// same broken connection and drops it (counting it as a front end leaving).
-	connection.Write(line)
+	// A client that stops reading must not hold up the backend, or everyone
+	// else with it: give it a deadline, and drop it when it misses one.
+	connection.SetWriteDeadline(time.Now().Add(s.WriteTimeout))
+	if _, err := connection.Write(line); err != nil {
+		s.log.Warn("dropping a client that stopped reading", "error", err)
+		delete(s.subscribers, connection)
+		connection.Close()
+		return
+	}
+	connection.SetWriteDeadline(time.Time{})
+}
+
+// Subscribers is how many clients are following events (tests).
+func (s *Server) Subscribers() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return len(s.subscribers)
 }
 
 func (s *Server) broadcast(event service.Event) {

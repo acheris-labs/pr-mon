@@ -9,7 +9,13 @@ import (
 	"net"
 
 	"github.com/acheris-labs/pr-mon/internal/protocol"
+	"github.com/acheris-labs/pr-mon/internal/service"
 )
+
+// clientID names one connection, so the backend can tell whose focus is whose.
+func clientID(connection net.Conn) string {
+	return fmt.Sprintf("%p", connection)
+}
 
 type nameArgs struct {
 	Name string `json:"name"`
@@ -60,8 +66,8 @@ func decodeArgs[T any](raw json.RawMessage, op string) (T, error) {
 // Ops are every request the backend answers, in the order docs/protocol.md lists them.
 var Ops = []string{
 	"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-	"set_collapsed", "perform", "add_dependency", "remove_dependency", "dependency_graph",
-	"save_notifications", "send_test", "set_poll_interval",
+	"set_collapsed", "set_focus", "perform", "add_dependency", "remove_dependency",
+	"dependency_graph", "save_notifications", "send_test", "set_poll_interval",
 	"notification_form", "preview_notification", "shutdown",
 }
 
@@ -124,6 +130,18 @@ func (s *Server) dispatch(connection net.Conn, request protocol.Request) (any, e
 			return nil, err
 		}
 		s.monitor.SetCollapsed(args.Owner, args.Collapsed)
+		return nil, nil
+
+	case "set_focus":
+		args, err := decodeArgs[struct {
+			Repo   string `json:"repo"`
+			Number int    `json:"number"`
+		}](request.Args, request.Op)
+		if err != nil {
+			return nil, err
+		}
+		s.monitor.SetFocus(clientID(connection),
+			service.Focus{Repo: args.Repo, Number: args.Number})
 		return nil, nil
 
 	case "perform":

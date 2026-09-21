@@ -561,3 +561,96 @@ func TestLookupPRsNotFound(t *testing.T) {
 		t.Errorf("err = %v, want NotFoundError", err)
 	}
 }
+
+// restServer answers REST requests, honouring If-None-Match.
+func restServer(t *testing.T, etag string, body string) (*github.Client, *recorder) {
+	t.Helper()
+	client, rec := serve(t, always(okData(nil)))
+	rest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec.mutex.Lock()
+		rec.requests = append(rec.requests, map[string]any{
+			"path": r.URL.Path + "?" + r.URL.RawQuery, "if_none_match": r.Header.Get("If-None-Match"),
+			"__authorization": r.Header.Get("Authorization"),
+		})
+		rec.mutex.Unlock()
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", etag)
+		fmt.Fprint(w, body)
+	}))
+	t.Cleanup(rest.Close)
+	client.SetRESTURL(rest.URL)
+	return client, rec
+}
+
+func TestListOpenPRsIsFreeWhenNothingChanged(t *testing.T) {
+	const etag = `W/"abc"`
+	body := `[{"number":7,"updated_at":"2026-09-20T10:00:00Z"},
+	          {"number":3,"updated_at":"2026-09-19T09:00:00Z"}]`
+	client, rec := restServer(t, etag, body)
+
+	first, err := client.ListOpenPRs(context.Background(), "acme/api", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.Changed || !reflect.DeepEqual(first.Numbers, []int{7, 3}) || first.ETag != etag {
+		t.Fatalf("first = %+v", first)
+	}
+	if first.Updated[7] != "2026-09-20T10:00:00Z" {
+		t.Errorf("updated = %v", first.Updated)
+	}
+	if path := rec.last()["path"]; path != "/repos/acme/api/pulls?state=open&sort=created&direction=desc&per_page=50" {
+		t.Errorf("path = %v", path)
+	}
+
+	// Asking again with the ETag: GitHub says 304, and it costs nothing.
+	again, err := client.ListOpenPRs(context.Background(), "acme/api", first.ETag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Changed || again.ETag != etag {
+		t.Errorf("again = %+v", again)
+	}
+	if sent := rec.last()["if_none_match"]; sent != etag {
+		t.Errorf("if-none-match = %v", sent)
+	}
+	if got := rec.last()["__authorization"]; got != "Bearer tok" {
+		t.Errorf("authorization = %v", got)
+	}
+}
+
+func TestBaseMoved(t *testing.T) {
+	const etag = `W/"head"`
+	client, _ := restServer(t, etag, `[{"sha":"abc"}]`)
+	moved, tag, err := client.BaseMoved(context.Background(), "acme/api", "")
+	if err != nil || !moved || tag != etag {
+		t.Fatalf("first = %v, %q, %v", moved, tag, err)
+	}
+	moved, _, err = client.BaseMoved(context.Background(), "acme/api", etag)
+	if err != nil || moved {
+		t.Errorf("unchanged = %v, %v", moved, err)
+	}
+}
+
+func TestFetchPRsOnlyAsksForTheOnesNamed(t *testing.T) {
+	client, rec := serve(t, func(request map[string]any) reply {
+		return okData(map[string]any{"repository": map[string]any{
+			"pr12": rawPR(12),
+			"pr14": rawPR(14, func(node map[string]any) { node["state"] = "CLOSED" }),
+		}})
+	})
+	prs, err := client.FetchPRs(context.Background(), "acme/api", []int{12, 14})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prs) != 1 || prs[0].Number != 12 || prs[0].Status == "" {
+		t.Fatalf("prs = %+v", prs)
+	}
+	sent := query(rec.last())
+	if !strings.Contains(sent, "pr12: pullRequest(number: 12)") ||
+		!strings.Contains(sent, "pr14: pullRequest(number: 14)") {
+		t.Errorf("query = %s", sent)
+	}
+}

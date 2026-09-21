@@ -205,6 +205,7 @@ func GetToken() (string, error) {
 // rejects the token, because a long-running daemon outlives `gh auth login`.
 type Client struct {
 	url           string
+	restURL       string
 	http          *http.Client
 	tokenProvider func() (string, error)
 	mutex         sync.RWMutex
@@ -353,10 +354,9 @@ func rateLimitReset(response *http.Response) time.Time {
 
 // FetchRepo returns the repo with its newest open PRs and their details.
 func (c *Client) FetchRepo(ctx context.Context, name string) (models.Repo, error) {
-	owner, repo, found := strings.Cut(name, "/")
-	if !found || owner == "" || repo == "" || strings.Contains(repo, "/") {
-		return models.Repo{}, &NotFoundError{
-			Message: fmt.Sprintf("Expected owner/name, got %q", name)}
+	owner, repo, err := splitRepo(name)
+	if err != nil {
+		return models.Repo{}, err
 	}
 	variables := map[string]any{"owner": owner, "name": repo}
 	data, err := c.graphql(ctx, repoQuery, variables)

@@ -49,6 +49,8 @@ enum Fixtures {
         let snapshot = try Fixtures.snapshot()
         #expect(snapshot.config.repos == ["acme/api", "acme/web", "Textualize/rich"])
         #expect(snapshot.config.notifications["acme/api"]?.scriptEnabled == true)
+        #expect(snapshot.config.pollInterval == 120 && snapshot.config.focusInterval == 60
+                && snapshot.config.activeInterval == 10)
         #expect(snapshot.errors["acme/web"] == "Repository acme/web not found")
         #expect(snapshot.unseen["acme/api"] == [1, 5])
         #expect(snapshot.collapsed == ["textualize"])
@@ -132,7 +134,7 @@ enum Fixtures {
             #expect(update.unseen == [1, 5])
         case let ("seen", .seen(update)): #expect(update.unseen == [1, 5])
         case let ("collapsed", .collapsed(owners)): #expect(owners == ["textualize"])
-        case let ("config", .config(config)): #expect(config.pollInterval == 60)
+        case let ("config", .config(config)): #expect(config.pollInterval == 120)
         case let ("status", .status(status)): #expect(status.pid == 4242)
         case let ("toast", .toast(toast)):
             #expect(toast == Toast(message: "Merged acme/api#1 (squash)", severity: .information))
@@ -190,6 +192,8 @@ enum Fixtures {
             try Wire.encode(Request(id: 10, op: "remove_repo", args: NameArgs(name: "acme/web"))),
             try Wire.encode(Request(id: 11, op: "set_collapsed",
                                     args: CollapsedArgs(owner: "acme", collapsed: true))),
+            try Wire.encode(Request(id: 21, op: "set_focus",
+                                    args: FocusArgs(repo: "acme/api", number: 1))),
             try Wire.encode(Request(id: 12, op: "save_notifications",
                                     args: SettingsArgs(repo: "acme/api", settings: defaults(script: "im")))),
             try Wire.encode(Request(id: 13, op: "send_test",

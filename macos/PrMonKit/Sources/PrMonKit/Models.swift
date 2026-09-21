@@ -115,12 +115,18 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
 
 public struct Config: Codable, Sendable, Equatable {
     public var repos: [String]
+    /// Seconds between looks at a repo nobody is showing; the repo a client has
+    /// in focus, and PRs in flight, are looked at more often.
     public var pollInterval: Int
+    public var focusInterval: Int
+    public var activeInterval: Int
     public var notifications: [String: NotifyConfig]
 
     enum CodingKeys: String, CodingKey {
         case repos, notifications
         case pollInterval = "poll_interval"
+        case focusInterval = "focus_interval"
+        case activeInterval = "active_interval"
     }
 }
 

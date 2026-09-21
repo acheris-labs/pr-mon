@@ -272,7 +272,7 @@ func Spawn(paths Paths, timeout time.Duration) (int, error) {
 // no app or terminal, and whatever started it can go away cleanly.
 func spawnSession(paths Paths, executable string, timeout time.Duration) (int, error) {
 	// The registered job first; if it can't run, one loaded here instead.
-	registered := kickstartSession()
+	registered := kickstartSession(paths)
 	if !registered {
 		if err := loadSession(paths, executable); err != nil {
 			return 0, err
@@ -288,9 +288,9 @@ func spawnSession(paths Paths, executable string, timeout time.Duration) (int, e
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
-		code, exited := sessionExited()
+		code, exited := sessionExited(paths)
 		switch {
-		case registered && (!sessionLoaded() || (exited && code != 0)):
+		case registered && (!sessionLoaded(paths) || (exited && code != 0)):
 			// launchd refused or dropped the registered job (it removes one that
 			// fails a launch constraint); fall back once.
 			registered = false

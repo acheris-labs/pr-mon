@@ -1,7 +1,11 @@
 package daemon_test
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/acheris-labs/pr-mon/internal/files"
 
 	"github.com/acheris-labs/pr-mon/internal/daemon"
 )
@@ -18,5 +22,16 @@ func TestToolPathAddsHomebrew(t *testing.T) {
 		if got := daemon.ToolPath(path); got != want {
 			t.Errorf("ToolPath(%q) = %q, want %q", path, got, want)
 		}
+	}
+}
+
+func TestSessionJobsDontShareALabel(t *testing.T) {
+	home := filepath.Join(files.Home(), ".local", "state", "pr-mon")
+	if got := daemon.SessionLabelFor(daemon.Paths{Directory: home}); got != daemon.SessionLabel {
+		t.Errorf("the usual directory should use the app's job: %q", got)
+	}
+	other := daemon.SessionLabelFor(daemon.Paths{Directory: "/tmp/elsewhere/pr-mon"})
+	if other == daemon.SessionLabel || !strings.HasPrefix(other, daemon.SessionLabel+".") {
+		t.Errorf("another state directory needs its own job, got %q", other)
 	}
 }

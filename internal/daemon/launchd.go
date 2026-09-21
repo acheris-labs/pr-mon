@@ -3,6 +3,7 @@
 package daemon
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,12 +11,29 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/acheris-labs/pr-mon/internal/files"
 )
 
 // SessionLabel is the launchd job `pr-mon start` runs the backend as on macOS.
 // A backend started as a child of the app would belong to the app: macOS then
 // keeps the app in the Dock, "Running in Background", after it quits.
 const SessionLabel = "com.acheris-labs.pr-mon.session"
+
+// sessionLabel is SessionLabel for the usual state directory — the job the app
+// registers — and a label of its own for any other (XDG_STATE_HOME in a test,
+// say), so two backends never fight over one job.
+// SessionLabelFor is sessionLabel, exported for tests.
+func SessionLabelFor(paths Paths) string { return sessionLabel(paths) }
+
+func sessionLabel(paths Paths) string {
+	home := filepath.Join(files.Home(), ".local", "state", files.AppName)
+	if paths.Directory == home {
+		return SessionLabel
+	}
+	sum := sha256.Sum256([]byte(paths.Directory))
+	return fmt.Sprintf("%s.%x", SessionLabel, sum[:4])
+}
 
 // KeptEnv is what a launchd job keeps of the environment it was set up from:
 // launchd starts jobs with a bare one, and the backend needs gh (and any
@@ -78,31 +96,35 @@ func UnescapeXML(text string) string {
 	return replacer.Replace(text)
 }
 
-func sessionTarget() string { return fmt.Sprintf("gui/%d/%s", os.Getuid(), SessionLabel) }
+func sessionTarget(paths Paths) string {
+	return fmt.Sprintf("gui/%d/%s", os.Getuid(), sessionLabel(paths))
+}
 
 // launchSession hands the backend to launchd as a one-shot job: no KeepAlive,
 // so `pr-mon stop` stays stopped. A job left from an earlier start is replaced.
 // sessionLoaded reports whether launchd has the session job, whoever loaded it.
-func sessionLoaded() bool {
-	return exec.Command("launchctl", "print", sessionTarget()).Run() == nil
+func sessionLoaded(paths Paths) bool {
+	return exec.Command("launchctl", "print", sessionTarget(paths)).Run() == nil
 }
 
 // kickstartSession runs the session job the app registered, if launchd has it.
 // Loading a job is what macOS charges to the caller, and an app charged with a
 // job stays in the Dock after it quits; running one someone else loaded isn't.
-func kickstartSession() bool {
-	return sessionLoaded() && exec.Command("launchctl", "kickstart", sessionTarget()).Run() == nil
+func kickstartSession(paths Paths) bool {
+	return sessionLoaded(paths) &&
+		exec.Command("launchctl", "kickstart", sessionTarget(paths)).Run() == nil
 }
 
 // loadSession loads the session job itself: a source install has none
 // registered, and a registered one can fail to launch (a signing check).
 func loadSession(paths Paths, executable string) error {
 	plistPath := filepath.Join(paths.Directory, "session.plist")
-	text := JobPlist(SessionLabel, []string{executable, "daemon"}, Environment(), paths.Log(), false)
+	text := JobPlist(sessionLabel(paths), []string{executable, "daemon"},
+		Environment(), paths.Log(), false)
 	if err := os.WriteFile(plistPath, []byte(text), 0o644); err != nil {
 		return err
 	}
-	exec.Command("launchctl", "bootout", sessionTarget()).Run()
+	exec.Command("launchctl", "bootout", sessionTarget(paths)).Run()
 	domain := fmt.Sprintf("gui/%d", os.Getuid())
 	output, err := exec.Command("launchctl", "bootstrap", domain, plistPath).CombinedOutput()
 	if err != nil {
@@ -114,8 +136,8 @@ func loadSession(paths Paths, executable string) error {
 var lastExit = regexp.MustCompile(`last exit code = (-?\d+)`)
 
 // sessionExited reports whether the session job ran and exited, and its code.
-func sessionExited() (int, bool) {
-	output, err := exec.Command("launchctl", "print", sessionTarget()).Output()
+func sessionExited(paths Paths) (int, bool) {
+	output, err := exec.Command("launchctl", "print", sessionTarget(paths)).Output()
 	if err != nil || strings.Contains(string(output), "state = running") {
 		return 0, false
 	}

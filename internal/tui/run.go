@@ -31,6 +31,8 @@ func Run(paths daemon.Paths, version string) error {
 
 	model := New(remote, version)
 	model.loginItem = defaultLoginItem(paths)
+	// The backend checks what's on screen more often than the rest.
+	remote.SetFocus(model.selectedRepo(), 0)
 	events := model.Events()
 	remote.AddListener(func(event service.Event) {
 		select {

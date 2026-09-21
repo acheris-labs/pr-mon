@@ -86,6 +86,11 @@ public struct DependencyArgs: Encodable, Sendable {
     var on: String
 }
 
+public struct FocusArgs: Encodable, Sendable {
+    var repo: String
+    var number: Int
+}
+
 public struct PRArgs: Encodable, Sendable {
     var repo: String
     var number: Int

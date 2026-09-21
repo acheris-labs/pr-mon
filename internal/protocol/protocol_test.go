@@ -82,7 +82,8 @@ func TestSnapshotFixtureIsUnderstood(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapshot := response.Result
-	if len(snapshot.Config.Repos) != 3 || snapshot.Config.PollInterval != 60 {
+	if len(snapshot.Config.Repos) != 3 || snapshot.Config.PollInterval != 120 ||
+		snapshot.Config.FocusInterval != 60 || snapshot.Config.ActiveInterval != 10 {
 		t.Errorf("config = %+v", snapshot.Config)
 	}
 	if snapshot.Errors["acme/web"] == "" {
@@ -177,8 +178,8 @@ func known(op string) bool {
 // serverOps mirrors server.Ops; the server's own test checks they agree.
 var serverOps = []string{
 	"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
-	"set_collapsed", "perform", "add_dependency", "remove_dependency", "dependency_graph",
-	"save_notifications", "send_test", "set_poll_interval",
+	"set_collapsed", "set_focus", "perform", "add_dependency", "remove_dependency",
+	"dependency_graph", "save_notifications", "send_test", "set_poll_interval",
 	"notification_form", "preview_notification", "shutdown",
 }
 

@@ -129,9 +129,11 @@ func state() protocol.Snapshot {
 	pid := 4242
 	return protocol.Snapshot{
 		Config: config.Config{
-			Repos:         []string{"acme/api", "acme/web", "Textualize/rich"},
-			PollInterval:  60,
-			Notifications: map[string]config.NotifyConfig{"acme/api": settings},
+			Repos:          []string{"acme/api", "acme/web", "Textualize/rich"},
+			PollInterval:   120,
+			FocusInterval:  60,
+			ActiveInterval: 10,
+			Notifications:  map[string]config.NotifyConfig{"acme/api": settings},
 		},
 		Repos: map[string]models.Repo{
 			"acme/api":        actions.WithActions(api, nil),
@@ -222,6 +224,7 @@ func requests(squash, merge models.MergeMethod) []map[string]any {
 		{"id": 9, "op": "add_repo", "args": map[string]any{"name": "acme/web"}},
 		{"id": 10, "op": "remove_repo", "args": map[string]any{"name": "acme/web"}},
 		{"id": 11, "op": "set_collapsed", "args": map[string]any{"owner": "acme", "collapsed": true}},
+		{"id": 21, "op": "set_focus", "args": map[string]any{"repo": "acme/api", "number": 1}},
 		{"id": 12, "op": "save_notifications",
 			"args": map[string]any{"repo": "acme/api", "settings": withScript}},
 		{"id": 13, "op": "send_test",

@@ -32,6 +32,17 @@ Two version numbers guard the client ↔ backend connection:
 Any wire change also updates `docs/protocol.md`, the fixtures (`make fixtures`)
 and the Swift models (`macos/PrMonKit/Sources/PrMonKit/Models.swift`).
 
+## Polling
+
+`internal/service/poll.go` is the scheduler. Looks start with conditional REST
+requests (`internal/github/conditional.go`): a 304 costs nothing against the
+rate limit, so a quiet repo is nearly free, and only PRs whose `updated_at`
+moved are fetched over GraphQL. Tiers: `poll_interval` for the rest,
+`focus_interval` for what a client has selected (`set_focus`), and
+`active_interval` for PRs in flight, which are fetched without their repo. A
+full `FetchRepo` runs every `github.Stale` so nothing drifts. Check runs often
+don't touch a PR's `updated_at`, which is why the in-flight tier exists.
+
 ## Go
 
 - `make test` runs everything with the race detector; `make lint` is gofmt plus

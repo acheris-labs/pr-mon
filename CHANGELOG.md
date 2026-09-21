@@ -4,6 +4,29 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc16]
+
+### Changed
+
+- Polling costs a fraction of what it did. Each look at a repo starts with
+  conditional requests, which GitHub answers with 304 when nothing changed —
+  free, against no rate limit — and only the PRs whose `updated_at` moved are
+  fetched. Measured over three quiet minutes on two 50-PR repos: 4 GraphQL
+  points instead of about 60.
+- Three tiers, all in `config.toml`: `poll_interval` (120s) for repos nobody is
+  looking at, `focus_interval` (60s) for the repo the app or dashboard has
+  selected, and `active_interval` (10s) for PRs in flight — checks running,
+  armed to merge, or on screen. A full fetch still happens every 5 minutes.
+- Clients say what they are showing (`set_focus`); the dashboard and the app
+  both do.
+
+### Fixed
+
+- A client that stopped reading could hang the backend for every other client.
+  Writes now have a deadline, and a client that misses it is dropped.
+- Two backends with different state directories no longer fight over one
+  launchd job (`XDG_STATE_HOME`).
+
 ## [0.2.0-rc15]
 
 ### Added

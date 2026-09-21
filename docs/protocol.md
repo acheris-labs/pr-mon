@@ -75,6 +75,7 @@ upgrade, a crash, a signal) and starting it again is the right thing to do.
 | `remove_repo` | `name` | `null` | Also drops its notification settings and armed merges. |
 | `mark_seen` | `name`, `number` | `null` | Clears the PR's "new" marker. |
 | `set_collapsed` | `owner`, `collapsed`: bool | `null` | `owner` is lowercase (the tree grouping key). |
+| `set_focus` | `repo`, `number`: int | `null` | What this client is showing. Its repo is checked every `focus_interval` instead of `poll_interval`; an empty `repo` clears it, as does closing the connection. |
 | `perform` | `repo`, `number`, `action`: `Action` | `null` | GitHub failures are reported as `toast` events, not errors. |
 | `add_dependency` | `repo`, `number`, `on`: string | `null` | The PR waits for `on` to merge first. `on` is `"owner/repo#12"` or a pull request URL, in any repo. Errors if `on` is missing, merged or closed, or the edge would make a loop. |
 | `remove_dependency` | `repo`, `number`, `on` | `null` | Undoes `add_dependency`. |
@@ -152,7 +153,9 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | Field | Type | Meaning |
 |:------|:-----|:--------|
 | `repos` | [string] | Monitored repos, in display order. |
-| `poll_interval` | int | Seconds between polls. |
+| `poll_interval` | int | Seconds between looks at a repo nobody has in focus. |
+| `focus_interval` | int | Seconds between looks at the repo a client has focused (`set_focus`). |
+| `active_interval` | int | Seconds between looks at PRs in flight: checks running, or armed to merge. Only those PRs are fetched, not their repos. |
 | `notifications` | {name: `NotifyConfig`} | Repos without an entry never notify. |
 
 ### Object: `NotifyConfig`

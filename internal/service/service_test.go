@@ -34,6 +34,11 @@ type fakeGitHub struct {
 	// States of PRs outside the fake repos, by "owner/repo#n"; a PR in a fake
 	// repo is open. Anything else is not found.
 	states map[string]string
+	// What the conditional requests answer: the repo's current ETags, and each
+	// PR's updated_at.
+	listETags map[string]string
+	baseETags map[string]string
+	updatedAt map[string]string
 }
 
 func newFakeGitHub(repos ...models.Repo) *fakeGitHub {
@@ -42,6 +47,9 @@ func newFakeGitHub(repos ...models.Repo) *fakeGitHub {
 		fetchErr:    map[string]error{},
 		fetchCounts: map[string]int{},
 		states:      map[string]string{},
+		listETags:   map[string]string{},
+		baseETags:   map[string]string{},
+		updatedAt:   map[string]string{},
 	}
 	for _, repo := range repos {
 		fake.repos[repo.Name] = repo
@@ -129,6 +137,81 @@ func (f *fakeGitHub) DeleteBranch(_ context.Context, refID string) error {
 	return f.deleteErr
 }
 
+// ListOpenPRs answers from the fake repo, and reports 304 when the caller's
+// ETag matches the one the repo has now.
+func (f *fakeGitHub) ListOpenPRs(_ context.Context, name, etag string) (github.OpenPRs, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.calls = append(f.calls, "list "+name)
+	if err := f.fetchErr[name]; err != nil {
+		return github.OpenPRs{}, err
+	}
+	repo, found := f.repos[name]
+	if !found {
+		return github.OpenPRs{}, &github.NotFoundError{Message: "Repository " + name + " not found"}
+	}
+	current := f.listETags[name]
+	if current == "" {
+		current = "etag-0"
+	}
+	if etag == current {
+		return github.OpenPRs{Changed: false, ETag: current}, nil
+	}
+	listed := github.OpenPRs{Changed: true, ETag: current, Updated: map[int]string{}}
+	for _, pr := range repo.PRs {
+		listed.Numbers = append(listed.Numbers, pr.Number)
+		stamp := f.updatedAt[models.PRKey(name, pr.Number)]
+		if stamp == "" {
+			stamp = testfixtures.CreatedAt
+		}
+		listed.Updated[pr.Number] = stamp
+	}
+	return listed, nil
+}
+
+func (f *fakeGitHub) BaseMoved(_ context.Context, name, etag string) (bool, string, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.calls = append(f.calls, "base "+name)
+	current := f.baseETags[name]
+	if current == "" {
+		current = "base-0"
+	}
+	return etag != current, current, nil
+}
+
+func (f *fakeGitHub) FetchPRs(_ context.Context, name string, numbers []int) ([]models.PullRequest, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.calls = append(f.calls, fmt.Sprintf("fetch %s %v", name, numbers))
+	wanted := map[int]bool{}
+	for _, number := range numbers {
+		wanted[number] = true
+	}
+	found := []models.PullRequest{}
+	for _, pr := range f.repos[name].PRs {
+		if wanted[pr.Number] {
+			found = append(found, pr)
+		}
+	}
+	return found, nil
+}
+
+// touch marks a PR as changed since the last look, the way GitHub would.
+func (f *fakeGitHub) touch(repo string, number int, stamp string) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.updatedAt[models.PRKey(repo, number)] = stamp
+	f.listETags[repo] = "etag-" + stamp
+}
+
+// basePushed makes the next BaseMoved report new commits on the base branch.
+func (f *fakeGitHub) basePushed(repo, sha string) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.baseETags[repo] = "base-" + sha
+}
+
 func (f *fakeGitHub) setState(key, state string) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -169,7 +252,15 @@ type harness struct {
 	deliveries []map[string]string
 }
 
-func start(t *testing.T, client *fakeGitHub, repos []string, notifications map[string]config.NotifyConfig) *harness {
+func start(t *testing.T, client *fakeGitHub, repos []string,
+	notifications map[string]config.NotifyConfig) *harness {
+	t.Helper()
+	return startWith(t, client, repos, notifications, nil)
+}
+
+// startWith is start with the saved config adjusted, for the poll intervals.
+func startWith(t *testing.T, client *fakeGitHub, repos []string,
+	notifications map[string]config.NotifyConfig, adjust func(*config.Config)) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	h := &harness{
@@ -182,6 +273,9 @@ func start(t *testing.T, client *fakeGitHub, repos []string, notifications map[s
 	saved.Repos = repos
 	if notifications != nil {
 		saved.Notifications = notifications
+	}
+	if adjust != nil {
+		adjust(&saved)
 	}
 	if err := config.Save(h.configPath, saved); err != nil {
 		t.Fatal(err)

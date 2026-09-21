@@ -361,6 +361,12 @@ func (c *Client) SetCollapsed(owner string, collapsed bool) error {
 	return c.request("set_collapsed", map[string]any{"owner": owner, "collapsed": collapsed}, nil)
 }
 
+// SetFocus tells the backend which repo (and PR) this client is showing, so it
+// is looked at more often than the rest. An empty repo clears it.
+func (c *Client) SetFocus(repo string, number int) error {
+	return c.request("set_focus", map[string]any{"repo": repo, "number": number}, nil)
+}
+
 func (c *Client) Perform(repo string, number int, action models.Action) error {
 	return c.request("perform",
 		map[string]any{"repo": repo, "number": number, "action": action}, nil)
