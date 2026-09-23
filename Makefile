@@ -97,14 +97,27 @@ sign: app
 	codesign --force $(HARDENED) --sign "$(SIGN_ID)" $(APP)
 	codesign --verify --strict --deep $(APP)
 
+# staple retries: Apple throttles the service that hands out tickets ("Error
+# 68", with a retry-after in the response), and a release that notarized fine
+# shouldn't fail for it.
+define staple
+	@for attempt in 1 2 3 4 5 6 7 8 9 10; do \
+		if xcrun stapler $(1) $(2); then exit 0; fi; \
+		echo "stapler $(1) failed (attempt $$attempt); Apple throttles this for"; \
+		echo "up to 40 minutes at a time (retry-after in its reply), so waiting 5m"; \
+		sleep 300; \
+	done; \
+	echo "stapler $(1) kept failing"; exit 1
+endef
+
 # Notarize through a zip, staple the ticket into the bundle, then re-zip so the
 # archive the cask downloads carries the ticket (stapler works on bundles).
 zip: sign
 	rm -f $(ZIP)
 	ditto -c -k --keepParent $(APP) $(ZIP)
 	xcrun notarytool submit $(ZIP) --keychain-profile "$(NOTARY_PROFILE)" --wait
-	xcrun stapler staple $(APP)
-	xcrun stapler validate $(APP)
+	$(call staple,staple,$(APP))
+	$(call staple,validate,$(APP))
 	rm -f $(ZIP)
 	ditto -c -k --keepParent $(APP) $(ZIP)
 	@echo "notarized $(ZIP)"
@@ -114,8 +127,8 @@ dmg: zip
 	rm -f $(DMG)
 	hdiutil create -volname "pr-mon" -srcfolder $(APP) -ov -format UDZO $(DMG)
 	xcrun notarytool submit $(DMG) --keychain-profile "$(NOTARY_PROFILE)" --wait
-	xcrun stapler staple $(DMG)
-	xcrun stapler validate $(DMG)
+	$(call staple,staple,$(DMG))
+	$(call staple,validate,$(DMG))
 	@echo "notarized $(DMG)"
 
 # Everything a release publishes: the stapled zip (cask) and DMG (humans).
@@ -125,7 +138,7 @@ verify:
 	codesign --verify --strict --verbose=2 $(APP)
 	codesign -dv --verbose=4 $(CONTENTS)/Resources/bin/pr-mon 2>&1 | head -5
 	spctl -a -vv $(APP)
-	xcrun stapler validate $(APP)
+	$(call staple,validate,$(APP))
 
 LS := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework
 LSREGISTER := $(LS)/Support/lsregister
