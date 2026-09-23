@@ -159,6 +159,57 @@ func splitRepo(name string) (string, string, error) {
 	return owner, repo, nil
 }
 
+// RerunFailedJobs asks GitHub Actions to run the failed jobs of these runs
+// again. Runs are named by the repo the workflow belongs to, which for a PR is
+// the one being merged into.
+func (c *Client) RerunFailedJobs(ctx context.Context, name string, runs []int) error {
+	owner, repo, err := splitRepo(name)
+	if err != nil {
+		return err
+	}
+	for _, run := range runs {
+		path := fmt.Sprintf("/repos/%s/%s/actions/runs/%d/rerun-failed-jobs", owner, repo, run)
+		if err := c.restPost(ctx, path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// restPost sends an empty POST, refreshing the token once if GitHub refuses it.
+func (c *Client) restPost(ctx context.Context, path string) error {
+	for attempt := range 2 {
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.restRoot()+path, nil)
+		if err != nil {
+			return &Error{Message: err.Error()}
+		}
+		request.Header.Set("Authorization", "Bearer "+c.currentToken())
+		request.Header.Set("Accept", "application/vnd.github+json")
+		response, err := c.http.Do(request)
+		if err != nil {
+			return &Error{Message: fmt.Sprintf("Network error: %v", err)}
+		}
+		body, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		if response.StatusCode < 300 {
+			return nil
+		}
+		problem := httpProblem(response, body)
+		var authProblem *AuthError
+		if attempt == 0 && asAuth(problem, &authProblem) {
+			if refreshErr := c.refreshToken(); refreshErr != nil {
+				return refreshErr
+			}
+			continue
+		}
+		if problem == nil {
+			problem = &Error{Message: fmt.Sprintf("GitHub API error %d", response.StatusCode)}
+		}
+		return problem
+	}
+	return &Error{Message: "GitHub kept rejecting the token"}
+}
+
 // Stale is how long a repo goes without a full fetch, however quiet the
 // conditional checks say it is.
 const Stale = 5 * time.Minute

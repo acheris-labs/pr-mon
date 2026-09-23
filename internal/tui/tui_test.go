@@ -408,6 +408,34 @@ func TestActionMenuOffersWhatTheBackendDecided(t *testing.T) {
 	}
 }
 
+func TestActionMenuDraftAndRerun(t *testing.T) {
+	model, backend := newModel()
+	press(t, model, "enter", "enter") // PR 1's action menu
+	if !strings.Contains(model.View(), "[t] Convert to draft") {
+		t.Fatalf("menu = \n%s", model.View())
+	}
+	press(t, model, "t")
+	if !contains2(backend.recorded(), "perform acme/api 1 convert_to_draft - false") {
+		t.Errorf("calls = %v", backend.recorded())
+	}
+
+	// A PR with a failed Actions run offers the re-run.
+	backend.editPR("acme/api", 2, func(pr *models.PullRequest) {
+		check := testfixtures.CheckRun("ci", "FAILURE")
+		check.RunID = models.Ptr(77)
+		pr.Checks = []models.Check{check}
+		pr.ChecksTotal = 1
+	})
+	press(t, model, "down", "enter")
+	if !strings.Contains(model.View(), "[r] Re-run failed checks") {
+		t.Fatalf("menu = \n%s", model.View())
+	}
+	press(t, model, "r")
+	if !contains2(backend.recorded(), "perform acme/api 2 rerun_checks - false") {
+		t.Errorf("calls = %v", backend.recorded())
+	}
+}
+
 func TestActionMenuDeleteToggleAndEscape(t *testing.T) {
 	model, backend := newModel()
 	press(t, model, "enter", "enter", "d") // open the menu, turn off deleting

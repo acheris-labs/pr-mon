@@ -54,6 +54,12 @@ func (f *fakeGitHub) DisableAutoMerge(context.Context, string) error { return ni
 
 func (f *fakeGitHub) DeleteBranch(context.Context, string) error { return nil }
 
+func (f *fakeGitHub) MarkReadyForReview(context.Context, string) error { return nil }
+
+func (f *fakeGitHub) ConvertToDraft(context.Context, string) error { return nil }
+
+func (f *fakeGitHub) RerunFailedJobs(context.Context, string, []int) error { return nil }
+
 func (f *fakeGitHub) ListOpenPRs(_ context.Context, _, etag string) (github.OpenPRs, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()

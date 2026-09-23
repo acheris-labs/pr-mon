@@ -42,6 +42,9 @@ type Check struct {
 	Name      string  `json:"name"`
 	State     string  `json:"state"`
 	StartedAt *string `json:"started_at"`
+	// The GitHub Actions run this check belongs to, for re-running it; null for
+	// a check that isn't an Actions run.
+	RunID *int `json:"run_id"`
 }
 
 // LinkedIssue is an issue this PR closes when it merges: what GitHub's own
@@ -115,7 +118,7 @@ type ArmedMerge struct {
 
 // ActionOption is one entry of a PR's action menu, as the backend decides it.
 type ActionOption struct {
-	Key                string  `json:"key"`  // "merge" | "auto_merge" | "update"
+	Key                string  `json:"key"`  // "merge" | "auto_merge" | "update" | "draft" | "rerun"
 	Kind               string  `json:"kind"` // the Action kind to send
 	Label              string  `json:"label"`
 	Available          bool    `json:"available"`

@@ -28,6 +28,7 @@ type fakeGitHub struct {
 	mergeHeads  []string
 	mergeErrs   []error // consumed in order, then mergeErr
 	mergeErr    error
+	actionErr   error
 	deleteErr   error
 	mergeGate   chan struct{}
 	fetchCounts map[string]int
@@ -128,6 +129,21 @@ func (f *fakeGitHub) EnableAutoMerge(_ context.Context, prID string, method mode
 func (f *fakeGitHub) DisableAutoMerge(_ context.Context, prID string) error {
 	f.record("auto_off " + prID)
 	return nil
+}
+
+func (f *fakeGitHub) MarkReadyForReview(_ context.Context, prID string) error {
+	f.record("ready " + prID)
+	return f.actionErr
+}
+
+func (f *fakeGitHub) ConvertToDraft(_ context.Context, prID string) error {
+	f.record("draft " + prID)
+	return f.actionErr
+}
+
+func (f *fakeGitHub) RerunFailedJobs(_ context.Context, repo string, runs []int) error {
+	f.record(fmt.Sprintf("rerun %s %v", repo, runs))
+	return f.actionErr
 }
 
 func (f *fakeGitHub) DeleteBranch(_ context.Context, refID string) error {
@@ -640,6 +656,46 @@ func TestEventsAreEmitted(t *testing.T) {
 	for kind, seen := range wanted {
 		if !seen {
 			t.Errorf("no %q event; kinds = %v", kind, h.kinds())
+		}
+	}
+}
+
+func TestDraftToggleAndRerun(t *testing.T) {
+	failing := testfixtures.PR(1, func(pr *models.PullRequest) {
+		testfixtures.Failing(pr)
+		one := testfixtures.CheckRun("ci", "FAILURE")
+		one.RunID = models.Ptr(77)
+		two := testfixtures.CheckRun("lint", "FAILURE")
+		two.RunID = models.Ptr(77) // the same run: asked to re-run once
+		three := testfixtures.CheckRun("deploy", "SUCCESS")
+		three.RunID = models.Ptr(88)
+		pr.Checks = []models.Check{one, two, three}
+		pr.ChecksTotal = 3
+	})
+	client := newFakeGitHub(repoWith("acme/api", failing))
+	h := start(t, client, []string{"acme/api"}, nil)
+
+	perform := func(kind string) {
+		t.Helper()
+		if err := h.monitor.Perform(context.Background(), "acme/api", 1,
+			models.Action{Kind: kind}); err != nil {
+			t.Fatal(err)
+		}
+		h.monitor.WaitIdle()
+	}
+	perform("convert_to_draft")
+	perform("mark_ready")
+	perform("rerun_checks")
+
+	for _, want := range []string{"draft PR_1", "ready PR_1", "rerun acme/api [77]"} {
+		if len(client.callsMatching(want)) != 1 {
+			t.Errorf("calls = %v, want %q", client.calls, want)
+		}
+	}
+	for _, want := range []string{"acme/api#1 is a draft again", "acme/api#1 is ready for review",
+		"Re-running failed checks for acme/api#1"} {
+		if !h.hasToast(want) {
+			t.Errorf("toasts = %v, want %q", h.toasts(), want)
 		}
 	}
 }

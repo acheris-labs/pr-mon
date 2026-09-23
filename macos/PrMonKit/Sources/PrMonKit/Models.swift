@@ -134,10 +134,14 @@ public struct Check: Codable, Sendable, Equatable {
     public var name: String
     public var state: String
     public var startedAt: String?
+    /// The GitHub Actions run behind this check, which `rerun_checks` re-runs;
+    /// nil for anything that isn't an Actions run.
+    public var runId: Int?
 
     enum CodingKeys: String, CodingKey {
         case name, state
         case startedAt = "started_at"
+        case runId = "run_id"
     }
 }
 

@@ -27,6 +27,7 @@ var EventKinds = []string{"repos", "repo", "seen", "collapsed", "config", "statu
 // ActionKinds are every action a client may ask for.
 var ActionKinds = []string{
 	"merge", "update", "auto_merge_on", "auto_merge_off", "arm_merge", "disarm_merge",
+	"mark_ready", "convert_to_draft", "rerun_checks",
 }
 
 // Request is what a client sends.

@@ -171,6 +171,8 @@ struct PullRequestCommands: Commands {
         switch key {
         case "merge": "m"
         case "auto_merge": "a"
+        case "draft": "t"
+        case "rerun": "r"
         default: "u"
         }
     }

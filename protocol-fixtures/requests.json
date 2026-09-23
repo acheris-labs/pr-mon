@@ -76,6 +76,32 @@
   },
   {
     "args": {
+      "action": {
+        "kind": "mark_ready",
+        "method": null,
+        "delete_branch": false
+      },
+      "number": 1,
+      "repo": "acme/api"
+    },
+    "id": 22,
+    "op": "perform"
+  },
+  {
+    "args": {
+      "action": {
+        "kind": "rerun_checks",
+        "method": null,
+        "delete_branch": false
+      },
+      "number": 1,
+      "repo": "acme/api"
+    },
+    "id": 23,
+    "op": "perform"
+  },
+  {
+    "args": {
       "name": "acme/web"
     },
     "id": 9,

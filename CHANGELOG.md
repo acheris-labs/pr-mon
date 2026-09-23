@@ -4,6 +4,34 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc20]
+
+### Added
+
+- Toggle a PR between draft and ready for review: `t` in the dashboard's
+  action menu, the same entry in the app's menus and toolbar (⌥⌘T).
+- Re-run a PR's failed GitHub Actions jobs: `r` in the action menu, ⌥⌘R in the
+  app. Offered only when Actions ran and something failed; each run is asked
+  once, however many of its checks failed.
+
+## [0.2.0-rc19]
+
+### Fixed
+
+- A PR kept saying it was waiting after the PR it waited on had merged. The
+  tiered polling added in rc16 looked those up during a full poll only, which
+  now happens at startup or on an explicit refresh. They are looked up on the
+  poll interval, and at once when one leaves its repo's open list.
+
+## [0.2.0-rc18]
+
+### Fixed
+
+- Releasing could fail after a successful notarization: Apple throttles the
+  service that hands out tickets, with a retry-after of up to 40 minutes.
+  Stapling retries now rather than giving up. (rc17 carries the same changes
+  as rc18; its build lost the race with that throttle.)
+
 ## [0.2.0-rc17]
 
 ### Added

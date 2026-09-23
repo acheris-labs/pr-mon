@@ -83,8 +83,10 @@ func state() protocol.Snapshot {
 		pr(3, func(p *models.PullRequest) {
 			testfixtures.Failing(p)
 			p.Checks = []models.Check{
-				{Name: "lint", State: "FAILURE", StartedAt: models.Ptr(checkStarted)},
-				{Name: "deploy", State: "SUCCESS", StartedAt: models.Ptr("2026-09-15T01:00:00Z")},
+				{Name: "lint", State: "FAILURE", StartedAt: models.Ptr(checkStarted),
+					RunID: models.Ptr(4242)},
+				{Name: "deploy", State: "SUCCESS", StartedAt: models.Ptr("2026-09-15T01:00:00Z"),
+					RunID: models.Ptr(4242)},
 			}
 			p.ChecksTotal = 5
 		}),
@@ -221,6 +223,8 @@ func requests(squash, merge models.MergeMethod) []map[string]any {
 		perform(6, models.Action{Kind: "arm_merge", Method: &merge}),
 		perform(7, models.Action{Kind: "disarm_merge"}),
 		perform(8, models.Action{Kind: "update"}),
+		perform(22, models.Action{Kind: "mark_ready"}),
+		perform(23, models.Action{Kind: "rerun_checks"}),
 		{"id": 9, "op": "add_repo", "args": map[string]any{"name": "acme/web"}},
 		{"id": 10, "op": "remove_repo", "args": map[string]any{"name": "acme/web"}},
 		{"id": 11, "op": "set_collapsed", "args": map[string]any{"owner": "acme", "collapsed": true}},

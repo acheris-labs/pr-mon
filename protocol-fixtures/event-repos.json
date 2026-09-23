@@ -81,6 +81,16 @@
                 "note": null,
                 "needs_method": true,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
             "waits_on": [],
@@ -127,6 +137,16 @@
                 "key": "auto_merge",
                 "kind": "disarm_merge",
                 "label": "Cancel merge when ready (pr-mon)",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
                 "available": true,
                 "reason": null,
                 "note": null,
@@ -209,6 +229,16 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
             "waits_on": [],
@@ -234,7 +264,8 @@
               {
                 "name": "ci",
                 "state": "PENDING",
-                "started_at": "2026-09-15T01:30:00Z"
+                "started_at": "2026-09-15T01:30:00Z",
+                "run_id": null
               }
             ],
             "checks_total": 1,
@@ -271,6 +302,16 @@
                 "note": "branch won't be deleted: repo doesn't auto-delete",
                 "needs_method": true,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
             "waits_on": [],
@@ -305,12 +346,14 @@
               {
                 "name": "lint",
                 "state": "FAILURE",
-                "started_at": "2026-09-15T01:30:00Z"
+                "started_at": "2026-09-15T01:30:00Z",
+                "run_id": 4242
               },
               {
                 "name": "deploy",
                 "state": "SUCCESS",
-                "started_at": "2026-09-15T01:00:00Z"
+                "started_at": "2026-09-15T01:00:00Z",
+                "run_id": 4242
               }
             ],
             "checks_total": 5,
@@ -350,6 +393,26 @@
                 "reason": null,
                 "note": "branch won't be deleted: repo doesn't auto-delete",
                 "needs_method": true,
+                "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
+              },
+              {
+                "key": "rerun",
+                "kind": "rerun_checks",
+                "label": "Re-run failed checks",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
                 "offers_delete_branch": false
               }
             ],
@@ -406,6 +469,16 @@
                 "reason": null,
                 "note": "branch won't be deleted: repo doesn't auto-delete",
                 "needs_method": true,
+                "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
                 "offers_delete_branch": false
               }
             ],
@@ -477,6 +550,16 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
             "waits_on": [],
@@ -530,6 +613,16 @@
                 "label": "Auto-merge",
                 "available": false,
                 "reason": "draft PR",
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "mark_ready",
+                "label": "Mark ready for review",
+                "available": true,
+                "reason": null,
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
@@ -589,6 +682,16 @@
                 "note": "branch won't be deleted: repo doesn't auto-delete",
                 "needs_method": true,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
             "waits_on": [],
@@ -638,6 +741,16 @@
                 "key": "auto_merge",
                 "kind": "auto_merge_off",
                 "label": "Disable auto-merge",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
                 "available": true,
                 "reason": null,
                 "note": null,
@@ -699,6 +812,16 @@
                 "note": "after the PRs it waits on have merged",
                 "needs_method": true,
                 "offers_delete_branch": true
+              },
+              {
+                "key": "draft",
+                "kind": "convert_to_draft",
+                "label": "Convert to draft",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
             "waits_on": [

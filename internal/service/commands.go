@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/config"
 	"github.com/acheris-labs/pr-mon/internal/models"
 	"github.com/acheris-labs/pr-mon/internal/notify"
+	"github.com/acheris-labs/pr-mon/internal/readiness"
 	"github.com/acheris-labs/pr-mon/internal/state"
 )
 
@@ -256,6 +258,25 @@ func (m *Monitor) runAction(ctx context.Context, repoName string, pr models.Pull
 			return err
 		}
 		m.toast(fmt.Sprintf("Auto-merge disabled for %s", label))
+	case "mark_ready":
+		if err := m.client.MarkReadyForReview(ctx, pr.ID); err != nil {
+			return err
+		}
+		m.toast(fmt.Sprintf("%s is ready for review", label))
+	case "rerun_checks":
+		runs := failedRuns(pr)
+		if len(runs) == 0 {
+			return &Error{Message: "no failed GitHub Actions checks to re-run"}
+		}
+		if err := m.client.RerunFailedJobs(ctx, repoName, runs); err != nil {
+			return err
+		}
+		m.toast(fmt.Sprintf("Re-running failed checks for %s", label))
+	case "convert_to_draft":
+		if err := m.client.ConvertToDraft(ctx, pr.ID); err != nil {
+			return err
+		}
+		m.toast(fmt.Sprintf("%s is a draft again", label))
 	default:
 		if err := m.client.UpdateBranch(ctx, pr.ID); err != nil {
 			return err
@@ -263,6 +284,20 @@ func (m *Monitor) runAction(ctx context.Context, repoName string, pr models.Pull
 		m.toast(fmt.Sprintf("Updated branch for %s", label))
 	}
 	return nil
+}
+
+// failedRuns is every Actions run behind a failed check, each one once.
+func failedRuns(pr models.PullRequest) []int {
+	runs := []int{}
+	for _, check := range pr.Checks {
+		if check.RunID == nil || !readiness.CheckFailed(check) {
+			continue
+		}
+		if !slices.Contains(runs, *check.RunID) {
+			runs = append(runs, *check.RunID)
+		}
+	}
+	return runs
 }
 
 // SaveNotifications stores one repo's notification settings.

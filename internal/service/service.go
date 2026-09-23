@@ -68,6 +68,9 @@ type GitHub interface {
 	EnableAutoMerge(ctx context.Context, prID string, method models.MergeMethod) error
 	DisableAutoMerge(ctx context.Context, prID string) error
 	DeleteBranch(ctx context.Context, refID string) error
+	MarkReadyForReview(ctx context.Context, prID string) error
+	RerunFailedJobs(ctx context.Context, repo string, runs []int) error
+	ConvertToDraft(ctx context.Context, prID string) error
 	LookupPRs(ctx context.Context, repo string, numbers []int) ([]models.PRRef, error)
 	// The cheap side: conditional requests and fetches of named PRs only.
 	ListOpenPRs(ctx context.Context, repo, etag string) (github.OpenPRs, error)

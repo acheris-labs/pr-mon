@@ -162,3 +162,40 @@ func TestWaitingPRUsesPrMonsMergeWhenReady(t *testing.T) {
 		t.Errorf("auto_merge = %+v", auto)
 	}
 }
+
+func TestDraftToggle(t *testing.T) {
+	open := menu(ready, nil)["draft"]
+	if open.Kind != "convert_to_draft" || !open.Available || open.Label != "Convert to draft" {
+		t.Errorf("open PR = %+v", open)
+	}
+	draft := menu(testfixtures.Draft, nil)["draft"]
+	if draft.Kind != "mark_ready" || !draft.Available || draft.Label != "Mark ready for review" {
+		t.Errorf("draft PR = %+v", draft)
+	}
+}
+
+func TestRerunFailedChecks(t *testing.T) {
+	withRuns := func(states ...string) func(*models.PullRequest) {
+		return func(pr *models.PullRequest) {
+			testfixtures.Failing(pr)
+			for i, state := range states {
+				check := testfixtures.CheckRun("ci", state)
+				check.RunID = models.Ptr(100 + i)
+				pr.Checks = append(pr.Checks, check)
+			}
+			pr.ChecksTotal = len(states)
+		}
+	}
+	failed := menu(withRuns("FAILURE", "SUCCESS"), nil)["rerun"]
+	if failed.Kind != "rerun_checks" || !failed.Available {
+		t.Errorf("failed checks = %+v", failed)
+	}
+	passing := menu(withRuns("SUCCESS"), nil)["rerun"]
+	if passing.Available || *passing.Reason != "no failed checks" {
+		t.Errorf("passing checks = %+v", passing)
+	}
+	// Checks that aren't Actions runs (another CI system) offer nothing to re-run.
+	if _, offered := menu(testfixtures.Failing, nil)["rerun"]; offered {
+		t.Error("no Actions runs, no re-run option")
+	}
+}

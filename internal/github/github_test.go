@@ -654,3 +654,49 @@ func TestFetchPRsOnlyAsksForTheOnesNamed(t *testing.T) {
 		t.Errorf("query = %s", sent)
 	}
 }
+
+func TestRerunFailedJobs(t *testing.T) {
+	client, rec := serve(t, always(okData(nil)))
+	rest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec.mutex.Lock()
+		rec.requests = append(rec.requests, map[string]any{
+			"method": r.Method, "path": r.URL.Path,
+		})
+		rec.mutex.Unlock()
+		w.WriteHeader(http.StatusCreated)
+	}))
+	t.Cleanup(rest.Close)
+	client.SetRESTURL(rest.URL)
+
+	if err := client.RerunFailedJobs(context.Background(), "acme/api", []int{77, 88}); err != nil {
+		t.Fatal(err)
+	}
+	asked := []string{}
+	for _, request := range rec.requests {
+		if request["method"] == http.MethodPost {
+			asked = append(asked, request["path"].(string))
+		}
+	}
+	want := []string{
+		"/repos/acme/api/actions/runs/77/rerun-failed-jobs",
+		"/repos/acme/api/actions/runs/88/rerun-failed-jobs",
+	}
+	if !reflect.DeepEqual(asked, want) {
+		t.Errorf("posts = %v, want %v", asked, want)
+	}
+}
+
+func TestRerunFailedJobsReportsRefusal(t *testing.T) {
+	client, _ := serve(t, always(okData(nil)))
+	rest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"Resource not accessible by personal access token"}`)
+	}))
+	t.Cleanup(rest.Close)
+	client.SetRESTURL(rest.URL)
+
+	err := client.RerunFailedJobs(context.Background(), "acme/api", []int{77})
+	if err == nil || !strings.Contains(err.Error(), "not accessible") {
+		t.Errorf("err = %v, want GitHub's refusal", err)
+	}
+}

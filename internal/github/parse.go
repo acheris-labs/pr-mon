@@ -104,6 +104,20 @@ type checkNode struct {
 	Context    string  `json:"context"`
 	State      string  `json:"state"`
 	CreatedAt  *string `json:"createdAt"`
+	CheckSuite *struct {
+		WorkflowRun *struct {
+			DatabaseID int `json:"databaseId"`
+		} `json:"workflowRun"`
+	} `json:"checkSuite"`
+}
+
+// runID is the Actions run this check belongs to, if it is one.
+func (c checkNode) runID() *int {
+	if c.CheckSuite == nil || c.CheckSuite.WorkflowRun == nil ||
+		c.CheckSuite.WorkflowRun.DatabaseID == 0 {
+		return nil
+	}
+	return models.Ptr(c.CheckSuite.WorkflowRun.DatabaseID)
 }
 
 // toCheck flattens the two kinds of check GitHub reports into one shape.
@@ -112,13 +126,13 @@ func (c checkNode) toCheck() models.Check {
 		return models.Check{Name: c.Context, State: c.State, StartedAt: c.CreatedAt}
 	}
 	if c.Status != "COMPLETED" {
-		return models.Check{Name: c.Name, State: "PENDING", StartedAt: c.StartedAt}
+		return models.Check{Name: c.Name, State: "PENDING", StartedAt: c.StartedAt, RunID: c.runID()}
 	}
 	state := c.Conclusion
 	if state == "" {
 		state = "PENDING"
 	}
-	return models.Check{Name: c.Name, State: state, StartedAt: c.StartedAt}
+	return models.Check{Name: c.Name, State: state, StartedAt: c.StartedAt, RunID: c.runID()}
 }
 
 func (p prNode) toPullRequest() models.PullRequest {

@@ -113,10 +113,14 @@ enum Fixtures {
         let snapshot = try Fixtures.snapshot()
         let api = try #require(snapshot.repos["acme/api"])
         let ready = api.prs[0].actions
-        #expect(ready.map(\.key) == ["merge", "auto_merge"])
+        #expect(ready.map(\.key) == ["merge", "auto_merge", "draft"])
         #expect(ready[0].available && ready[0].needsMethod && ready[0].offersDeleteBranch)
         #expect(ready[1].reason == "already mergeable")
-        #expect(api.prs[4].actions.map(\.kind) == ["merge", "auto_merge_on", "update"])
+        #expect(api.prs[4].actions.map(\.kind) == ["merge", "auto_merge_on", "update", "convert_to_draft"])
+        // A PR with a failed GitHub Actions run offers to re-run it.
+        #expect(api.prs[2].actions.map(\.key) == ["merge", "auto_merge", "draft", "rerun"])
+        #expect(api.prs[2].checks.first?.runId == 4242)
+        #expect(api.prs[0].actions.contains { $0.key == "rerun" } == false)
 
         let rich = try #require(snapshot.repos["Textualize/rich"])
         #expect(rich.mergeMethods == [.squash])
@@ -188,6 +192,8 @@ enum Fixtures {
             try Wire.encode(Request(id: 6, op: "perform", args: action("arm_merge", .merge, false))),
             try Wire.encode(Request(id: 7, op: "perform", args: action("disarm_merge", nil, false))),
             try Wire.encode(Request(id: 8, op: "perform", args: action("update", nil, false))),
+            try Wire.encode(Request(id: 22, op: "perform", args: action("mark_ready", nil, false))),
+            try Wire.encode(Request(id: 23, op: "perform", args: action("rerun_checks", nil, false))),
             try Wire.encode(Request(id: 9, op: "add_repo", args: NameArgs(name: "acme/web"))),
             try Wire.encode(Request(id: 10, op: "remove_repo", args: NameArgs(name: "acme/web"))),
             try Wire.encode(Request(id: 11, op: "set_collapsed",

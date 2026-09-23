@@ -246,6 +246,7 @@ reimplement the rules.
 | `name` | string | |
 | `state` | string | e.g. `SUCCESS`, `FAILURE`, `PENDING`. |
 | `started_at` | timestamp or null | |
+| `run_id` | int or null | The GitHub Actions run behind this check, which `rerun_checks` re-runs; null for anything that isn't an Actions run. |
 
 ### Object: `LinkedIssue`
 
@@ -307,7 +308,7 @@ disabled with its `reason`.
 
 | Field | Type | Meaning |
 |:------|:-----|:--------|
-| `key` | string | Menu slot: `merge`, `auto_merge` or `update` (the TUI's `m`, `a`, `u`). |
+| `key` | string | Menu slot: `merge`, `auto_merge`, `update`, `draft` or `rerun` (the TUI's `m`, `a`, `u`, `t`, `r`). |
 | `kind` | string | The `Action` kind to send when chosen. |
 | `label` | string | Text to show. |
 | `available` | bool | False: show it disabled. |
@@ -343,6 +344,9 @@ To act on an entry, send `perform` with
 | `auto_merge_off` | Disable GitHub's native auto-merge. |
 | `arm_merge` | pr-mon merges the PR once it is strictly ready. |
 | `disarm_merge` | Cancel `arm_merge`. |
+| `mark_ready` | Take the PR out of draft. |
+| `convert_to_draft` | Put the PR back into draft. |
+| `rerun_checks` | Re-run the failed jobs of this PR's GitHub Actions runs. |
 
 `MergeMethod` is one of `SQUASH`, `MERGE`, `REBASE`.
 

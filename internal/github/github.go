@@ -57,7 +57,10 @@ fragment PrFields on PullRequest {
             totalCount
             nodes {
               __typename
-              ... on CheckRun { name status conclusion startedAt }
+              ... on CheckRun {
+                name status conclusion startedAt
+                checkSuite { workflowRun { databaseId } }
+              }
               ... on StatusContext { context state createdAt }
             }
           }
@@ -143,6 +146,16 @@ mutation($id: ID!, $method: PullRequestMergeMethod!) {
 	disableAutoMergeMutation = `
 mutation($id: ID!) {
   disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId }
+}
+`
+	readyForReviewMutation = `
+mutation($id: ID!) {
+  markPullRequestReadyForReview(input: {pullRequestId: $id}) { clientMutationId }
+}
+`
+	convertToDraftMutation = `
+mutation($id: ID!) {
+  convertPullRequestToDraft(input: {pullRequestId: $id}) { clientMutationId }
 }
 `
 	deleteRefMutation = `
@@ -515,6 +528,18 @@ func (c *Client) EnableAutoMerge(ctx context.Context, prID string, method models
 
 func (c *Client) DisableAutoMerge(ctx context.Context, prID string) error {
 	_, err := c.graphql(ctx, disableAutoMergeMutation, map[string]any{"id": prID})
+	return err
+}
+
+// MarkReadyForReview takes a PR out of draft.
+func (c *Client) MarkReadyForReview(ctx context.Context, prID string) error {
+	_, err := c.graphql(ctx, readyForReviewMutation, map[string]any{"id": prID})
+	return err
+}
+
+// ConvertToDraft puts a PR back into draft.
+func (c *Client) ConvertToDraft(ctx context.Context, prID string) error {
+	_, err := c.graphql(ctx, convertToDraftMutation, map[string]any{"id": prID})
 	return err
 }
 

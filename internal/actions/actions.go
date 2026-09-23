@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/acheris-labs/pr-mon/internal/models"
+	"github.com/acheris-labs/pr-mon/internal/readiness"
 )
 
 const (
@@ -44,7 +45,48 @@ func Available(repo models.Repo, pr models.PullRequest, armed *models.ArmedMerge
 			Key: "update", Kind: "update", Label: "Update branch", Available: true,
 		})
 	}
+	options = append(options, draftOption(pr))
+	if rerun := rerunOption(pr); rerun != nil {
+		options = append(options, *rerun)
+	}
 	return options
+}
+
+// rerunOption re-runs the failed jobs of this PR's checks; nil when GitHub
+// Actions didn't run any (another CI system, or nothing has run yet).
+func rerunOption(pr models.PullRequest) *models.ActionOption {
+	actionsRan, failed := false, false
+	for _, check := range pr.Checks {
+		if check.RunID == nil {
+			continue
+		}
+		actionsRan = true
+		failed = failed || readiness.CheckFailed(check)
+	}
+	if !actionsRan {
+		return nil
+	}
+	if !failed {
+		return &models.ActionOption{
+			Key: "rerun", Kind: "rerun_checks", Label: "Re-run failed checks",
+			Available: false, Reason: models.Ptr("no failed checks"),
+		}
+	}
+	return &models.ActionOption{
+		Key: "rerun", Kind: "rerun_checks", Label: "Re-run failed checks", Available: true,
+	}
+}
+
+// draftOption takes a PR out of draft, or puts it back.
+func draftOption(pr models.PullRequest) models.ActionOption {
+	if pr.IsDraft {
+		return models.ActionOption{
+			Key: "draft", Kind: "mark_ready", Label: "Mark ready for review", Available: true,
+		}
+	}
+	return models.ActionOption{
+		Key: "draft", Kind: "convert_to_draft", Label: "Convert to draft", Available: true,
+	}
 }
 
 func mergeOption(repo models.Repo, pr models.PullRequest, deletable bool) models.ActionOption {

@@ -122,6 +122,8 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods) |
 | `a` | action menu | Toggle auto-merge: GitHub's if the repo allows it, otherwise pr-mon's "merge when ready" (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
+| `t` | action menu | Toggle draft: mark ready for review, or convert back to draft |
+| `r` | action menu | Re-run this PR's failed GitHub Actions jobs |
 | `space` | action menu | Toggle "delete remote branch" |
 | `w` | PR list or action menu | Dependencies: what the PR waits on (`a` add, `d` remove, `g` graph) |
 | `N` | repo tree (on a repo) | Notification settings for that repo |
