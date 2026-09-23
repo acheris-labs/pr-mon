@@ -91,12 +91,13 @@ func (m *Monitor) focusedLocked() map[string]bool {
 	return repos
 }
 
-// due reports which repos to look at now, and whether in-flight PRs are due.
-func (m *Monitor) due(now time.Time) (look []string, active bool) {
+// due reports which repos to look at now, whether in-flight PRs are due, and
+// whether to look again at the PRs other PRs are waiting on.
+func (m *Monitor) due(now time.Time) (look []string, active, waited bool) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if !m.pausedUntil.IsZero() && now.Before(m.pausedUntil) {
-		return nil, false
+		return nil, false, false
 	}
 	focused := m.focusedLocked()
 	background := seconds(m.config.PollInterval, MinPollInterval)
@@ -111,7 +112,8 @@ func (m *Monitor) due(now time.Time) (look []string, active bool) {
 			look = append(look, name)
 		}
 	}
-	return look, now.Sub(m.lastActive) >= seconds(m.config.ActiveInterval, 1)
+	waited = len(m.graphLocked()) > 0 && now.Sub(m.lastWaited) >= background
+	return look, now.Sub(m.lastActive) >= seconds(m.config.ActiveInterval, 1), waited
 }
 
 func seconds(value, lowest int) time.Duration {
@@ -141,7 +143,13 @@ func (m *Monitor) pollLoop() {
 		case <-ticker.C:
 		}
 		now := time.Now()
-		look, active := m.due(now)
+		look, active, waited := m.due(now)
+		if waited {
+			m.mutex.Lock()
+			m.lastWaited = now
+			m.mutex.Unlock()
+			m.spawn(func() { m.RefreshDependencyStates(m.ctx) })
+		}
 		if active {
 			m.mutex.Lock()
 			m.lastActive = now
@@ -264,6 +272,15 @@ func (m *Monitor) applyChanged(ctx context.Context, name string, listed github.O
 
 	m.apply(name, repo)
 	m.noteFresh(name)
+	// Something waiting on a PR that just left this list shouldn't say it is
+	// still waiting until the next scheduled look.
+	open := map[int]bool{}
+	for _, number := range listed.Numbers {
+		open[number] = true
+	}
+	if m.targetGone(name, open) {
+		m.RefreshDependencyStates(ctx)
+	}
 }
 
 // RefreshInFlight re-fetches only the PRs that are moving: checks running, or

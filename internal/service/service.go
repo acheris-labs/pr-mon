@@ -109,6 +109,7 @@ type Monitor struct {
 	// What each connected client has selected, by client id.
 	focus      map[string]Focus
 	lastActive time.Time
+	lastWaited time.Time
 	status     Status
 	// Repos whose first load finished this session; only they can notify.
 	loaded      map[string]bool

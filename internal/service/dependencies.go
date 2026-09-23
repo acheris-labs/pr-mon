@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/acheris-labs/pr-mon/internal/dependencies"
@@ -133,6 +134,49 @@ func (m *Monitor) refreshWaitedOn(ctx context.Context) {
 	for key, ref := range found {
 		m.waitedOn[key] = ref
 	}
+}
+
+// RefreshDependencyStates looks up the PRs being waited on and works out the
+// waiting PRs again, so one stops saying it waits as soon as the last PR it
+// waits on has merged. The scheduler calls it; so does a look that sees a PR
+// something waits on leave its repo's open list.
+func (m *Monitor) RefreshDependencyStates(ctx context.Context) {
+	m.refreshWaitedOn(ctx)
+	m.mutex.Lock()
+	waiting := []string{}
+	for key := range m.graphLocked() {
+		if repo, _, ok := dependencies.ParseKey(key); ok && !slices.Contains(waiting, repo) {
+			waiting = append(waiting, repo)
+		}
+	}
+	for _, name := range waiting {
+		m.rebuildLocked(name)
+	}
+	m.mutex.Unlock()
+	for _, name := range waiting {
+		m.emit(Event{Kind: "repo", Name: name})
+		// One of them may be ready now, and armed.
+		if repo, found := m.Repo(name); found {
+			m.checkArmed(name, repo)
+		}
+	}
+}
+
+// targetGone reports whether a PR something waits on has left this repo's open
+// list while pr-mon still thinks it is open: it merged or closed just now.
+func (m *Monitor) targetGone(name string, open map[int]bool) bool {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	for _, key := range m.graphLocked().Targets() {
+		repo, number, ok := dependencies.ParseKey(key)
+		if !ok || repo != name || open[number] {
+			continue
+		}
+		if state := m.waitedOn[key].State; state != models.PRMerged && state != models.PRClosed {
+			return true
+		}
+	}
+	return false
 }
 
 // merged records that pr-mon merged a PR, so anything waiting on it can go

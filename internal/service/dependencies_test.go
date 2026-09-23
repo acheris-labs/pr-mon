@@ -255,3 +255,47 @@ func TestDependencyGraph(t *testing.T) {
 		t.Errorf("the tree should reach through #2: %+v", top.WaitsOn)
 	}
 }
+
+func TestAMergedDependencyStopsTheWait(t *testing.T) {
+	// A waits on B, both in the same monitored repo.
+	client := newFakeGitHub(repoWith("acme/api", testfixtures.PR(1), testfixtures.PR(2)))
+	h := start(t, client, []string{"acme/api"}, nil)
+	addDependency(t, h, 1, "acme/api#2")
+	if got := pr(t, h, "acme/api", 1); got.Status != models.StatusWaiting {
+		t.Fatalf("status = %s", got.Status)
+	}
+
+	// B merges: it leaves the open list, and GitHub reports it merged.
+	client.setRepo(repoWith("acme/api", testfixtures.PR(1)))
+	client.setState("acme/api#2", models.PRMerged)
+	client.touch("acme/api", 1, "2026-09-23T12:00:00Z")
+	look(h)
+
+	got := pr(t, h, "acme/api", 1)
+	if got.Status != models.StatusReady {
+		t.Errorf("status = %s, want READY once what it waited on merged", got.Status)
+	}
+	if len(got.WaitsOn) != 1 || got.WaitsOn[0].State != models.PRMerged {
+		t.Errorf("waits on = %+v, want it marked merged", got.WaitsOn)
+	}
+}
+
+func TestADependencyThatMergesElsewhereStopsTheWait(t *testing.T) {
+	// The PR being waited on is in a repo pr-mon doesn't monitor, so only the
+	// scheduled lookup can notice it merged.
+	client := newFakeGitHub(repoWith("acme/api", testfixtures.PR(1)))
+	client.setState("other/lib#5", models.PROpen)
+	h := start(t, client, []string{"acme/api"}, nil)
+	addDependency(t, h, 1, "other/lib#5")
+	if got := pr(t, h, "acme/api", 1); got.Status != models.StatusWaiting {
+		t.Fatalf("status = %s", got.Status)
+	}
+
+	client.setState("other/lib#5", models.PRMerged)
+	h.monitor.RefreshDependencyStates(context.Background())
+	h.monitor.WaitIdle()
+
+	if got := pr(t, h, "acme/api", 1); got.Status != models.StatusReady {
+		t.Errorf("status = %s, want READY", got.Status)
+	}
+}
