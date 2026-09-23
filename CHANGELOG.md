@@ -4,6 +4,14 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc17]
+
+### Added
+
+- Several PRs can be added as dependencies at once: ⌘-click or shift-click in
+  the app's picker, space to mark them in the dashboard's. Whatever is refused
+  (already merged, closed, or a loop) is reported while the rest go in.
+
 ## [0.2.0-rc16]
 
 ### Changed

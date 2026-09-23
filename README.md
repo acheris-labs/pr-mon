@@ -170,7 +170,9 @@ A PR can wait for other PRs to merge first: select a release PR and add the
 feature PRs it needs. Any number, in any repo, monitored or not.
 
 - **Add:** TUI `w` then `a`, search the monitored PRs or type `owner/repo#12`
-  or a PR URL. App: Pull Request › Wait for Another Pull Request… (⌥⌘W).
+  or a PR URL; `space` marks several and `enter` adds them all. App: Pull
+  Request › Wait for Another Pull Request… (⌥⌘W), ⌘-click or shift-click to
+  pick several.
 - **While any is unmerged** the PR shows `WAITING` (`BLOCKED` if one was closed
   without merging), Merge is unavailable, and merge when ready waits. Auto-merge
   on a waiting PR is always pr-mon's: GitHub's would merge it without waiting,

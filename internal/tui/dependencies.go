@@ -4,6 +4,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -34,8 +35,10 @@ type dependencyModal struct {
 	// picker
 	input      textinput.Model
 	pickCursor int
-	message    string
-	busy       bool
+	// PRs marked with space, by key; enter adds all of them.
+	picked  map[string]bool
+	message string
+	busy    bool
 	// graph
 	graph    *models.DependencyGraph
 	graphErr string
@@ -57,7 +60,7 @@ func newDependencies(repo string, number int) *dependencyModal {
 	input.Placeholder = "search, owner/repo#12, or a PR URL"
 	input.Prompt = "> "
 	input.Width = 60
-	return &dependencyModal{repo: repo, number: number, input: input}
+	return &dependencyModal{repo: repo, number: number, input: input, picked: map[string]bool{}}
 }
 
 func (d *dependencyModal) title() string {
@@ -140,6 +143,7 @@ func (d *dependencyModal) update(model *Model, key tea.KeyMsg) (modal, tea.Cmd) 
 		d.input.SetValue("")
 		d.input.Focus()
 		d.pickCursor = 0
+		d.picked = map[string]bool{}
 		d.message = ""
 		return d, textinput.Blink
 	case "d", "x", "delete", "backspace":
@@ -179,25 +183,68 @@ func (d *dependencyModal) updatePick(model *Model, key tea.KeyMsg) (modal, tea.C
 	case "down":
 		d.pickCursor = min(max(0, min(len(candidates), pickerRows)-1), d.pickCursor+1)
 		return d, nil
-	case "enter":
-		on := strings.TrimSpace(d.input.Value())
+	case " ", "space":
 		if len(candidates) > 0 {
-			on = candidates[min(d.pickCursor, len(candidates)-1)].Key()
+			key := candidates[min(d.pickCursor, len(candidates)-1)].Key()
+			if d.picked[key] {
+				delete(d.picked, key)
+			} else {
+				d.picked[key] = true
+			}
 		}
-		if on == "" {
+		return d, nil
+	case "enter":
+		wanted := d.wanted(candidates)
+		if len(wanted) == 0 {
 			return d, nil
 		}
 		d.busy = true
-		d.message = "Checking " + on + "…"
+		d.message = "Checking " + strings.Join(wanted, ", ") + "…"
 		repo, number := d.repo, d.number
 		return d, func() tea.Msg {
-			return dependencyDone{adding: true, err: model.backend.AddDependency(repo, number, on)}
+			return dependencyDone{adding: true, err: addAll(model.backend, repo, number, wanted)}
 		}
 	}
 	var cmd tea.Cmd
 	d.input, cmd = d.input.Update(key)
 	d.pickCursor = 0
 	return d, cmd
+}
+
+// wanted is what enter adds: everything marked with space, else the PR under
+// the cursor, else whatever was typed (a PR in a repo pr-mon doesn't monitor).
+func (d *dependencyModal) wanted(candidates []models.PRRef) []string {
+	marked := []string{}
+	for _, ref := range candidates {
+		if d.picked[ref.Key()] {
+			marked = append(marked, ref.Key())
+		}
+	}
+	switch {
+	case len(marked) > 0:
+		return marked
+	case len(candidates) > 0:
+		return []string{candidates[min(d.pickCursor, len(candidates)-1)].Key()}
+	}
+	if typed := strings.TrimSpace(d.input.Value()); typed != "" {
+		return []string{typed}
+	}
+	return nil
+}
+
+// addAll adds each in turn: the ones that work are in, and the rest are
+// reported together.
+func addAll(backend Backend, repo string, number int, wanted []string) error {
+	refused := []string{}
+	for _, on := range wanted {
+		if err := backend.AddDependency(repo, number, on); err != nil {
+			refused = append(refused, err.Error())
+		}
+	}
+	if len(refused) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(refused, "; "))
 }
 
 // finished handles the backend's answer to an add or remove.
@@ -215,6 +262,7 @@ func (d *dependencyModal) finished(model *Model, done dependencyDone) {
 	if done.adding {
 		d.mode = modeList
 		d.input.Blur()
+		d.picked = map[string]bool{}
 		if current, ok := d.pr(model); ok {
 			d.cursor = max(0, len(current.WaitsOn)-1)
 		}
@@ -261,7 +309,11 @@ func (d *dependencyModal) pickView(model *Model) string {
 	lines := []string{bold.Render(fmt.Sprintf("%s#%d waits on…", d.repo, d.number)), d.input.View()}
 	candidates := d.candidates(model)
 	for index, ref := range candidates[:min(len(candidates), pickerRows)] {
-		line := "  " + refLine(ref, d.repo, model.modalInner()-2)
+		box := "[ ] "
+		if d.picked[ref.Key()] {
+			box = "[x] "
+		}
+		line := box + refLine(ref, d.repo, model.modalInner()-4)
 		if index == d.pickCursor {
 			line = selected.Render(line)
 		}
@@ -280,7 +332,8 @@ func (d *dependencyModal) pickView(model *Model) string {
 		}
 		lines = append(lines, style.Render(d.message))
 	}
-	return strings.Join(append(lines, "", dim.Render("↑/↓: choose   enter: add   esc: back")), "\n")
+	hint := "↑/↓: choose   space: pick several   enter: add   esc: back"
+	return strings.Join(append(lines, "", dim.Render(hint)), "\n")
 }
 
 func (d *dependencyModal) graphView(width int) string {

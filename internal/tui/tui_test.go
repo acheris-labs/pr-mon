@@ -29,11 +29,12 @@ type fakeBackend struct {
 	unseen    map[string][]int
 	armed     map[string]map[int]models.ArmedMerge
 
-	calls    []string
-	addErr   error
-	addName  string
-	formErr  error
-	previews []string
+	calls        []string
+	addErr       error
+	addDependErr error
+	addName      string
+	formErr      error
+	previews     []string
 }
 
 func newFakeBackend() *fakeBackend {
@@ -208,6 +209,9 @@ func (f *fakeBackend) PreviewNotification(repo, message string) (notify.Preview,
 // so the dialog sees it; "bad" is refused.
 func (f *fakeBackend) AddDependency(repo string, number int, on string) error {
 	f.record("depend " + repo + " " + itoa(number) + " " + on)
+	if f.addDependErr != nil {
+		return f.addDependErr
+	}
 	if on == "bad" {
 		return errors.New(`expected owner/repo#number or a pull request URL, got "bad"`)
 	}
@@ -614,6 +618,16 @@ func TestArmedPRsAreMarked(t *testing.T) {
 	}
 }
 
+// line is the first rendered line containing `want`, for asserting on one row.
+func line(view, want string) string {
+	for _, candidate := range strings.Split(view, "\n") {
+		if strings.Contains(candidate, want) {
+			return candidate
+		}
+	}
+	return ""
+}
+
 // without drops calls that start with prefix, so a test can ignore them.
 func without(items []string, prefix string) []string {
 	kept := []string{}
@@ -684,6 +698,47 @@ func TestDependenciesDialog(t *testing.T) {
 	press(t, model, "esc")
 	if model.modal != nil {
 		t.Error("escape should close the dialog")
+	}
+}
+
+func TestDependenciesPickSeveral(t *testing.T) {
+	model, backend := newModel()
+	press(t, model, "enter", "w", "a") // PR 1's dependencies, then the picker
+	view := model.View()
+	if !strings.Contains(line(view, "#2 A change"), "[ ]") ||
+		!strings.Contains(view, "space: pick several") {
+		t.Fatalf("picker = \n%s", view)
+	}
+
+	press(t, model, "space") // mark #2
+	press(t, model, "down")  // on to acme/web#7
+	press(t, model, "space") // mark that too
+	if got := line(model.View(), "acme/web#7"); !strings.Contains(got, "[x]") {
+		t.Errorf("it should be marked, got %q", strings.TrimSpace(got))
+	}
+	press(t, model, "enter")
+
+	want := []string{"depend acme/api 1 acme/api#2", "depend acme/api 1 acme/web#7"}
+	got := []string{}
+	for _, call := range backend.recorded() {
+		if strings.HasPrefix(call, "depend ") {
+			got = append(got, call)
+		}
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("calls = %v, want %v", got, want)
+	}
+	if strings.Contains(model.View(), "space: pick several") {
+		t.Errorf("adding should go back to the list:\n%s", model.View())
+	}
+}
+
+func TestPickingSeveralReportsTheOnesRefused(t *testing.T) {
+	model, backend := newModel()
+	backend.addDependErr = errors.New("acme/web#7 has already merged")
+	press(t, model, "enter", "w", "a", "down", "space", "enter")
+	if !strings.Contains(model.View(), "has already merged") {
+		t.Errorf("the refusal should show:\n%s", model.View())
 	}
 }
 

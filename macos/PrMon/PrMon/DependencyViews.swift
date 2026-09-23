@@ -47,7 +47,7 @@ struct DependencyPicker: View {
     let target: PRTarget
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
-    @State private var selection: PRRef.ID?
+    @State private var chosen: Set<PRRef.ID> = []
     @State private var problem: String?
     @State private var adding = false
 
@@ -71,17 +71,19 @@ struct DependencyPicker: View {
         }
     }
 
-    /// What Add sends: the chosen PR, the only match, or the text as typed.
-    private var choice: String? {
+    /// What Add sends: everything picked (⌘-click or shift-click for several),
+    /// the only match, or the text as typed.
+    private var choices: [String] {
         let matches = candidates
-        if let selection, matches.contains(where: { $0.id == selection }) {
-            return selection
+        let picked = matches.filter { chosen.contains($0.id) }.map(\.key)
+        if !picked.isEmpty {
+            return picked
         }
         if matches.count == 1 {
-            return matches[0].key
+            return [matches[0].key]
         }
         let typed = search.trimmingCharacters(in: .whitespaces)
-        return matches.isEmpty && !typed.isEmpty ? typed : nil
+        return matches.isEmpty && !typed.isEmpty ? [typed] : []
     }
 
     var body: some View {
@@ -95,7 +97,7 @@ struct DependencyPicker: View {
             TextField("Search, owner/repo#12, or a pull request URL", text: $search)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(add)
-            List(candidates, selection: $selection) { ref in
+            List(candidates, selection: $chosen) { ref in
                 PRRefRow(ref: ref, repo: target.repo)
             }
             .frame(minHeight: 240)
@@ -113,7 +115,8 @@ struct DependencyPicker: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("pr-mon won't merge \(target.id) until every pull request it waits on has merged.")
+            Text("Pick several with ⌘-click or shift-click. pr-mon won't merge \(target.id) "
+                 + "until every pull request it waits on has merged.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             HStack {
@@ -121,9 +124,9 @@ struct DependencyPicker: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Add", action: add)
+                Button(addTitle, action: add)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(choice == nil || adding)
+                    .disabled(choices.isEmpty || adding)
             }
         }
         .padding(20)
@@ -131,18 +134,32 @@ struct DependencyPicker: View {
         .onChange(of: search) { problem = nil }
     }
 
+    private var addTitle: String {
+        choices.count > 1 ? "Add \(choices.count)" : "Add"
+    }
+
     private func add() {
-        guard let on = choice, !adding else { return }
+        let wanted = choices
+        guard !wanted.isEmpty, !adding else { return }
         adding = true
         problem = nil
         Task {
-            do {
-                try await store.addDependency(repo: target.repo, number: target.number, on: on)
-                dismiss()
-            } catch {
-                problem = error.localizedDescription
+            var refused: [String] = []
+            for on in wanted {
+                do {
+                    try await store.addDependency(repo: target.repo, number: target.number, on: on)
+                } catch {
+                    refused.append("\(on): \(error.localizedDescription)")
+                }
             }
             adding = false
+            if refused.isEmpty {
+                dismiss()
+                return
+            }
+            // The ones that worked are in; say which didn't and why.
+            chosen = []
+            problem = refused.joined(separator: "\n")
         }
     }
 }
