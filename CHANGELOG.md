@@ -4,6 +4,13 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc21]
+
+### Changed
+
+- The Dock badge counts only unseen PRs that are ready to merge or need
+  attention (failing, conflicted, blocked), rather than every unseen PR.
+
 ## [0.2.0-rc20]
 
 ### Added
