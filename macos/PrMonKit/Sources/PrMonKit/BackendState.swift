@@ -109,10 +109,12 @@ public struct BackendState: Sendable, Equatable {
         snapshot.config.repos.map(entry)
     }
 
-    /// Unseen PRs across every repo: the sidebar's badges added up, for the
-    /// Dock. Only PRs still open count, as in the sidebar.
+    /// Unseen PRs across every repo that are ready to merge or need
+    /// attention, for the Dock. Only PRs still open count, as in the sidebar.
     public var unseenTotal: Int {
-        repos.reduce(0) { $0 + $1.unseenPRs.count }
+        repos.reduce(0) { total, entry in
+            total + entry.unseenPRs.filter { $0.status == .ready || $0.status.isAlert }.count
+        }
     }
 
     public func entry(_ name: String) -> RepoEntry {

@@ -21,8 +21,8 @@ struct PrMonApp: App {
 
     init() {
         let store = PrMonStore()
-        // Like Mail: the Dock shows how many PRs you haven't looked at, with or
-        // without a window open.
+        // Like Mail: the Dock shows how many ready or needs-attention PRs you
+        // haven't looked at, with or without a window open.
         store.unseenTotalChanged = { count in
             NSApp.dockTile.badgeLabel = count > 0 ? String(count) : nil
         }

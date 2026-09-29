@@ -15,12 +15,12 @@ import Testing
 }
 
 @Suite struct BackendStateTests {
-    @Test func unseenTotalAddsUpTheSidebar() throws {
+    @Test func unseenTotalCountsReadyAndAlerts() throws {
         var state = BackendState(snapshot: try Fixtures.snapshot())
-        // acme/api has #1 and #5 unseen; the other repos have none.
-        #expect(state.unseenTotal == 2)
-        state.markSeenLocally(repo: "acme/api", number: 1)
+        // acme/api has #1 (ready) and #5 (behind) unseen; the other repos have none.
         #expect(state.unseenTotal == 1)
+        state.markSeenLocally(repo: "acme/api", number: 1)
+        #expect(state.unseenTotal == 0)
     }
 
     @Test func appliesEvents() throws {
