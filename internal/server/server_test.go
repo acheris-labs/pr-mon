@@ -344,7 +344,9 @@ func idle(listener *server.Server) bool {
 }
 
 func TestIdleAfterTheLastFrontEndLeaves(t *testing.T) {
-	const grace = 150 * time.Millisecond
+	// Long enough that reconnecting (hello, then snapshot) always fits in it,
+	// however slow the machine running the tests.
+	const grace = 500 * time.Millisecond
 	listener, _, socket := serveWith(t, grace)
 	app := connect(t, socket, "")
 	dashboard := connect(t, socket, "")
@@ -356,9 +358,11 @@ func TestIdleAfterTheLastFrontEndLeaves(t *testing.T) {
 
 	// One that leaves and comes back within the grace period pushes it back.
 	dashboard.Close()
-	time.Sleep(grace / 2)
+	waitFor(t, func() bool { return listener.Subscribers() == 0 })
 	again := connect(t, socket, "")
-	time.Sleep(grace)
+	waitFor(t, func() bool { return listener.Subscribers() == 1 })
+	// Past the check the leaving scheduled: it must have found someone there.
+	time.Sleep(grace + grace/2)
 	if idle(listener) {
 		t.Fatal("a front end came back in time")
 	}
