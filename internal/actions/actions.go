@@ -52,25 +52,15 @@ func Available(repo models.Repo, pr models.PullRequest, armed *models.ArmedMerge
 	return options
 }
 
-// rerunOption re-runs the failed jobs of this PR's checks; nil when GitHub
-// Actions didn't run any (another CI system, or nothing has run yet).
+// rerunOption re-runs the failed jobs of this PR's checks; nil unless a
+// GitHub Actions check has failed, so there's nothing to show otherwise.
 func rerunOption(pr models.PullRequest) *models.ActionOption {
-	actionsRan, failed := false, false
+	failed := false
 	for _, check := range pr.Checks {
-		if check.RunID == nil {
-			continue
-		}
-		actionsRan = true
-		failed = failed || readiness.CheckFailed(check)
-	}
-	if !actionsRan {
-		return nil
+		failed = failed || (check.RunID != nil && readiness.CheckFailed(check))
 	}
 	if !failed {
-		return &models.ActionOption{
-			Key: "rerun", Kind: "rerun_checks", Label: "Re-run failed checks",
-			Available: false, Reason: models.Ptr("no failed checks"),
-		}
+		return nil
 	}
 	return &models.ActionOption{
 		Key: "rerun", Kind: "rerun_checks", Label: "Re-run failed checks", Available: true,

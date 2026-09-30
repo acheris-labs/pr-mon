@@ -347,7 +347,7 @@ To act on an entry, send `perform` with
 | `disarm_merge` | Cancel `arm_merge`. |
 | `mark_ready` | Take the PR out of draft. |
 | `convert_to_draft` | Put the PR back into draft. |
-| `rerun_checks` | Re-run the failed jobs of this PR's GitHub Actions runs. |
+| `rerun_checks` | Re-run the failed jobs of this PR's GitHub Actions runs. Offered only while one of its Actions checks has failed. |
 | `force_merge` | Merge past branch protection (failing checks, missing reviews, behind base). Offered in the `merge` slot only when `can_bypass` is true and nothing else stands in the way: never for conflicts, drafts, or a PR waiting on dependencies. Clients should confirm it and show it as dangerous. |
 
 `MergeMethod` is one of `SQUASH`, `MERGE`, `REBASE`.

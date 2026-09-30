@@ -4,6 +4,13 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc23]
+
+### Changed
+
+- "Re-run failed checks" only appears once a GitHub Actions check has failed,
+  instead of sitting greyed out with "no failed checks".
+
 ## [0.2.0-rc22]
 
 ### Added

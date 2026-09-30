@@ -190,9 +190,9 @@ func TestRerunFailedChecks(t *testing.T) {
 	if failed.Kind != "rerun_checks" || !failed.Available {
 		t.Errorf("failed checks = %+v", failed)
 	}
-	passing := menu(withRuns("SUCCESS"), nil)["rerun"]
-	if passing.Available || *passing.Reason != "no failed checks" {
-		t.Errorf("passing checks = %+v", passing)
+	// Nothing failed, so nothing to re-run: the entry isn't there at all.
+	if passing, offered := menu(withRuns("SUCCESS"), nil)["rerun"]; offered {
+		t.Errorf("passing checks offered a re-run: %+v", passing)
 	}
 	// Checks that aren't Actions runs (another CI system) offer nothing to re-run.
 	if _, offered := menu(testfixtures.Failing, nil)["rerun"]; offered {
