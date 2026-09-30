@@ -29,6 +29,8 @@ type actionMenu struct {
 	// set while asking which merge method to use
 	choosing     *models.ActionOption
 	deleteBranch bool
+	// a force merge waiting for y/n: it bypasses branch protection
+	confirming *models.Action
 }
 
 var menuSlots = []struct{ key, shortcut string }{
@@ -74,6 +76,16 @@ func (a *actionMenu) methods() []models.MergeMethod {
 }
 
 func (a *actionMenu) update(model *Model, key tea.KeyMsg) (modal, tea.Cmd) {
+	if a.confirming != nil {
+		switch key.String() {
+		case "y":
+			action := *a.confirming
+			return nil, model.perform(a.repo.Name, a.pr.Number, action)
+		case "n", "esc", "escape":
+			a.confirming = nil
+		}
+		return a, nil
+	}
 	switch key.String() {
 	case "esc", "escape":
 		if a.choosing != nil {
@@ -94,7 +106,7 @@ func (a *actionMenu) update(model *Model, key tea.KeyMsg) (modal, tea.Cmd) {
 	if a.choosing != nil {
 		for _, choice := range methodKeys {
 			if key.String() == choice.key && contains(a.methods(), choice.method) {
-				return nil, a.send(model, *a.choosing, &choice.method)
+				return a.sendOrConfirm(model, *a.choosing, &choice.method)
 			}
 		}
 		return a, nil
@@ -111,11 +123,11 @@ func (a *actionMenu) update(model *Model, key tea.KeyMsg) (modal, tea.Cmd) {
 			return a, nil // the reason is already on screen
 		}
 		if !option.NeedsMethod {
-			return nil, a.send(model, option, nil)
+			return a.sendOrConfirm(model, option, nil)
 		}
 		methods := a.methods()
 		if len(methods) == 1 {
-			return nil, a.send(model, option, &methods[0])
+			return a.sendOrConfirm(model, option, &methods[0])
 		}
 		a.choosing = &option
 		return a, nil
@@ -130,6 +142,21 @@ func (a *actionMenu) send(model *Model, option models.ActionOption, method *mode
 		DeleteBranch: option.OffersDeleteBranch && a.deleteBranch,
 	}
 	return model.perform(a.repo.Name, a.pr.Number, action)
+}
+
+// sendOrConfirm sends an action, except a force merge, which asks first.
+func (a *actionMenu) sendOrConfirm(model *Model, option models.ActionOption,
+	method *models.MergeMethod) (modal, tea.Cmd) {
+	if option.Kind != "force_merge" {
+		return nil, a.send(model, option, method)
+	}
+	a.choosing = nil
+	a.confirming = &models.Action{
+		Kind:         option.Kind,
+		Method:       method,
+		DeleteBranch: option.OffersDeleteBranch && a.deleteBranch,
+	}
+	return a, nil
 }
 
 func contains(methods []models.MergeMethod, method models.MergeMethod) bool {

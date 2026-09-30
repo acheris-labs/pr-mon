@@ -120,6 +120,11 @@ enum Fixtures {
         // A PR with a failed GitHub Actions run offers to re-run it.
         #expect(api.prs[2].actions.map(\.key) == ["merge", "auto_merge", "draft", "rerun"])
         #expect(api.prs[2].checks.first?.runId == 4242)
+        // Failing, but the user may bypass branch protection: merge becomes force merge.
+        #expect(api.prs[2].canBypass == true)
+        #expect(api.prs[2].actions[0].kind == "force_merge" && api.prs[2].actions[0].available)
+        #expect(api.prs[2].actions[0].note == "bypasses Check failed: lint")
+        #expect(api.prs[0].canBypass == false)
         #expect(api.prs[0].actions.contains { $0.key == "rerun" } == false)
 
         let rich = try #require(snapshot.repos["Textualize/rich"])
@@ -194,6 +199,7 @@ enum Fixtures {
             try Wire.encode(Request(id: 8, op: "perform", args: action("update", nil, false))),
             try Wire.encode(Request(id: 22, op: "perform", args: action("mark_ready", nil, false))),
             try Wire.encode(Request(id: 23, op: "perform", args: action("rerun_checks", nil, false))),
+            try Wire.encode(Request(id: 24, op: "perform", args: action("force_merge", .squash, false))),
             try Wire.encode(Request(id: 9, op: "add_repo", args: NameArgs(name: "acme/web"))),
             try Wire.encode(Request(id: 10, op: "remove_repo", args: NameArgs(name: "acme/web"))),
             try Wire.encode(Request(id: 11, op: "set_collapsed",

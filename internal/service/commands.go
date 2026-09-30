@@ -169,7 +169,7 @@ func (m *Monitor) Perform(ctx context.Context, repoName string, number int, acti
 	label := fmt.Sprintf("%s#%d", repoName, number)
 	if pr.Waiting() {
 		switch action.Kind {
-		case "merge":
+		case "merge", "force_merge":
 			return &Error{Message: fmt.Sprintf(
 				"%s waits on PRs that haven't merged; remove them to merge it now", label)}
 		case "auto_merge_on":
@@ -202,9 +202,13 @@ func (m *Monitor) Perform(ctx context.Context, repoName string, number int, acti
 		return nil
 	}
 
+	if action.Kind == "force_merge" && !pr.CanBypass {
+		return &Error{Message: fmt.Sprintf(
+			"GitHub doesn't let you bypass branch protection on %s", label)}
+	}
 	key := prKey{repo: repoName, number: number}
 	manualMerge := false
-	if action.Kind == "merge" {
+	if action.Kind == "merge" || action.Kind == "force_merge" {
 		m.mutex.Lock()
 		if !m.merging[key] {
 			m.merging[key] = true
@@ -258,6 +262,25 @@ func (m *Monitor) runAction(ctx context.Context, repoName string, pr models.Pull
 			return err
 		}
 		m.toast(fmt.Sprintf("Auto-merge disabled for %s", label))
+	case "force_merge":
+		if action.Method == nil {
+			return &Error{Message: "merging needs a merge method"}
+		}
+		// The same merge; GitHub lets it past branch protection because the
+		// user may bypass it (viewerCanMergeAsAdmin).
+		if err := m.client.Merge(ctx, pr.ID, *action.Method, ""); err != nil {
+			return err
+		}
+		m.toast(fmt.Sprintf("Force-merged %s (%s), bypassing branch protection",
+			label, action.Method.Lower()))
+		m.merged(repoName, pr)
+		defer m.refreshWaiting(ctx, repoName, pr.Number)
+		if action.DeleteBranch && pr.HeadRefID != nil {
+			if err := m.client.DeleteBranch(ctx, *pr.HeadRefID); err != nil {
+				m.toast(fmt.Sprintf("Merged %s, but couldn't delete %s: %v", label, pr.HeadRef, err),
+					"warning")
+			}
+		}
 	case "mark_ready":
 		if err := m.client.MarkReadyForReview(ctx, pr.ID); err != nil {
 			return err

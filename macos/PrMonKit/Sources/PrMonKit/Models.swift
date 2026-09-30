@@ -289,6 +289,9 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public var mergeable: String
     public var mergeState: String
     public var reviewDecision: String?
+    /// The user may bypass branch protection and merge anyway; nil from a
+    /// backend older than force merge.
+    public var canBypass: Bool?
     public var checkState: String?
     public var checks: [Check]
     public var checksTotal: Int
@@ -320,6 +323,7 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
         case headRepo = "head_repo"
         case mergeState = "merge_state"
         case reviewDecision = "review_decision"
+        case canBypass = "can_bypass"
         case checkState = "check_state"
         case checksTotal = "checks_total"
         case autoMerge = "auto_merge"

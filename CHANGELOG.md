@@ -4,6 +4,21 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc22]
+
+### Added
+
+- Force merge: when branch protection blocks a merge (failing checks, missing
+  reviews, behind base) and GitHub lets you bypass it (`viewerCanMergeAsAdmin`),
+  Merge becomes a red Force merge that asks before it goes. Never offered for
+  conflicts, drafts, or a PR waiting on dependencies; merge when ready never
+  force-merges.
+
+### Changed
+
+- The app's toolbar keeps refresh, the dependency graph and Open in Browser.
+  PR actions moved to the right-click menu and the Pull Request menu.
+
 ## [0.2.0-rc21]
 
 ### Changed

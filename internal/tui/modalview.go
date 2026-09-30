@@ -39,6 +39,16 @@ func unavailable(shortcut, label, reason string) string {
 }
 
 func (a *actionMenu) view(model *Model) string {
+	if a.confirming != nil {
+		danger := lipgloss.NewStyle().Bold(true).Foreground(red)
+		lines := []string{danger.Render(fmt.Sprintf("Force merge #%d?", a.pr.Number)), ""}
+		if option, found := a.option("merge"); found && option.Note != nil {
+			lines = append(lines, lipgloss.NewStyle().Foreground(red).Width(model.modalInner()).
+				Render("This "+*option.Note+"."))
+		}
+		lines = append(lines, "It merges past branch protection, as GitHub lets you.")
+		return strings.Join(append(lines, "", dim.Render("y: force merge   n/esc: back")), "\n")
+	}
 	if a.choosing != nil {
 		lines := []string{bold.Render("Merge method")}
 		for _, choice := range methodKeys {
@@ -55,6 +65,13 @@ func (a *actionMenu) view(model *Model) string {
 			continue
 		}
 		switch {
+		case option.Kind == "force_merge":
+			danger := lipgloss.NewStyle().Bold(true).Foreground(red)
+			line := danger.Render("[" + slot.shortcut + "] " + option.Label)
+			if option.Note != nil {
+				line += lipgloss.NewStyle().Foreground(red).Render(" (" + *option.Note + ")")
+			}
+			lines = append(lines, line)
 		case !option.Available:
 			lines = append(lines, unavailable(slot.shortcut, option.Label, derefString(option.Reason)))
 		case option.Note != nil:

@@ -699,3 +699,57 @@ func TestDraftToggleAndRerun(t *testing.T) {
 		}
 	}
 }
+
+func TestForceMergeBypassesOnlyWhenAllowed(t *testing.T) {
+	failing := func(canBypass bool) models.PullRequest {
+		return testfixtures.PR(1, func(pr *models.PullRequest) {
+			testfixtures.Failing(pr)
+			pr.CanBypass = canBypass
+		})
+	}
+	force := models.Action{Kind: "force_merge", Method: &squash, DeleteBranch: true}
+
+	client := newFakeGitHub(repoWith("acme/api", failing(true)))
+	h := start(t, client, []string{"acme/api"}, nil)
+	if err := h.monitor.Perform(context.Background(), "acme/api", 1, force); err != nil {
+		t.Fatal(err)
+	}
+	h.monitor.WaitIdle()
+	if got := client.callsMatching("merge "); len(got) != 1 || got[0] != "merge PR_1 SQUASH" {
+		t.Errorf("merges = %v", got)
+	}
+	if len(client.callsMatching("delete ")) != 1 {
+		t.Error("the branch should be deleted as asked")
+	}
+	if !h.hasToast("Force-merged acme/api#1 (squash), bypassing branch protection") {
+		t.Errorf("toasts = %v", h.toasts())
+	}
+
+	// Someone GitHub won't let bypass gets refused before anything is sent.
+	denied := newFakeGitHub(repoWith("acme/api", failing(false)))
+	h = start(t, denied, []string{"acme/api"}, nil)
+	err := h.monitor.Perform(context.Background(), "acme/api", 1, force)
+	if err == nil || err.Error() != "GitHub doesn't let you bypass branch protection on acme/api#1" {
+		t.Errorf("err = %v", err)
+	}
+	if len(denied.callsMatching("merge ")) != 0 {
+		t.Error("nothing should have been merged")
+	}
+}
+
+func TestForceMergeRespectsDependencies(t *testing.T) {
+	client := newFakeGitHub(repoWith("acme/api",
+		testfixtures.PR(1, func(pr *models.PullRequest) { testfixtures.Failing(pr); pr.CanBypass = true }),
+		testfixtures.PR(2)))
+	h := start(t, client, []string{"acme/api"}, nil)
+	addDependency(t, h, 1, "acme/api#2")
+
+	err := h.monitor.Perform(context.Background(), "acme/api", 1,
+		models.Action{Kind: "force_merge", Method: &squash})
+	if err == nil || err.Error() != "acme/api#1 waits on PRs that haven't merged; remove them to merge it now" {
+		t.Errorf("err = %v", err)
+	}
+	if len(client.callsMatching("merge ")) != 0 {
+		t.Error("a PR waiting on others must not be merged")
+	}
+}

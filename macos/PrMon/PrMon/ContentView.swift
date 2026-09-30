@@ -46,7 +46,6 @@ struct ContentView: View {
                 } detail: {
                     PRDetailColumn(
                         entry: entry, pr: selectedPR, state: state,
-                        act: { pr, option in act(on: pr, option) },
                         depend: { pr, command in depend(pr, command) },
                         stopWaiting: { pr, ref in
                             guard let repo = entry?.name else { return }
@@ -411,7 +410,6 @@ private struct PRDetailColumn: View {
     let entry: BackendState.RepoEntry?
     let pr: PullRequest?
     let state: BackendState
-    let act: (PullRequest, ActionOption) -> Void
     let depend: (PullRequest, DependencyCommand) -> Void
     let stopWaiting: (PullRequest, PRRef) -> Void
 
@@ -422,12 +420,10 @@ private struct PRDetailColumn: View {
                 depend: { depend(pr, $0) }, stopWaiting: { stopWaiting(pr, $0) }
             )
                 .toolbar {
+                    // PR actions (merge, auto-merge, draft, re-run…) live in the
+                    // right-click menu and the Pull Request menu; the toolbar
+                    // keeps what applies whatever state the PR is in.
                     ToolbarItemGroup {
-                        ForEach(pr.actions) { option in
-                            Button(ActionRequest(repo: repo, pr: pr, option: option).buttonTitle) { act(pr, option) }
-                                .disabled(!option.available)
-                                .help(option.available ? (option.note ?? option.label) : (option.reason ?? ""))
-                        }
                         Menu {
                             Button("Wait for Another Pull Request…") { depend(pr, .waitFor) }
                             Button("Show Dependency Graph…") { depend(pr, .showGraph) }

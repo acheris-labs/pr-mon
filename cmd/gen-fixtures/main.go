@@ -89,6 +89,7 @@ func state() protocol.Snapshot {
 					RunID: models.Ptr(4242)},
 			}
 			p.ChecksTotal = 5
+			p.CanBypass = true // so it offers force merge
 		}),
 		pr(4, testfixtures.Conflict),
 		pr(5, func(p *models.PullRequest) {
@@ -225,6 +226,7 @@ func requests(squash, merge models.MergeMethod) []map[string]any {
 		perform(8, models.Action{Kind: "update"}),
 		perform(22, models.Action{Kind: "mark_ready"}),
 		perform(23, models.Action{Kind: "rerun_checks"}),
+		perform(24, models.Action{Kind: "force_merge", Method: &squash}),
 		{"id": 9, "op": "add_repo", "args": map[string]any{"name": "acme/web"}},
 		{"id": 10, "op": "remove_repo", "args": map[string]any{"name": "acme/web"}},
 		{"id": 11, "op": "set_collapsed", "args": map[string]any{"owner": "acme", "collapsed": true}},

@@ -41,7 +41,7 @@ fragment PrFields on PullRequest {
   headRefName baseRefName
   headRef { id }
   headRepository { nameWithOwner }
-  mergeable mergeStateStatus reviewDecision
+  mergeable mergeStateStatus reviewDecision viewerCanMergeAsAdmin
   autoMergeRequest { mergeMethod enabledBy { login } }
   closingIssuesReferences(first: %d) {
     nodes { number title url repository { nameWithOwner } }

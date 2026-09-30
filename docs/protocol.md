@@ -224,6 +224,7 @@ reimplement the rules.
 | `mergeable` | string | GitHub's `MERGEABLE`, `CONFLICTING` or `UNKNOWN`. |
 | `merge_state` | string | GitHub's `mergeStateStatus`. |
 | `review_decision` | string or null | GitHub's `reviewDecision`. |
+| `can_bypass` | bool | The user may bypass branch protection and merge anyway (GitHub's `viewerCanMergeAsAdmin`). |
 | `check_state` | string or null | Combined check state. |
 | `checks` | [`Check`] | Up to 50 checks. |
 | `checks_total` | int | All checks. |
@@ -333,8 +334,8 @@ To act on an entry, send `perform` with
 | Field | Type | Meaning |
 |:------|:-----|:--------|
 | `kind` | string | See the table below. |
-| `method` | `MergeMethod` or null | Required for `merge`, `auto_merge_on`, `arm_merge`. |
-| `delete_branch` | bool | For `merge` and `arm_merge`; defaults to false. |
+| `method` | `MergeMethod` or null | Required for `merge`, `force_merge`, `auto_merge_on`, `arm_merge`. |
+| `delete_branch` | bool | For `merge`, `force_merge` and `arm_merge`; defaults to false. |
 
 | Action kind | Does |
 |:------------|:-----|
@@ -347,6 +348,7 @@ To act on an entry, send `perform` with
 | `mark_ready` | Take the PR out of draft. |
 | `convert_to_draft` | Put the PR back into draft. |
 | `rerun_checks` | Re-run the failed jobs of this PR's GitHub Actions runs. |
+| `force_merge` | Merge past branch protection (failing checks, missing reviews, behind base). Offered in the `merge` slot only when `can_bypass` is true and nothing else stands in the way: never for conflicts, drafts, or a PR waiting on dependencies. Clients should confirm it and show it as dangerous. |
 
 `MergeMethod` is one of `SQUASH`, `MERGE`, `REBASE`.
 

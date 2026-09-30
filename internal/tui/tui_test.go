@@ -436,6 +436,38 @@ func TestActionMenuDraftAndRerun(t *testing.T) {
 	}
 }
 
+func TestForceMergeAsksFirst(t *testing.T) {
+	model, backend := newModel()
+	backend.editPR("acme/api", 2, func(pr *models.PullRequest) { pr.CanBypass = true })
+	press(t, model, "enter", "down", "enter") // PR 2 (pending, review required)
+	if got := line(model.View(), "Force merge"); !strings.Contains(got, "[m] Force merge") ||
+		!strings.Contains(got, "bypasses") {
+		t.Fatalf("menu line = %q\n%s", strings.TrimSpace(got), model.View())
+	}
+
+	press(t, model, "m", "s") // squash, then the confirmation
+	if !strings.Contains(model.View(), "Force merge #2?") {
+		t.Fatalf("expected a confirmation:\n%s", model.View())
+	}
+	for _, call := range backend.recorded() {
+		if strings.Contains(call, "force_merge") {
+			t.Fatalf("sent before confirming: %v", backend.recorded())
+		}
+	}
+	press(t, model, "n") // back out
+	if strings.Contains(model.View(), "Force merge #2?") {
+		t.Error("n should cancel the confirmation")
+	}
+
+	press(t, model, "m", "s", "y")
+	if !contains2(backend.recorded(), "perform acme/api 2 force_merge SQUASH true") {
+		t.Errorf("calls = %v", backend.recorded())
+	}
+	if model.modal != nil {
+		t.Error("confirming should close the menu")
+	}
+}
+
 func TestActionMenuDeleteToggleAndEscape(t *testing.T) {
 	model, backend := newModel()
 	press(t, model, "enter", "enter", "d") // open the menu, turn off deleting

@@ -199,3 +199,55 @@ func TestRerunFailedChecks(t *testing.T) {
 		t.Error("no Actions runs, no re-run option")
 	}
 }
+
+func TestForceMerge(t *testing.T) {
+	bypassing := func(state func(*models.PullRequest)) func(*models.PullRequest) {
+		return func(pr *models.PullRequest) {
+			state(pr)
+			pr.CanBypass = true
+		}
+	}
+	failingCheck := func(pr *models.PullRequest) {
+		testfixtures.Failing(pr)
+		pr.Checks = []models.Check{testfixtures.CheckRun("lint", "FAILURE")}
+		pr.ChecksTotal = 1
+	}
+
+	force := menu(bypassing(failingCheck), nil)["merge"]
+	if force.Kind != "force_merge" || !force.Available || force.Label != "Force merge" ||
+		!force.NeedsMethod || !force.OffersDeleteBranch {
+		t.Fatalf("merge slot = %+v", force)
+	}
+	if force.Note == nil || *force.Note != "bypasses Check failed: lint" {
+		t.Errorf("note = %v, want what it overrides", force.Note)
+	}
+
+	// Without the right to bypass, it stays the disabled Merge it was.
+	if plain := menu(failingCheck, nil)["merge"]; plain.Kind != "merge" || plain.Available {
+		t.Errorf("no bypass = %+v", plain)
+	}
+	// A ready PR merges normally.
+	if ready := menu(bypassing(ready), nil)["merge"]; ready.Kind != "merge" || !ready.Available {
+		t.Errorf("ready = %+v", ready)
+	}
+	// GitHub refuses these whoever you are, so nothing is offered.
+	for name, state := range map[string]func(*models.PullRequest){
+		"conflict": testfixtures.Conflict,
+		"draft":    testfixtures.Draft,
+		"checking": func(pr *models.PullRequest) { pr.Mergeable = "UNKNOWN"; pr.MergeState = "UNKNOWN" },
+	} {
+		if got := menu(bypassing(state), nil)["merge"]; got.Kind == "force_merge" {
+			t.Errorf("%s offered force merge: %+v", name, got)
+		}
+	}
+	// Dependencies are the user's own rule: force merge leaves them alone.
+	pr := readiness.Assess(testfixtures.PR(1, bypassing(failingCheck)))
+	pr.WaitsOn = []models.PRRef{{Repo: "acme/lib", Number: 3, State: models.PROpen}}
+	pr = readiness.Wait(pr)
+	repo := testfixtures.Repo("acme/api", []models.PullRequest{pr})
+	for _, option := range actions.Available(repo, pr, nil) {
+		if option.Kind == "force_merge" {
+			t.Errorf("a PR waiting on others offered force merge: %+v", option)
+		}
+	}
+}

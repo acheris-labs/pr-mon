@@ -102,6 +102,19 @@
   },
   {
     "args": {
+      "action": {
+        "kind": "force_merge",
+        "method": "SQUASH",
+        "delete_branch": false
+      },
+      "number": 1,
+      "repo": "acme/api"
+    },
+    "id": 24,
+    "op": "perform"
+  },
+  {
+    "args": {
       "name": "acme/web"
     },
     "id": 9,

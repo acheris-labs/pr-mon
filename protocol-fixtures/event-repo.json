@@ -26,6 +26,7 @@
           "mergeable": "MERGEABLE",
           "merge_state": "CLEAN",
           "review_decision": null,
+          "can_bypass": false,
           "check_state": "SUCCESS",
           "checks": [],
           "checks_total": 0,
@@ -100,6 +101,7 @@
           "mergeable": "MERGEABLE",
           "merge_state": "BLOCKED",
           "review_decision": null,
+          "can_bypass": false,
           "check_state": "PENDING",
           "checks": [
             {
@@ -182,6 +184,7 @@
           "mergeable": "MERGEABLE",
           "merge_state": "BLOCKED",
           "review_decision": null,
+          "can_bypass": true,
           "check_state": "FAILURE",
           "checks": [
             {
@@ -218,13 +221,13 @@
           "actions": [
             {
               "key": "merge",
-              "kind": "merge",
-              "label": "Merge",
-              "available": false,
-              "reason": "FAILING: Check failed: lint",
-              "note": null,
-              "needs_method": false,
-              "offers_delete_branch": false
+              "kind": "force_merge",
+              "label": "Force merge",
+              "available": true,
+              "reason": null,
+              "note": "bypasses Check failed: lint",
+              "needs_method": true,
+              "offers_delete_branch": true
             },
             {
               "key": "auto_merge",
@@ -275,6 +278,7 @@
           "mergeable": "CONFLICTING",
           "merge_state": "DIRTY",
           "review_decision": null,
+          "can_bypass": false,
           "check_state": "SUCCESS",
           "checks": [],
           "checks_total": 0,
@@ -341,6 +345,7 @@
           "mergeable": "MERGEABLE",
           "merge_state": "BEHIND",
           "review_decision": "REVIEW_REQUIRED",
+          "can_bypass": false,
           "check_state": "SUCCESS",
           "checks": [],
           "checks_total": 0,
@@ -421,6 +426,7 @@
           "mergeable": "MERGEABLE",
           "merge_state": "DRAFT",
           "review_decision": null,
+          "can_bypass": false,
           "check_state": "SUCCESS",
           "checks": [],
           "checks_total": 0,
@@ -487,6 +493,7 @@
           "mergeable": "UNKNOWN",
           "merge_state": "UNKNOWN",
           "review_decision": null,
+          "can_bypass": false,
           "check_state": null,
           "checks": [],
           "checks_total": 0,
@@ -553,6 +560,7 @@
           "mergeable": "MERGEABLE",
           "merge_state": "BLOCKED",
           "review_decision": null,
+          "can_bypass": false,
           "check_state": "PENDING",
           "checks": [],
           "checks_total": 0,
@@ -617,6 +625,7 @@
           "mergeable": "MERGEABLE",
           "merge_state": "CLEAN",
           "review_decision": null,
+          "can_bypass": false,
           "check_state": "SUCCESS",
           "checks": [],
           "checks_total": 0,

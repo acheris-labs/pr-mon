@@ -119,7 +119,7 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `←` / `→` | repo tree | Go to owner / collapse; expand |
 | `tab` / `shift+tab` | anywhere | Move between repo tree and PR list |
 | `enter` | PR list | Action menu |
-| `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods) |
+| `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods). Shown in red as **Force merge** when branch protection blocks it but GitHub lets you bypass that; asks `y`/`n` first |
 | `a` | action menu | Toggle auto-merge: GitHub's if the repo allows it, otherwise pr-mon's "merge when ready" (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
 | `t` | action menu | Toggle draft: mark ready for review, or convert back to draft |
@@ -253,8 +253,11 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
 ## macOS app
 
 `macos/` holds a native Mac app for the same backend: repositories in a
-sidebar, pull requests, and details, with merges and auto-merge from the
-toolbar, the Pull Request menu, or a right-click.
+sidebar, pull requests, and details. A PR's actions (merge, auto-merge,
+draft, re-run checks, force merge) are in its right-click menu and the Pull
+Request menu (⌥⌘ shortcuts); the toolbar keeps refresh, the dependency graph
+and Open in Browser. Force merge appears in red, in place of a blocked Merge,
+only when GitHub lets you bypass branch protection, and asks first.
 
 Settings (⌘,) has three tabs:
 

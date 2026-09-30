@@ -77,6 +77,28 @@ func rerunOption(pr models.PullRequest) *models.ActionOption {
 	}
 }
 
+// forceMergeOption merges past branch protection, for someone GitHub lets
+// bypass it; nil when it can't help. It never overrides what GitHub refuses
+// anyway (conflicts, drafts, mergeability still being worked out) or pr-mon's
+// own dependencies, which the user relaxes by removing them.
+func forceMergeOption(repo models.Repo, pr models.PullRequest, bypasses []string,
+	deletable bool) *models.ActionOption {
+	switch {
+	case !pr.CanBypass, len(repo.MergeMethods) == 0, pr.IsDraft, pr.Waiting(),
+		pr.Mergeable == "CONFLICTING", pr.MergeState == "DIRTY",
+		pr.Mergeable == "UNKNOWN", pr.MergeState == "UNKNOWN":
+		return nil
+	}
+	option := models.ActionOption{
+		Key: "merge", Kind: "force_merge", Label: "Force merge", Available: true,
+		NeedsMethod: true, OffersDeleteBranch: deletable,
+	}
+	if len(bypasses) > 0 {
+		option.Note = models.Ptr("bypasses " + strings.Join(bypasses, ", "))
+	}
+	return &option
+}
+
 // draftOption takes a PR out of draft, or puts it back.
 func draftOption(pr models.PullRequest) models.ActionOption {
 	if pr.IsDraft {
@@ -101,6 +123,9 @@ func mergeOption(repo models.Repo, pr models.PullRequest, deletable bool) models
 		if reason.Level != "info" {
 			why = append(why, reason.Text)
 		}
+	}
+	if force := forceMergeOption(repo, pr, why, deletable); force != nil {
+		return *force
 	}
 	if len(repo.MergeMethods) == 0 {
 		why = append(why, noMethods)

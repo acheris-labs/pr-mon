@@ -15,8 +15,11 @@ struct ActionRequest: Identifiable {
     }
 
     /// Merges always ask; other actions ask only when there is something to choose.
+    /// Merging past branch protection: shown in red and always confirmed.
+    var isForce: Bool { option.kind == "force_merge" }
+
     var needsConfirmation: Bool {
-        option.kind == "merge" || methods.count > 1 || option.offersDeleteBranch
+        option.kind == "merge" || isForce || methods.count > 1 || option.offersDeleteBranch
     }
 
     /// The action to send when nothing needs asking.
@@ -53,6 +56,7 @@ struct ActionSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(verbatim: "\(request.option.label) \(request.repo.name)#\(request.pr.number)?")
                     .font(.headline)
+                    .foregroundStyle(request.isForce ? Color.red : Color.primary)
                 Text(request.pr.title)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -73,7 +77,20 @@ struct ActionSheet: View {
                 }
                 .formStyle(.columns)
             }
-            if let note = request.option.note {
+            if request.isForce {
+                // Say exactly what is being overridden, in the words the
+                // Blocked By list uses.
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("This merges past branch protection, as GitHub lets you.",
+                          systemImage: "exclamationmark.triangle.fill")
+                    if let note = request.option.note {
+                        Text(note.prefix(1).uppercased() + note.dropFirst() + ".")
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+            } else if let note = request.option.note {
                 Label(note, systemImage: "info.circle")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -82,7 +99,7 @@ struct ActionSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(request.option.label) {
+                Button(request.option.label, role: request.isForce ? .destructive : nil) {
                     perform(Action(
                         kind: request.option.kind,
                         method: request.option.needsMethod ? method : nil,
@@ -91,6 +108,7 @@ struct ActionSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
+                .tint(request.isForce ? .red : nil)
             }
         }
         .padding(20)
@@ -115,7 +133,10 @@ struct PRMenuItems: View {
         Button("Copy Link") { Browser.copy(pr.url) }
         Divider()
         ForEach(pr.actions) { option in
-            Button(ActionRequest(repo: repo, pr: pr, option: option).menuTitle) { act(option) }
+            let request = ActionRequest(repo: repo, pr: pr, option: option)
+            // Force merge overrides branch protection: red, like other
+            // destructive menu items.
+            Button(request.menuTitle, role: request.isForce ? .destructive : nil) { act(option) }
                 .disabled(!option.available)
         }
         Divider()
@@ -149,7 +170,8 @@ struct PullRequestCommands: Commands {
                     .keyboardShortcut("c", modifiers: [.command, .shift])
                 Divider()
                 ForEach(context.pr.actions) { option in
-                    Button(ActionRequest(repo: context.repo, pr: context.pr, option: option).menuTitle) {
+                    let request = ActionRequest(repo: context.repo, pr: context.pr, option: option)
+                    Button(request.menuTitle, role: request.isForce ? .destructive : nil) {
                         context.act(option)
                     }
                         .disabled(!option.available)

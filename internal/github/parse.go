@@ -57,7 +57,9 @@ type prNode struct {
 	Mergeable      string  `json:"mergeable"`
 	MergeState     string  `json:"mergeStateStatus"`
 	ReviewDecision *string `json:"reviewDecision"`
-	HeadRef        *struct {
+	// Whether whoever pr-mon runs as may bypass branch protection and merge.
+	ViewerCanMergeAsAdmin bool `json:"viewerCanMergeAsAdmin"`
+	HeadRef               *struct {
 		ID string `json:"id"`
 	} `json:"headRef"`
 	HeadRepository *struct {
@@ -149,6 +151,7 @@ func (p prNode) toPullRequest() models.PullRequest {
 		Mergeable:      p.Mergeable,
 		MergeState:     p.MergeState,
 		ReviewDecision: p.ReviewDecision,
+		CanBypass:      p.ViewerCanMergeAsAdmin,
 		Checks:         []models.Check{},
 		ClosingIssues:  []models.LinkedIssue{},
 		Reasons:        []models.Reason{},
