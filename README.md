@@ -166,6 +166,8 @@ up to half, and the details get the rest.
 - Under 80 columns PR rows keep the status icon, number and title; the author
   and the status in words are in the details. Dialogs lose their padding.
 - Under 16 lines the key hints make way for the panes.
+- Under 30 columns or 10 lines there is no room for the panes, and the
+  dashboard says so until the window grows.
 
 ## Indicators
 

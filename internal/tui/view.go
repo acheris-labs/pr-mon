@@ -20,6 +20,9 @@ const (
 	narrowBelow = 80
 	// Below this many lines the key hints give their room to the panes.
 	hintsFrom = 16
+	// The least the panes can be drawn in: under this the dashboard only says
+	// so. The keys still work.
+	minWidth, minHeight = 30, 10
 )
 
 var (
@@ -80,6 +83,9 @@ func (m *Model) View() string {
 		return ""
 	}
 	m.marked = m.marked[:0]
+	if m.width < minWidth || m.height < minHeight {
+		return m.tooSmall()
+	}
 	prs, details := m.paneHeights()
 	lines := []string{
 		m.headerView(),
@@ -111,6 +117,14 @@ func (m *Model) headerView() string {
 }
 
 func (m *Model) narrow() bool { return m.width < narrowBelow }
+
+// tooSmall stands in for the dashboard on a screen it doesn't fit.
+func (m *Model) tooSmall() string {
+	text := fmt.Sprintf("pr-mon needs at least %d×%d; this is %d×%d",
+		minWidth, minHeight, m.width, m.height)
+	message := lipgloss.NewStyle().Width(m.width).MaxHeight(m.height).Align(lipgloss.Center).Render(text)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, message)
+}
 
 // paneHeights splits what the header, tabs and key hints leave: the PR list
 // takes what it needs, up to half, and the details get the rest.

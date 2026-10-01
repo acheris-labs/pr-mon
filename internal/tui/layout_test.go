@@ -346,3 +346,27 @@ func TestNotificationsDialogFitsAPhone(t *testing.T) {
 		t.Errorf("the dialog's title should show:\n%s", view)
 	}
 }
+
+func TestTooSmallAScreenSaysSo(t *testing.T) {
+	cases := []struct {
+		name          string
+		width, height int
+		fits          bool
+	}{
+		{"too short", 120, 9, false},
+		{"too thin", 29, 24, false},
+		{"just enough", 30, 10, true},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			model, _ := newModel()
+			resize(model, test.width, test.height)
+			view := model.View()
+			assertFits(t, view, test.width, test.height)
+			asks := strings.Contains(view, "30×10")
+			if asks == test.fits || strings.Contains(view, "Details") != test.fits {
+				t.Errorf("at %d×%d:\n%s", test.width, test.height, view)
+			}
+		})
+	}
+}

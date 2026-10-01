@@ -24,6 +24,8 @@ the git tags the release workflow builds from.
   dashboard (the app keeps them). Repos are chosen with `←` / `→`, and `↓` or
   `enter` goes into the PR list. A screen of 80 columns or more still shows
   the PR list's status and author columns.
+- A window under 30 columns or 10 lines shows a message asking for more room
+  instead of a dashboard that doesn't fit.
 
 ## [0.2.0-rc25]
 
