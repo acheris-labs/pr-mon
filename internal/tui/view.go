@@ -1,5 +1,7 @@
-// Rendering: the header, the repo tree, the PR table, the details pane, the
-// footer and any open dialog.
+// Rendering: the header, the repo tabs, the PR table, the details pane, the
+// key hints and any open dialog. One layout for every screen, a phone's
+// included: only the PR table's columns and a dialog's padding give way when
+// it is narrow.
 
 package tui
 
@@ -13,10 +15,10 @@ import (
 )
 
 const (
-	treeWidth = 34
-	// Below this many columns the panes stack: repo tabs, PRs, details.
-	compactBelow = 100
-	// Below this many lines the stacked layout gives its key hints' room away.
+	// Below this many columns the PR table keeps only the icon, number and
+	// title, and dialogs lose their padding.
+	narrowBelow = 80
+	// Below this many lines the key hints give their room to the panes.
 	hintsFrom = 16
 )
 
@@ -78,13 +80,15 @@ func (m *Model) View() string {
 		return ""
 	}
 	m.marked = m.marked[:0]
-	var screen string
-	if m.compact() {
-		screen = m.compactView()
-	} else {
-		body := lipgloss.JoinHorizontal(lipgloss.Top, m.treeView(), m.rightView())
-		screen = lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.footerView())
+	prs, details := m.paneHeights()
+	lines := []string{
+		m.headerView(),
+		m.tabsView(),
+		m.mark(zonePane+"prs",
+			framePane(m.prTitle(), m.width, prs, m.focus == panePRs, m.prTable(m.width-2, prs-2))),
+		m.detailsPane(m.width, details),
 	}
+	screen := strings.Join(append(lines, m.footerView(m.mark)...), "\n")
 	if m.modal != nil {
 		m.marked = m.marked[:0] // a dialog covers everything else
 		screen = m.overlay(screen, m.modalView())
@@ -106,9 +110,19 @@ func (m *Model) headerView() string {
 	return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(text)
 }
 
-// paneHeight splits the window between the header, panes and footer.
-func (m *Model) paneHeight() int {
-	return max(6, m.height-2)
+func (m *Model) narrow() bool { return m.width < narrowBelow }
+
+// paneHeights splits what the header, tabs and key hints leave: the PR list
+// takes what it needs, up to half, and the details get the rest.
+func (m *Model) paneHeights() (prs, details int) {
+	unmarked := func(_, text string) string { return text }
+	room := max(6, m.height-2-len(m.footerView(unmarked)))
+	rows := max(1, len(m.prs()))
+	if !m.narrow() {
+		rows++ // the column headings
+	}
+	prs = min(room/2, rows+2)
+	return prs, room - prs
 }
 
 // framePane draws a rounded box with its title in the top border, the way the
@@ -153,44 +167,89 @@ func clip(line string, width int) string {
 	return lipgloss.NewStyle().MaxWidth(width).Render(line)
 }
 
-func (m *Model) treeView() string {
-	height := m.paneHeight()
-	lines := []string{}
-	for index, item := range m.rows {
-		line := m.treeRow(item)
-		if index == m.cursor && m.focus == paneRepos {
-			line = selected.Render(padTo(line, treeWidth-4))
-		}
-		lines = append(lines, m.mark(fmt.Sprintf("%s%d", zoneRepo, index), padTo(line, treeWidth-2)))
+// tabsView is one line of repo tabs, scrolled sideways so the selected one
+// shows, with ‹ and › where more are out of sight.
+func (m *Model) tabsView() string {
+	if len(m.repos) == 0 {
+		return clip(dim.Render(" Press A to add a repository"), m.width)
 	}
-	if len(lines) == 0 {
-		lines = append(lines, dim.Render("Press A to add a repository"))
+	tabs := []string{}
+	for index, repo := range m.repos {
+		tabs = append(tabs, m.mark(fmt.Sprintf("%s%d", zoneRepo, index), m.tab(repo, index == m.cursor)))
 	}
-	return m.mark(zonePane+"repos",
-		framePane("Repos", treeWidth, height, m.focus == paneRepos, strings.Join(lines, "\n")))
+	room := m.width - 2 // a column each side for ‹ and ›
+	fits := func(from, to int) bool {
+		return lipgloss.Width(strings.Join(tabs[from:to], "")) <= room
+	}
+	start := 0
+	for start < m.cursor && !fits(start, m.cursor+1) {
+		start++
+	}
+	end := m.cursor + 1
+	for end < len(tabs) && fits(start, end+1) {
+		end++
+	}
+	left, right := " ", " "
+	if start > 0 {
+		left = m.more("‹", "«", m.repos[:start])
+	}
+	if end < len(tabs) {
+		right = m.more("›", "»", m.repos[end:])
+	}
+	return left + clip(strings.Join(tabs[start:end], ""), room) + right
 }
 
-func (m *Model) treeRow(item row) string {
-	if item.repo == "" {
-		marker := "▼ "
-		if m.isCollapsed(item.owner) {
-			marker = "▶ "
+// more marks tabs out of sight: faint while they are quiet, doubled and in
+// their badge's colour when one has something unseen or a failed refresh.
+func (m *Model) more(quiet, news string, hidden []string) string {
+	flagged, alert := false, false
+	for _, repo := range hidden {
+		unseen, repoAlert := m.repoCounts(repo)
+		flagged = flagged || unseen > 0 || repoAlert
+		alert = alert || repoAlert
+	}
+	if !flagged {
+		return dim.Render(quiet)
+	}
+	return m.badgeStyle(alert).Render(news)
+}
+
+// tabName is a repo's short name, or its full name when another repo shares
+// the short one.
+func (m *Model) tabName(repo string) string {
+	short := models.ShortName(repo)
+	for _, other := range m.repos {
+		if other != repo && strings.EqualFold(models.ShortName(other), short) {
+			return repo
 		}
-		unseen, alerts := m.groupCounts(item.owner)
-		return dim.Render(marker) + m.badge(unseen, alerts) +
-			bold.Render(item.ownerName+"/") + m.count(unseen, alerts)
 	}
-	branch := "├── "
-	if item.last {
-		branch = "└── "
+	return short
+}
+
+// tab is a repo's name with its unseen count: green for something ready, red
+// for something blocked or a failed refresh.
+func (m *Model) tab(repo string, current bool) string {
+	unseen, alert := m.repoCounts(repo)
+	label := m.tabName(repo)
+	switch {
+	case unseen > 0:
+		label = fmt.Sprintf("● %s (%d)", label, unseen)
+	case alert:
+		label = "⚠ " + label
 	}
-	unseen, alerts := m.repoCounts(item.repo)
-	name := models.ShortName(item.repo)
-	style := lipgloss.NewStyle()
-	if _, loaded := m.backend.Repo(item.repo); !loaded && m.backend.Errors()[item.repo] == "" {
-		style = dim
+	label = " " + label + " "
+	_, loaded := m.backend.Repo(repo)
+	switch {
+	case current && m.focus == paneRepos:
+		return selected.Render(label)
+	case current:
+		return keyStyle.Underline(true).Render(label)
+	case unseen > 0 || alert:
+		return m.badgeStyle(alert).Render(label)
+	case !loaded:
+		return dim.Render(label)
 	}
-	return dim.Render(branch) + m.badge(unseen, alerts) + style.Render(name) + m.count(unseen, alerts)
+	return label
 }
 
 // repoCounts is how many PRs are unseen, and whether any of them is an alert.
@@ -222,36 +281,6 @@ func (m *Model) repoCounts(name string) (int, bool) {
 	return count, alert
 }
 
-func (m *Model) groupCounts(owner string) (int, bool) {
-	total, alert := 0, false
-	for _, name := range m.backend.Config().Repos {
-		if models.OwnerKey(name) != owner {
-			continue
-		}
-		count, groupAlert := m.repoCounts(name)
-		total += count
-		alert = alert || groupAlert
-	}
-	return total, alert
-}
-
-func (m *Model) badge(unseen int, alert bool) string {
-	switch {
-	case alert && unseen == 0:
-		return lipgloss.NewStyle().Bold(true).Foreground(red).Render("⚠ ")
-	case unseen > 0:
-		return m.badgeStyle(alert).Render("● ")
-	}
-	return "  "
-}
-
-func (m *Model) count(unseen int, alert bool) string {
-	if unseen == 0 {
-		return ""
-	}
-	return m.badgeStyle(alert).Render(fmt.Sprintf(" (%d)", unseen))
-}
-
 func (m *Model) badgeStyle(alert bool) lipgloss.Style {
 	if alert {
 		return lipgloss.NewStyle().Bold(true).Foreground(red)
@@ -259,24 +288,10 @@ func (m *Model) badgeStyle(alert bool) lipgloss.Style {
 	return lipgloss.NewStyle().Bold(true).Foreground(green)
 }
 
-func (m *Model) rightView() string {
-	width, bottom := m.detailsSize()
-	top := m.paneHeight() - bottom
-	return lipgloss.JoinVertical(lipgloss.Left,
-		m.mark(zonePane+"prs",
-			framePane(m.prTitle(), width, top, m.focus == panePRs, m.prTable(width-6, top-2))),
-		m.detailsPane(width, bottom),
-	)
-}
-
 // detailsSize is the details pane's width and height, border included.
 func (m *Model) detailsSize() (int, int) {
-	if m.compact() {
-		_, details := m.compactHeights()
-		return m.width, details
-	}
-	height := m.paneHeight()
-	return max(20, m.width-treeWidth), height / 2
+	_, details := m.paneHeights()
+	return m.width, details
 }
 
 // detailsPane frames the details from where they're scrolled to, and says they
@@ -352,8 +367,8 @@ func (m *Model) prTable(width, height int) string {
 	)
 	titleWidth := max(10, width-numberWidth-statusWidth-authorWidth-2)
 	lines := []string{}
-	compact := m.compact()
-	if !compact {
+	narrow := m.narrow()
+	if !narrow {
 		lines = append(lines, dim.Render("  "+padTo("#", numberWidth)+padTo("Status", statusWidth)+
 			padTo("Author", authorWidth)+"Title"))
 	}
@@ -381,7 +396,7 @@ func (m *Model) prTable(width, height int) string {
 		number := text.Render(fmt.Sprintf("#%d", pr.Number))
 		// Each cell is padded after styling, so colour codes don't eat the width.
 		var cells string
-		if compact {
+		if narrow {
 			if marker != "" {
 				auto = lipgloss.NewStyle().Foreground(cyan).Render(marker[1:]) + " "
 			}
@@ -501,20 +516,21 @@ func labelled(label string, refs []models.PRRef, repo string) []string {
 	return lines
 }
 
-func (m *Model) footerView() string {
-	keys := []struct{ key, label string }{
-		{"A", "Add repo"}, {"D", "Remove repo"}, {"N", "Notifications"}, {"S", "Settings"},
-		{"r", "Refresh"}, {"q", "Quit"},
+// footerView is the key hints, wrapped to the screen; a short screen goes
+// without them. mark makes each a place to tap.
+func (m *Model) footerView(mark func(name, text string) string) []string {
+	if m.height < hintsFrom {
+		return nil
 	}
-	parts := []string{}
-	for _, item := range keys {
-		parts = append(parts, m.mark(zoneKey+item.key, keyStyle.Render(" "+item.key+" ")+" "+item.label))
+	hints := []struct{ key, label string }{
+		{"A", "Add"}, {"D", "Remove"}, {"N", "Notify"}, {"S", "Settings"},
+		{"r", "Refresh"}, {"q", "Quit"}, {"w", "Deps"}, {"⏎", "Actions"},
 	}
-	left := strings.Join(parts, "  ")
-	right := m.mark(zoneKey+"w", keyStyle.Render(" w ")+" Dependencies") + "  " +
-		m.mark(zoneKey+"⏎", keyStyle.Render(" ⏎ ")+" Actions")
-	gap := max(1, m.width-lipgloss.Width(left)-lipgloss.Width(right))
-	return left + strings.Repeat(" ", gap) + right
+	items := []string{}
+	for _, hint := range hints {
+		items = append(items, mark(zoneKey+hint.key, keyStyle.Render(hint.key)+" "+hint.label))
+	}
+	return wrapItems(items, "  ", m.width)
 }
 
 // overlay centres a dialog on the screen.

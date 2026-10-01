@@ -24,7 +24,7 @@ func (m *Model) modalInner() int {
 // modalPadding is the space inside a dialog's border, above and beside its
 // text. A narrow screen keeps one column and gives the rest to the text.
 func (m *Model) modalPadding() (int, int) {
-	if m.compact() {
+	if m.narrow() {
 		return 0, 1
 	}
 	return 1, 2

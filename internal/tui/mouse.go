@@ -21,7 +21,7 @@ import (
 // What a zone's name starts with says what a tap on it does.
 const (
 	zoneKey  = "key:"  // presses the key named after it
-	zoneRepo = "repo:" // selects that row of the tree, or that tab
+	zoneRepo = "repo:" // selects that repo's tab
 	zonePR   = "pr:"   // selects that PR
 	zonePane = "pane:" // where the wheel applies
 )
@@ -122,9 +122,6 @@ func (m *Model) tap(mouse tea.MouseMsg) tea.Cmd {
 		index, _ := strconv.Atoi(strings.TrimPrefix(id, zoneRepo))
 		m.focus = paneRepos
 		m.moveRepo(index - m.cursor)
-		if m.selectedRepo() == "" {
-			return m.enterRow() // an owner row folds
-		}
 		return nil
 	}
 	if id := m.zoneAt(mouse, zonePR); id != "" {
@@ -177,10 +174,6 @@ func (m *Model) wheel(mouse tea.MouseMsg, down bool) tea.Cmd {
 			_, cmd := m.handlePRKey(key)
 			return cmd
 		}
-	case zonePane + "repos":
-		m.focus = paneRepos
-		_, cmd := m.handleTreeKey(key)
-		return cmd
 	}
 	return nil
 }

@@ -68,14 +68,6 @@ func TestTapSelectsARepo(t *testing.T) {
 	}
 }
 
-func TestTapOnAnOwnerFoldsIt(t *testing.T) {
-	model, backend := newModel()
-	tap(t, model, "▼")
-	if !contains2(backend.recorded(), "collapsed acme true") {
-		t.Errorf("calls = %v", backend.recorded())
-	}
-}
-
 func TestTapSelectsAPRThenOpensItsActions(t *testing.T) {
 	model, backend := newModel()
 	tap(t, model, "#2")
@@ -164,7 +156,7 @@ func TestTapBehindADialogDoesNothing(t *testing.T) {
 
 func TestWheelActsOnWhatIsUnderIt(t *testing.T) {
 	model, _ := newModel()
-	resize(model, 120, 14) // room for four lines of details
+	resize(model, 120, 14) // room for six lines of details
 	for range 20 {
 		wheel(t, model, "Details", tea.MouseButtonWheelDown)
 	}
@@ -180,11 +172,6 @@ func TestWheelActsOnWhatIsUnderIt(t *testing.T) {
 	if model.focus != panePRs || model.prCursor != 1 {
 		t.Errorf("the wheel over the PR list should move down it: focus %v, cursor %d",
 			model.focus, model.prCursor)
-	}
-	wheel(t, model, "Repos", tea.MouseButtonWheelDown)
-	if model.focus != paneRepos || model.selectedRepo() != "acme/web" {
-		t.Errorf("the wheel over the tree should move down it: focus %v, repo %q",
-			model.focus, model.selectedRepo())
 	}
 }
 

@@ -20,14 +20,13 @@ import (
 
 // fakeBackend is a dashboard backend that records what the model asked for.
 type fakeBackend struct {
-	mutex     sync.Mutex
-	config    config.Config
-	repos     map[string]models.Repo
-	errs      map[string]string
-	status    service.Status
-	collapsed []string
-	unseen    map[string][]int
-	armed     map[string]map[int]models.ArmedMerge
+	mutex  sync.Mutex
+	config config.Config
+	repos  map[string]models.Repo
+	errs   map[string]string
+	status service.Status
+	unseen map[string][]int
+	armed  map[string]map[int]models.ArmedMerge
 
 	calls        []string
 	addErr       error
@@ -82,7 +81,6 @@ func (f *fakeBackend) Config() config.Config         { return f.config }
 func (f *fakeBackend) Repos() map[string]models.Repo { return f.repos }
 func (f *fakeBackend) Errors() map[string]string     { return f.errs }
 func (f *fakeBackend) Status() service.Status        { return f.status }
-func (f *fakeBackend) Collapsed() []string           { return f.collapsed }
 func (f *fakeBackend) Unseen(name string) []int      { return f.unseen[name] }
 
 // Repo fills in action menus the way the real backend does.
@@ -124,24 +122,6 @@ func (f *fakeBackend) RemoveRepo(name string) error {
 
 func (f *fakeBackend) MarkSeen(name string, number int) error {
 	f.record("seen " + name + " " + itoa(number))
-	return nil
-}
-
-func (f *fakeBackend) SetCollapsed(owner string, collapsed bool) error {
-	f.record("collapsed " + owner + " " + boolText(collapsed))
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
-	if collapsed {
-		f.collapsed = append(f.collapsed, owner)
-	} else {
-		kept := []string{}
-		for _, candidate := range f.collapsed {
-			if candidate != owner {
-				kept = append(kept, candidate)
-			}
-		}
-		f.collapsed = kept
-	}
 	return nil
 }
 
@@ -334,16 +314,13 @@ func newModel() (*Model, *fakeBackend) {
 	return model, backend
 }
 
-func TestTreeShowsOwnersAndRepos(t *testing.T) {
+func TestTabsShowTheRepos(t *testing.T) {
 	model, _ := newModel()
-	view := model.View()
-	for _, want := range []string{"acme/", "api", "web", "Other/", "tool"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("the tree is missing %q:\n%s", want, view)
+	tabs := line(model.View(), "tool")
+	for _, want := range []string{"api", "web", "tool", "(2)"} {
+		if !strings.Contains(tabs, want) {
+			t.Errorf("the tabs are missing %q: %q", want, tabs)
 		}
-	}
-	if !strings.Contains(view, "(2)") {
-		t.Errorf("unseen counts should show:\n%s", view)
 	}
 	if model.selectedRepo() != "acme/api" {
 		t.Errorf("selected = %q, want the first repo", model.selectedRepo())
@@ -352,12 +329,12 @@ func TestTreeShowsOwnersAndRepos(t *testing.T) {
 
 func TestNavigationAndMarkSeen(t *testing.T) {
 	model, backend := newModel()
-	press(t, model, "down") // acme/web
+	press(t, model, "right") // acme/web
 	if model.selectedRepo() != "acme/web" {
 		t.Fatalf("selected = %q", model.selectedRepo())
 	}
 	if !strings.Contains(model.View(), "PRs — acme/web (1)") {
-		t.Errorf("the PR pane should follow the tree:\n%s", model.View())
+		t.Errorf("the PR pane should follow the tabs:\n%s", model.View())
 	}
 	press(t, model, "enter") // into the PR list
 	if model.focus != panePRs {
@@ -365,26 +342,6 @@ func TestNavigationAndMarkSeen(t *testing.T) {
 	}
 	if !contains2(backend.recorded(), "seen acme/web 7") {
 		t.Errorf("reading a PR should mark it seen: %v", backend.recorded())
-	}
-}
-
-func TestCollapseAndExpand(t *testing.T) {
-	model, backend := newModel()
-	press(t, model, "left") // from the repo to its owner row
-	if model.selectedRepo() != "" {
-		t.Error("left should move to the owner row")
-	}
-	press(t, model, "left") // collapse the group
-	if !contains2(backend.recorded(), "collapsed acme true") {
-		t.Errorf("calls = %v", backend.recorded())
-	}
-	model.rebuildRows("")
-	if strings.Contains(model.View(), "├── ") {
-		t.Errorf("a collapsed group should hide its repos:\n%s", model.View())
-	}
-	press(t, model, "right")
-	if !contains2(backend.recorded(), "collapsed acme false") {
-		t.Errorf("calls = %v", backend.recorded())
 	}
 }
 
@@ -589,8 +546,9 @@ func TestNotificationsDialog(t *testing.T) {
 }
 
 func TestNotificationsNeedsARepo(t *testing.T) {
-	model, _ := newModel()
-	press(t, model, "left") // sit on the owner row
+	model, backend := newModel()
+	backend.config.Repos = nil // nothing monitored yet
+	model.reloadRepos("")
 	press(t, model, "N")
 	if model.modal != nil {
 		t.Error("no dialog without a repo selected")
@@ -872,7 +830,7 @@ func TestSettingsWithoutLoginItem(t *testing.T) {
 
 func TestFocusFollowsTheSelection(t *testing.T) {
 	model, backend := newModel()
-	press(t, model, "down")  // acme/web in the tree
+	press(t, model, "right") // acme/web
 	press(t, model, "enter") // into its PRs
 	want := []string{"focus acme/web 0", "focus acme/web 7"}
 	got := []string{}

@@ -31,6 +31,65 @@ func assertFits(t *testing.T, view string, width, height int) {
 	}
 }
 
+// One layout for every screen: a wide one only gives the PR list its columns.
+func TestWideScreenStacksThePanesToo(t *testing.T) {
+	model, _ := newModel()
+	view := model.View()
+	assertFits(t, view, 120, 40)
+	if strings.Contains(view, "├── ") || strings.Contains(view, "Repos") {
+		t.Errorf("there should be no repo tree:\n%s", view)
+	}
+	tabs := line(view, "tool")
+	if !strings.Contains(tabs, "api") || !strings.Contains(tabs, "web") {
+		t.Errorf("the repos should be tabs on one line: %q", tabs)
+	}
+	if got := lipgloss.Width(line(view, "PRs — acme/api")); got != 120 {
+		t.Errorf("the PR pane is %d wide, want the whole 120", got)
+	}
+	if heading := line(view, "Status"); !strings.Contains(heading, "Author") {
+		t.Errorf("a wide PR list should head its columns: %q", heading)
+	}
+	row := line(view, "#2")
+	if !strings.Contains(row, "PENDING") || !strings.Contains(row, "alice") {
+		t.Errorf("a wide PR row has room for the status and the author: %q", row)
+	}
+}
+
+func TestHiddenTabsWithNewsAreFlagged(t *testing.T) {
+	model, backend := newModel()
+	backend.config.Repos = []string{"acme/alpha", "acme/bravo", "acme/charlie", "acme/delta",
+		"acme/echo", "acme/foxtrot", "acme/golf"}
+	backend.repos["acme/golf"] = backend.repos["acme/web"]
+	backend.unseen["acme/golf"] = []int{7}
+	resize(model, 40, 24)
+	model.reloadRepos("acme/alpha")
+
+	tabs := line(model.View(), "alpha")
+	if !strings.Contains(tabs, "»") || strings.Contains(tabs, "›") {
+		t.Errorf("an unseen PR out of sight to the right should be flagged: %q", tabs)
+	}
+	press(t, model, "right", "right", "right", "right", "right", "right")
+	tabs = line(model.View(), "golf")
+	if !strings.Contains(tabs, "‹") || strings.Contains(tabs, "«") {
+		t.Errorf("quiet tabs out of sight get the plain marker: %q", tabs)
+	}
+}
+
+func TestTabsNameTheOwnerWhenRepoNamesClash(t *testing.T) {
+	model, backend := newModel()
+	backend.config.Repos = []string{"acme/api", "Other/api", "acme/web"}
+	model.reloadRepos("acme/api")
+	tabs := line(model.View(), "web")
+	for _, want := range []string{"acme/api", "Other/api"} {
+		if !strings.Contains(tabs, want) {
+			t.Errorf("two repos called api should show their owners, missing %q: %q", want, tabs)
+		}
+	}
+	if strings.Contains(tabs, "acme/web") {
+		t.Errorf("a name on its own stays short: %q", tabs)
+	}
+}
+
 func TestNarrowScreenStacksThePanes(t *testing.T) {
 	model, _ := newModel()
 	resize(model, 45, 24)
@@ -84,7 +143,7 @@ func TestRepoTabsScrollToTheSelection(t *testing.T) {
 	backend.config.Repos = []string{"acme/alpha", "acme/bravo", "acme/charlie", "acme/delta",
 		"acme/echo", "acme/foxtrot", "acme/golf"}
 	resize(model, 40, 24)
-	model.rebuildRows("acme/alpha")
+	model.reloadRepos("acme/alpha")
 
 	view := model.View()
 	assertFits(t, view, 40, 24)
@@ -127,36 +186,9 @@ func TestNarrowKeysFollowTheStackedLayout(t *testing.T) {
 	}
 }
 
-func TestResizeKeepsTheRepoSelected(t *testing.T) {
-	model, _ := newModel()
-	press(t, model, "down") // acme/web
-	resize(model, 45, 24)
-	if model.selectedRepo() != "acme/web" {
-		t.Errorf("narrowing moved the selection to %q", model.selectedRepo())
-	}
-	resize(model, 120, 40)
-	if model.selectedRepo() != "acme/web" {
-		t.Errorf("widening moved the selection to %q", model.selectedRepo())
-	}
-	if !strings.Contains(model.View(), "├── ") {
-		t.Errorf("a wide screen should show the tree again:\n%s", model.View())
-	}
-}
-
-func TestNarrowTabsShowCollapsedGroups(t *testing.T) {
-	model, backend := newModel()
-	backend.collapsed = []string{"acme"}
-	model.rebuildRows("")
-	resize(model, 45, 24)
-	tabs := line(model.View(), "tool")
-	if !strings.Contains(tabs, "api") || !strings.Contains(tabs, "web") {
-		t.Errorf("tabs have no groups to fold, so every repo should show: %q", tabs)
-	}
-}
-
 func TestDetailsScroll(t *testing.T) {
 	model, _ := newModel()
-	resize(model, 120, 14) // room for four lines of details
+	resize(model, 120, 14) // room for six lines of details
 	press(t, model, "enter")
 	view := model.View()
 	if strings.Contains(view, "Ready to merge") || !strings.Contains(view, "Branch:") {

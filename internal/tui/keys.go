@@ -1,6 +1,6 @@
 // Keys: A add, D remove, N notifications, S settings, r refresh, q quit,
-// enter acts, w dependencies, arrows navigate, tab goes round the panes, J/K
-// scroll the details from anywhere.
+// enter acts, w dependencies, left and right pick a repo, up and down a PR,
+// tab goes round the panes, J/K scroll the details from anywhere.
 
 package tui
 
@@ -51,12 +51,9 @@ func (m *Model) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.scrollDetails(-m.detailsPage())
 		return m, nil
 	}
-	if m.focus == paneRepos && m.compact() {
-		return m.handleTabKey(key)
-	}
 	switch m.focus {
 	case paneRepos:
-		return m.handleTreeKey(key)
+		return m.handleRepoKey(key)
 	case paneDetails:
 		return m.handleDetailsKey(key)
 	}
@@ -103,104 +100,34 @@ func (m *Model) detailsPage() int {
 
 // moveRepo steps the repo cursor, stopping at either end.
 func (m *Model) moveRepo(by int) {
-	if next := m.cursor + by; next >= 0 && next < len(m.rows) {
+	if next := m.cursor + by; next >= 0 && next < len(m.repos) {
 		m.cursor = next
 		m.prCursor = 0
 	}
 }
 
-// handleTabKey is the repo keys on a narrow screen: the tabs run sideways and
-// the PR list sits below them.
-func (m *Model) handleTabKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+// handleRepoKey is the keys on the repo tabs: they run sideways, and the PR
+// list sits below them.
+func (m *Model) handleRepoKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.String() {
 	case "left", "h":
 		m.moveRepo(-1)
 	case "right", "l":
 		m.moveRepo(1)
 	case "down", "j", "enter":
-		return m, m.enterRow()
+		return m, m.enterRepo()
 	}
 	return m, nil
 }
 
-func (m *Model) handleTreeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch key.String() {
-	case "up", "k":
-		m.moveRepo(-1)
-	case "down", "j":
-		m.moveRepo(1)
-	case "left", "h":
-		return m, m.collapseOrParent()
-	case "right", "l":
-		return m, m.expand()
-	case "enter":
-		return m, m.enterRow()
-	}
-	return m, nil
-}
-
-// collapseOrParent moves from a repo to its group, or folds an open group away.
-func (m *Model) collapseOrParent() tea.Cmd {
-	current, ok := m.currentRow()
-	if !ok {
-		return nil
-	}
-	if current.repo != "" {
-		for index, candidate := range m.rows {
-			if candidate.repo == "" && candidate.owner == current.owner {
-				m.cursor = index
-				break
-			}
-		}
-		return nil
-	}
-	if !m.isCollapsed(current.owner) {
-		return m.setCollapsed(current.owner, true)
-	}
-	return nil
-}
-
-func (m *Model) expand() tea.Cmd {
-	current, ok := m.currentRow()
-	if !ok || current.repo != "" || !m.isCollapsed(current.owner) {
-		return nil
-	}
-	return m.setCollapsed(current.owner, false)
-}
-
-// enterRow folds a group, or moves into a repo's pull requests.
-func (m *Model) enterRow() tea.Cmd {
-	current, ok := m.currentRow()
-	if !ok {
-		return nil
-	}
-	if current.repo == "" {
-		return m.setCollapsed(current.owner, !m.isCollapsed(current.owner))
-	}
+// enterRepo moves into the selected repo's pull requests.
+func (m *Model) enterRepo() tea.Cmd {
 	if len(m.prs()) == 0 {
 		return nil
 	}
 	m.focus = panePRs
 	m.prCursor = 0
 	return m.markSeen()
-}
-
-func (m *Model) isCollapsed(owner string) bool {
-	for _, candidate := range m.backend.Collapsed() {
-		if candidate == owner {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *Model) setCollapsed(owner string, collapsed bool) tea.Cmd {
-	keep := m.selectedRepo()
-	if keep == "" {
-		keep = ""
-	}
-	cmd := run(func() error { return m.backend.SetCollapsed(owner, collapsed) })
-	return cmd
 }
 
 func (m *Model) handlePRKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {

@@ -36,7 +36,7 @@ func TestShiftTabCyclesBackwards(t *testing.T) {
 
 func TestTabStaysPutWithoutPRs(t *testing.T) {
 	model, _ := newModel()
-	press(t, model, "down", "down", "down") // Other/tool has no PRs loaded
+	press(t, model, "right", "right") // Other/tool has no PRs loaded
 	if model.selectedRepo() != "Other/tool" {
 		t.Fatalf("selected %q", model.selectedRepo())
 	}
@@ -52,7 +52,7 @@ func TestTabStaysPutWithoutPRs(t *testing.T) {
 
 func TestArrowsScrollTheFocusedDetails(t *testing.T) {
 	model, _ := newModel()
-	resize(model, 120, 14) // room for four lines of details
+	resize(model, 120, 14) // room for six lines of details
 	press(t, model, "tab", "tab")
 	if !strings.Contains(line(model.View(), "Details"), "↑/↓") {
 		t.Errorf("the focused pane should name the arrows: %q", line(model.View(), "Details"))
@@ -174,7 +174,7 @@ func TestTapOnTheURLOpensIt(t *testing.T) {
 func TestTapOnAScrolledURLOpensIt(t *testing.T) {
 	model, _ := newModel()
 	urls := opened(model)
-	resize(model, 120, 14) // room for four lines of details
+	resize(model, 120, 14) // room for six lines of details
 	for range 6 {
 		press(t, model, "J")
 	}

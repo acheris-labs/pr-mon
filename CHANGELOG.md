@@ -14,6 +14,16 @@ the git tags the release workflow builds from.
 - Click the PR's URL in the details to open it in the browser. It is also a
   terminal hyperlink (OSC 8), which is what opens it over ssh, where pr-mon
   doesn't open a browser on the far machine.
+- `«` and `»` on the repo tabs flag a repo out of sight with something unseen
+  or a failed refresh, and two repos with the same name show their owners.
+
+### Changed
+
+- The dashboard has one layout on every screen: repo tabs, the PR list, the
+  details. The repo tree is gone, and with it owner groups and folding in the
+  dashboard (the app keeps them). Repos are chosen with `←` / `→`, and `↓` or
+  `enter` goes into the PR list. A screen of 80 columns or more still shows
+  the PR list's status and author columns.
 
 ## [0.2.0-rc25]
 

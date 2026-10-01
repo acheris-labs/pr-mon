@@ -1,9 +1,10 @@
-// Package tui is the terminal dashboard: a repo tree, the pull requests in the
-// selected repo, and the details of the selected PR.
+// Package tui is the terminal dashboard: a row of repo tabs, the pull requests
+// in the selected repo, and the details of the selected PR.
 package tui
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -25,7 +26,6 @@ type Backend interface {
 	Repo(name string) (models.Repo, bool)
 	Errors() map[string]string
 	Status() service.Status
-	Collapsed() []string
 	Unseen(name string) []int
 	Armed(name string) map[int]models.ArmedMerge
 
@@ -33,7 +33,6 @@ type Backend interface {
 	AddRepo(name string) (string, error)
 	RemoveRepo(name string) error
 	MarkSeen(name string, number int) error
-	SetCollapsed(owner string, collapsed bool) error
 	Perform(repo string, number int, action models.Action) error
 	AddDependency(repo string, number int, on string) error
 	RemoveDependency(repo string, number int, on string) error
@@ -59,14 +58,6 @@ const (
 	tickInterval = time.Second
 )
 
-// row is one line of the repo tree: an owner group or a repo under it.
-type row struct {
-	owner     string // lower-cased grouping key
-	ownerName string // as spelled
-	repo      string // empty for an owner row
-	last      bool   // last repo in its group
-}
-
 type toast struct {
 	message  string
 	severity string
@@ -80,7 +71,7 @@ type Model struct {
 
 	width, height int
 	focus         pane
-	rows          []row
+	repos         []string // the monitored repos, in tab order
 	cursor        int
 	prCursor      int
 	detailScroll  int // lines of the details scrolled past
@@ -124,14 +115,7 @@ func New(backend Backend, version string) *Model {
 		width:     120,
 		height:    40,
 	}
-	model.rebuildRows("")
-	// Start on the first repo, not its group heading.
-	for index, item := range model.rows {
-		if item.repo != "" {
-			model.cursor = index
-			break
-		}
-	}
+	model.reloadRepos("")
 	return model
 }
 
@@ -162,12 +146,7 @@ func tick() tea.Cmd {
 func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch typed := message.(type) {
 	case tea.WindowSizeMsg:
-		// The tree and the tabs list different rows.
-		was, keep := m.compact(), m.selectedRepo()
 		m.width, m.height = typed.Width, typed.Height
-		if m.compact() != was {
-			m.rebuildRows(keep)
-		}
 		m.scrollDetails(0)
 		return m, nil
 
@@ -189,7 +168,7 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.modal = nil
-		m.rebuildRows(typed.name)
+		m.reloadRepos(typed.name)
 		return m, nil
 
 	case previewReady:
@@ -265,8 +244,8 @@ func (m *Model) applyEvent(event service.Event) tea.Cmd {
 	switch event.Kind {
 	case "toast":
 		m.addToast(event.Message, event.Severity)
-	case "repos", "repo", "seen", "collapsed", "config":
-		m.rebuildRows(m.selectedRepo())
+	case "repos", "repo", "seen", "config":
+		m.reloadRepos(m.selectedRepo())
 	case "disconnected":
 		m.connected = false
 		m.addToast("Backend disconnected — reconnecting…", "warning")
@@ -276,16 +255,16 @@ func (m *Model) applyEvent(event service.Event) tea.Cmd {
 	case "connected":
 		m.connected = true
 		m.addToast("Backend reconnected", "information")
-		m.rebuildRows(m.selectedRepo())
+		m.reloadRepos(m.selectedRepo())
 	}
 	return nil
 }
 
-// ----- rows and selection -----
+// ----- repos and selection -----
 
-// rebuildRows lays the tree out again, keeping the cursor on `keep` when it can.
-// The narrow layout's tabs have no owner rows, so nothing folds there.
-func (m *Model) rebuildRows(keep string) {
+// reloadRepos lists the monitored repos again, by owner then name, keeping the
+// cursor on `keep` when it can.
+func (m *Model) reloadRepos(keep string) {
 	names := append([]string{}, m.backend.Config().Repos...)
 	sort.Slice(names, func(i, j int) bool {
 		left, right := names[i], names[j]
@@ -294,61 +273,18 @@ func (m *Model) rebuildRows(keep string) {
 		}
 		return strings.ToLower(left) < strings.ToLower(right)
 	})
-	collapsed := map[string]bool{}
-	for _, owner := range m.backend.Collapsed() {
-		collapsed[owner] = true
+	m.repos = names
+	if index := slices.Index(names, keep); index >= 0 {
+		m.cursor = index
 	}
-	rows := []row{}
-	compact := m.compact()
-	for index, name := range names {
-		owner := models.OwnerKey(name)
-		if !compact && (index == 0 || models.OwnerKey(names[index-1]) != owner) {
-			rows = append(rows, row{owner: owner, ownerName: models.Owner(name)})
-		}
-		if !compact && collapsed[owner] {
-			continue
-		}
-		last := index == len(names)-1 || models.OwnerKey(names[index+1]) != owner
-		rows = append(rows, row{owner: owner, ownerName: models.Owner(name), repo: name, last: last})
-	}
-	m.rows = rows
-	m.moveCursorTo(keep)
-}
-
-func (m *Model) moveCursorTo(repo string) {
-	if repo != "" {
-		for index, candidate := range m.rows {
-			if candidate.repo == repo {
-				m.cursor = index
-				return
-			}
-		}
-		// Its group collapsed: sit on the group instead.
-		for index, candidate := range m.rows {
-			if candidate.repo == "" && candidate.owner == models.OwnerKey(repo) {
-				m.cursor = index
-				return
-			}
-		}
-	}
-	if m.cursor >= len(m.rows) {
-		m.cursor = max(0, len(m.rows)-1)
-	}
-}
-
-func (m *Model) currentRow() (row, bool) {
-	if m.cursor < 0 || m.cursor >= len(m.rows) {
-		return row{}, false
-	}
-	return m.rows[m.cursor], true
+	m.cursor = max(0, min(m.cursor, len(names)-1))
 }
 
 func (m *Model) selectedRepo() string {
-	current, ok := m.currentRow()
-	if !ok {
+	if m.cursor >= len(m.repos) {
 		return ""
 	}
-	return current.repo
+	return m.repos[m.cursor]
 }
 
 func (m *Model) prs() []models.PullRequest {

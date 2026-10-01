@@ -113,10 +113,9 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | Key | Where | Action |
 |-----|-------|--------|
 | `A` | anywhere | Add a repo (`owner/name`) |
-| `D` | repo tree | Remove the selected repo |
-| `enter` / `space` | owner row | Collapse / expand the group |
-| `enter` | repo row | Jump to its PR list |
-| `←` / `→` | repo tree | Go to owner / collapse; expand |
+| `D` | anywhere | Remove the selected repo |
+| `←` / `→` | repo tabs | Previous / next repo |
+| `↓` / `enter` | repo tabs | Into the repo's PR list (`←` or `esc` comes back) |
 | `tab` / `shift+tab` | anywhere | Go round the panes: repos, PR list, details (and back the other way) |
 | `enter` | PR list | Action menu |
 | `J` / `K`, `PgDn` / `PgUp` | anywhere | Scroll the details pane when it says `(J/K scroll)` |
@@ -128,7 +127,7 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `r` | action menu | Re-run this PR's failed GitHub Actions jobs |
 | `space` | action menu | Toggle "delete remote branch" |
 | `w` | PR list or action menu | Dependencies: what the PR waits on (`a` add, `d` remove, `g` graph) |
-| `N` | repo tree (on a repo) | Notification settings for that repo |
+| `N` | anywhere | Notification settings for the selected repo |
 | `S` | anywhere | Settings: how often to check GitHub, start the backend at login (macOS) |
 | `r` | anywhere | Refresh now |
 | `q` | anywhere | Quit the dashboard (the backend keeps running) |
@@ -138,7 +137,7 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 The dashboard takes the mouse, so it works by touch in a terminal that sends
 taps as clicks:
 
-- Tap a repo (a tree row or a tab) to select it; tap an owner row to fold it.
+- Tap a repo's tab to select it.
 - Tap a PR to select it, and tap it again for its action menu.
 - Tap the details to give them the focus.
 - Click the PR's URL in the details to open it in your browser. Over ssh
@@ -154,24 +153,25 @@ taps as clicks:
 While pr-mon has the mouse, selecting text is up to your terminal: usually
 Shift-drag (Option-drag in some), or a long press on a phone.
 
-### Small screens
+### Layout
 
-Under 100 columns (a phone, a split pane) the panes stack: repos become a row
-of tabs, the PR list sits under them and the details under that. `←` / `→`
-move between tabs, which scroll sideways (`‹` and `›` mark more out of sight),
-and `↓` or `enter` goes into the PR list. Tabs show every repo, whatever is
-collapsed in the tree. PR rows keep the status icon, number and title; the
-author and the status in words are in the details. Under 16 lines the key
-hints make way for the panes.
+The same on every screen, a phone's included: a row of repo tabs, the PR list
+under it and the details under that. The PR list takes only the lines it needs,
+up to half, and the details get the rest.
+
+- Tabs scroll sideways to keep the selected repo in view. `‹` and `›` mark more
+  out of sight; they turn into a coloured `«` or `»` when a repo out of sight
+  has something you haven't seen or a failed refresh.
+- A tab shows the repo's short name, or `owner/name` when two repos share one.
+- Under 80 columns PR rows keep the status icon, number and title; the author
+  and the status in words are in the details. Dialogs lose their padding.
+- Under 16 lines the key hints make way for the panes.
 
 ## Indicators
 
-- Repo tree: repos are grouped under their owner. `● name (n)` — `n` PRs you
-  haven't looked at since they were opened, became ready, or became blocked.
-  Green = something is ready, red = something got blocked, yellow = new PRs
-  only. `⚠` = the last refresh failed. Owner rows add up their repos, so a
-  collapsed group still shows alerts; a new alert expands its group.
-  Collapsed groups are remembered.
+- Repo tabs: `● name (n)` — `n` PRs you haven't looked at since they were
+  opened, became ready, or became blocked. Red = something got blocked, green
+  otherwise. `⚠` = the last refresh failed.
 - Selecting a PR in the PR list marks it seen.
 - PR statuses: `READY`, `WAITING` (ready, but waiting on other PRs), `CONFLICT`,
   `FAILING`, `BLOCKED`, `BEHIND`, `PENDING`, `CHECKING` (GitHub still
