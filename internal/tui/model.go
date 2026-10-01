@@ -51,6 +51,7 @@ type pane int
 const (
 	paneRepos pane = iota
 	panePRs
+	paneDetails
 )
 
 const (
@@ -99,6 +100,9 @@ type Model struct {
 	events chan service.Event
 	// reconnect is called when the connection drops; nil in tests.
 	reconnect func() tea.Cmd
+	// open hands a URL to the browser; nil where that would be the wrong
+	// machine's (over ssh) and in tests.
+	open func(url string) error
 	// loginItem starts the backend at login; nil where there is none.
 	loginItem LoginItem
 	// What the backend was last told this dashboard is showing.
@@ -414,7 +418,7 @@ func run(work func() error) tea.Cmd {
 func (m *Model) reportFocus() tea.Cmd {
 	repo := m.selectedRepo()
 	number := 0
-	if pr, ok := m.selectedPR(); ok && m.focus == panePRs {
+	if pr, ok := m.selectedPR(); ok && m.focus != paneRepos {
 		number = pr.Number
 	}
 	if repo == m.told.repo && number == m.told.number {

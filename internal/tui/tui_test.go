@@ -295,6 +295,10 @@ func press(t *testing.T, model *Model, keys ...string) {
 			key = tea.KeyMsg{Type: tea.KeySpace}
 		case "ctrl+s":
 			key = tea.KeyMsg{Type: tea.KeyCtrlS}
+		case "tab":
+			key = tea.KeyMsg{Type: tea.KeyTab}
+		case "shift+tab":
+			key = tea.KeyMsg{Type: tea.KeyShiftTab}
 		default:
 			key = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(name)}
 		}

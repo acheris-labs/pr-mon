@@ -4,6 +4,17 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc26]
+
+### Added
+
+- The details pane takes the focus: `tab` now goes round repos, PR list and
+  details (`shift+tab` the other way), a tap on the details focuses them, and
+  there `↑` / `↓` scroll.
+- Click the PR's URL in the details to open it in the browser. It is also a
+  terminal hyperlink (OSC 8), which is what opens it over ssh, where pr-mon
+  doesn't open a browser on the far machine.
+
 ## [0.2.0-rc25]
 
 ### Added

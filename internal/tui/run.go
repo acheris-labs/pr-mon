@@ -6,6 +6,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,6 +32,11 @@ func Run(paths daemon.Paths, version string) error {
 
 	model := New(remote, version)
 	model.loginItem = defaultLoginItem(paths)
+	// Over ssh the browser would open on this machine, not the viewer's: leave
+	// the link to their terminal.
+	if os.Getenv("SSH_CONNECTION") == "" {
+		model.open = openURL
+	}
 	// The backend checks what's on screen more often than the rest.
 	remote.SetFocus(model.selectedRepo(), 0)
 	events := model.Events()

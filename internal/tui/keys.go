@@ -1,5 +1,6 @@
 // Keys: A add, D remove, N notifications, S settings, r refresh, q quit,
-// enter acts, w dependencies, arrows and tab navigate, J/K scroll the details.
+// enter acts, w dependencies, arrows navigate, tab goes round the panes, J/K
+// scroll the details from anywhere.
 
 package tui
 
@@ -34,14 +35,9 @@ func (m *Model) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.modal = dialog
 		return m, cmd
 	case "tab":
-		m.focus = panePRs
-		if m.focus == panePRs && len(m.prs()) == 0 {
-			m.focus = paneRepos
-		}
-		return m, m.markSeen()
+		return m, m.cycleFocus(1)
 	case "shift+tab":
-		m.focus = paneRepos
-		return m, nil
+		return m, m.cycleFocus(-1)
 	case "J":
 		m.scrollDetails(1)
 		return m, nil
@@ -58,10 +54,45 @@ func (m *Model) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.focus == paneRepos && m.compact() {
 		return m.handleTabKey(key)
 	}
-	if m.focus == paneRepos {
+	switch m.focus {
+	case paneRepos:
 		return m.handleTreeKey(key)
+	case paneDetails:
+		return m.handleDetailsKey(key)
 	}
 	return m.handlePRKey(key)
+}
+
+// cycleFocus moves round the panes: repos, PRs, details. A repo with no PRs
+// has nothing in the other two, so focus stays on the repos.
+func (m *Model) cycleFocus(by int) tea.Cmd {
+	if len(m.prs()) == 0 {
+		m.focus = paneRepos
+		return nil
+	}
+	m.focus = (m.focus + pane(by) + 3) % 3
+	return m.markSeen()
+}
+
+// handleDetailsKey scrolls the details with the arrows. Enter and w act on the
+// PR they show, as in the PR list.
+func (m *Model) handleDetailsKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch key.String() {
+	case "up", "k":
+		m.scrollDetails(-1)
+	case "down", "j":
+		m.scrollDetails(1)
+	case "home", "g":
+		m.detailScroll = 0
+	case "end", "G":
+		width, _ := m.detailsSize()
+		m.scrollDetails(len(m.detailLines(width - 2)))
+	case "left", "h", "esc", "escape":
+		m.focus = panePRs
+	case "enter", "w":
+		return m.handlePRKey(key)
+	}
+	return m, nil
 }
 
 // detailsPage is how far page up and page down scroll the details.

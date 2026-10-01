@@ -117,9 +117,10 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `enter` / `space` | owner row | Collapse / expand the group |
 | `enter` | repo row | Jump to its PR list |
 | `←` / `→` | repo tree | Go to owner / collapse; expand |
-| `tab` / `shift+tab` | anywhere | Move between repo tree and PR list |
+| `tab` / `shift+tab` | anywhere | Go round the panes: repos, PR list, details (and back the other way) |
 | `enter` | PR list | Action menu |
 | `J` / `K`, `PgDn` / `PgUp` | anywhere | Scroll the details pane when it says `(J/K scroll)` |
+| `↑` / `↓` | details | Scroll; `←` or `esc` goes back to the PR list, `enter` and `w` act on the PR shown |
 | `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods). Shown in red as **Force merge** when branch protection blocks it but GitHub lets you bypass that; asks `y`/`n` first |
 | `a` | action menu | Toggle auto-merge: GitHub's if the repo allows it, otherwise pr-mon's "merge when ready" (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
@@ -139,6 +140,12 @@ taps as clicks:
 
 - Tap a repo (a tree row or a tab) to select it; tap an owner row to fold it.
 - Tap a PR to select it, and tap it again for its action menu.
+- Tap the details to give them the focus.
+- Click the PR's URL in the details to open it in your browser. Over ssh
+  pr-mon leaves that to your terminal, since its own browser is on the far
+  machine: the URL is a terminal hyperlink, so a terminal that supports them
+  opens it where you are (a tap in some; where a click is reported to pr-mon,
+  the terminal's bypass, such as Shift-Cmd-click in Ghostty).
 - Tap any key hint to press that key: the hints along the bottom, a dialog's
   `[m] Merge` choices, and each key in its last line (`y: yes`, `esc: close`).
 - The wheel, or a drag where the terminal turns drags into wheel ticks, moves

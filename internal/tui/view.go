@@ -282,15 +282,25 @@ func (m *Model) detailsSize() (int, int) {
 // detailsPane frames the details from where they're scrolled to, and says they
 // scroll when they don't all fit.
 func (m *Model) detailsPane(width, height int) string {
-	lines := m.detailLines(width - 2)
+	lines, hidden := m.detailsShown(width, height)
 	title := "Details"
-	hidden := max(0, len(lines)-(height-2))
-	if hidden > 0 {
+	focused := m.focus == paneDetails
+	switch {
+	case hidden > 0 && focused:
+		title = "Details (↑/↓ scroll)"
+	case hidden > 0:
 		title = "Details (J/K scroll)"
 	}
-	start := min(m.detailScroll, hidden)
 	return m.mark(zonePane+"details",
-		framePane(title, width, height, false, strings.Join(lines[start:], "\n")))
+		framePane(title, width, height, focused, strings.Join(lines, "\n")))
+}
+
+// detailsShown is the details from the line they're scrolled to, and how many
+// lines don't fit the pane.
+func (m *Model) detailsShown(width, height int) ([]string, int) {
+	lines := m.detailLines(width - 2)
+	hidden := max(0, len(lines)-(height-2))
+	return lines[min(m.detailScroll, hidden):], hidden
 }
 
 // detailLines is the details text, wrapped to width.
@@ -300,8 +310,7 @@ func (m *Model) detailLines(width int) []string {
 
 // scrollDetails moves the details by some lines, stopping at either end.
 func (m *Model) scrollDetails(by int) {
-	width, height := m.detailsSize()
-	hidden := max(0, len(m.detailLines(width-2))-(height-2))
+	_, hidden := m.detailsShown(m.detailsSize())
 	m.detailScroll = max(0, min(m.detailScroll+by, hidden))
 }
 
@@ -385,7 +394,8 @@ func (m *Model) prTable(width, height int) string {
 				padTo(dim.Render(truncate(pr.Author, authorWidth-1)), authorWidth) +
 				text.Render(truncate(pr.Title, titleWidth))
 		}
-		if index == m.prCursor && m.focus == panePRs {
+		// The PR stays marked while the details have the focus: they are its.
+		if index == m.prCursor && m.focus != paneRepos {
 			cells = selected.Render(padTo(cells, width))
 		}
 		lines = append(lines, m.mark(fmt.Sprintf("%s%d", zonePR, index), padTo(cells, width)))
@@ -437,7 +447,7 @@ func (m *Model) detailsText() string {
 	}
 	lines = append(lines, labelled("Waits on:    ", pr.WaitsOn, name)...)
 	lines = append(lines, labelled("Required by: ", pr.RequiredBy, name)...)
-	lines = append(lines, lipgloss.NewStyle().Underline(true).Foreground(blue).Render(pr.URL), "")
+	lines = append(lines, hyperlink(pr.URL, lipgloss.NewStyle().Underline(true).Foreground(blue).Render(pr.URL)), "")
 	lines = append(lines, style.Render(icon+" "+string(pr.Status)))
 	armed := m.backend.Armed(name)[pr.Number]
 	switch {
@@ -468,6 +478,16 @@ func (m *Model) detailsText() string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// hyperlink makes text a link the terminal opens (OSC 8), so it opens where
+// the viewer is, which over ssh is not where pr-mon runs.
+func hyperlink(url, text string) string {
+	return linkStart + url + "\x1b\\" + text + linkStart + "\x1b\\"
+}
+
+// linkStart opens a hyperlink to the URL that follows it; with none, it ends
+// one.
+const linkStart = "\x1b]8;;"
 
 // labelled lists PRs under a label that shows on the first line only.
 func labelled(label string, refs []models.PRRef, repo string) []string {

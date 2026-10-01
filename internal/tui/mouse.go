@@ -7,12 +7,15 @@ package tui
 
 import (
 	"fmt"
+	"os/exec"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // What a zone's name starts with says what a tap on it does.
@@ -36,13 +39,35 @@ func (m *Model) mark(name, text string) string {
 
 // zoneAt is the name of the zone of one kind under the mouse, or "".
 func (m *Model) zoneAt(mouse tea.MouseMsg, prefix string) string {
+	name, _ := m.zoneUnder(mouse, prefix)
+	return name
+}
+
+// zoneUnder is zoneAt with where the zone is, to place the mouse inside it.
+func (m *Model) zoneUnder(mouse tea.MouseMsg, prefix string) (string, *zone.ZoneInfo) {
 	for _, id := range m.marked {
-		if strings.HasPrefix(id, prefix) && m.zones.Get(id).InBounds(mouse) {
+		if info := m.zones.Get(id); strings.HasPrefix(id, prefix) && info.InBounds(mouse) {
 			name, _, _ := strings.Cut(id, "#")
-			return name
+			return name, info
 		}
 	}
-	return ""
+	return "", nil
+}
+
+// linkAt is the URL of the link at a cell of the details pane, or "". The
+// terminal can open the link itself, but with the mouse reported to pr-mon a
+// click comes here instead.
+func (m *Model) linkAt(x, y int) string {
+	pr, ok := m.selectedPR()
+	lines, _ := m.detailsShown(m.detailsSize())
+	// The border takes a row and a column.
+	if !ok || y < 1 || y > len(lines) || !strings.Contains(lines[y-1], linkStart+pr.URL) {
+		return ""
+	}
+	if x < 1 || x > lipgloss.Width(strings.TrimRight(lines[y-1], " ")) {
+		return ""
+	}
+	return pr.URL
 }
 
 // keyNamed is the key press a hint names.
@@ -111,7 +136,25 @@ func (m *Model) tap(mouse tea.MouseMsg) tea.Cmd {
 		m.prCursor = index
 		return m.markSeen()
 	}
+	if name, info := m.zoneUnder(mouse, zonePane); name == zonePane+"details" {
+		if url := m.linkAt(info.Pos(mouse)); url != "" && m.open != nil {
+			return run(func() error { return m.open(url) })
+		}
+		if _, ok := m.selectedPR(); ok {
+			m.focus = paneDetails
+			return m.markSeen()
+		}
+	}
 	return nil
+}
+
+// openURL hands a URL to the desktop's browser.
+func openURL(url string) error {
+	opener := "xdg-open"
+	if runtime.GOOS == "darwin" {
+		opener = "open"
+	}
+	return exec.Command(opener, url).Run()
 }
 
 // wheel is an arrow key to a dialog, or to the list under the mouse; over the
