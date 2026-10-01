@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 
 	"github.com/acheris-labs/pr-mon/internal/config"
 	"github.com/acheris-labs/pr-mon/internal/models"
@@ -81,12 +82,18 @@ type Model struct {
 	rows          []row
 	cursor        int
 	prCursor      int
+	detailScroll  int // lines of the details scrolled past
 	shownRepo     string
 	modal         modal
 	toasts        []toast
 	connected     bool
 	quitting      bool
 	now           time.Time
+
+	// Where the mouse can act: zones finds them on screen, marked lists the
+	// ones in the frame being drawn.
+	zones  *zone.Manager
+	marked []string
 
 	// events arrive from the backend on another goroutine.
 	events chan service.Event
@@ -106,6 +113,7 @@ func New(backend Backend, version string) *Model {
 	model := &Model{
 		backend:   backend,
 		version:   version,
+		zones:     zone.New(),
 		events:    make(chan service.Event, 256),
 		connected: true,
 		now:       time.Now(),
@@ -150,7 +158,13 @@ func tick() tea.Cmd {
 func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch typed := message.(type) {
 	case tea.WindowSizeMsg:
+		// The tree and the tabs list different rows.
+		was, keep := m.compact(), m.selectedRepo()
 		m.width, m.height = typed.Width, typed.Height
+		if m.compact() != was {
+			m.rebuildRows(keep)
+		}
+		m.scrollDetails(0)
 		return m, nil
 
 	case tickMsg:
@@ -218,13 +232,29 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		model, cmd := m.handleKey(typed)
-		if m.quitting {
-			return model, cmd
-		}
-		return model, tea.Batch(cmd, m.reportFocus())
+		return m.acted(func() tea.Cmd {
+			_, cmd := m.handleKey(typed)
+			return cmd
+		})
+
+	case tea.MouseMsg:
+		return m.acted(func() tea.Cmd { return m.handleMouse(typed) })
 	}
 	return m, nil
+}
+
+// acted runs a key press or a mouse event, then follows the selection: the
+// details start from the top for another PR, and the backend hears of it.
+func (m *Model) acted(handle func() tea.Cmd) (tea.Model, tea.Cmd) {
+	before := m.detailsOf()
+	cmd := handle()
+	if m.quitting {
+		return m, cmd
+	}
+	if m.detailsOf() != before {
+		m.detailScroll = 0
+	}
+	return m, tea.Batch(cmd, m.reportFocus())
 }
 
 func (m *Model) applyEvent(event service.Event) tea.Cmd {
@@ -250,6 +280,7 @@ func (m *Model) applyEvent(event service.Event) tea.Cmd {
 // ----- rows and selection -----
 
 // rebuildRows lays the tree out again, keeping the cursor on `keep` when it can.
+// The narrow layout's tabs have no owner rows, so nothing folds there.
 func (m *Model) rebuildRows(keep string) {
 	names := append([]string{}, m.backend.Config().Repos...)
 	sort.Slice(names, func(i, j int) bool {
@@ -264,12 +295,13 @@ func (m *Model) rebuildRows(keep string) {
 		collapsed[owner] = true
 	}
 	rows := []row{}
+	compact := m.compact()
 	for index, name := range names {
 		owner := models.OwnerKey(name)
-		if index == 0 || models.OwnerKey(names[index-1]) != owner {
+		if !compact && (index == 0 || models.OwnerKey(names[index-1]) != owner) {
 			rows = append(rows, row{owner: owner, ownerName: models.Owner(name)})
 		}
-		if collapsed[owner] {
+		if !compact && collapsed[owner] {
 			continue
 		}
 		last := index == len(names)-1 || models.OwnerKey(names[index+1]) != owner
@@ -330,6 +362,12 @@ func (m *Model) selectedPR() (models.PullRequest, bool) {
 	}
 	index := min(m.prCursor, len(prs)-1)
 	return prs[index], true
+}
+
+// detailsOf names the PR the details pane is showing.
+func (m *Model) detailsOf() string {
+	pr, _ := m.selectedPR()
+	return fmt.Sprintf("%s#%d", m.selectedRepo(), pr.Number)
 }
 
 func (m *Model) unseen(name string) map[int]bool {

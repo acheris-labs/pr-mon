@@ -50,7 +50,8 @@ func Run(paths daemon.Paths, version string) error {
 			}
 		}
 	}
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	defer model.zones.Close()
+	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := program.Run()
 	return err
 }

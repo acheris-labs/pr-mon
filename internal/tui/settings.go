@@ -187,6 +187,6 @@ func (s *settingsModal) view(model *Model) string {
 			"On: the backend starts at login and runs all the time. Off: it runs while "+
 				"this dashboard or the app is open, and stops two minutes after the last one quits."))
 	}
-	hint := "↑/↓: choose   ←/→ or space: change   esc: close"
-	return strings.Join(append(lines, "", dim.Render(hint)), "\n")
+	hint := "↑/↓: choose   ←/→/space: change   esc: close"
+	return strings.Join(append(lines, "", model.hints(hint, model.modalInner())), "\n")
 }

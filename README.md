@@ -119,6 +119,7 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `←` / `→` | repo tree | Go to owner / collapse; expand |
 | `tab` / `shift+tab` | anywhere | Move between repo tree and PR list |
 | `enter` | PR list | Action menu |
+| `J` / `K`, `PgDn` / `PgUp` | anywhere | Scroll the details pane when it says `(J/K scroll)` |
 | `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods). Shown in red as **Force merge** when branch protection blocks it but GitHub lets you bypass that; asks `y`/`n` first |
 | `a` | action menu | Toggle auto-merge: GitHub's if the repo allows it, otherwise pr-mon's "merge when ready" (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
@@ -130,6 +131,31 @@ autostart, use Send test in the `N` dialog and approve the Automation prompt.
 | `S` | anywhere | Settings: how often to check GitHub, start the backend at login (macOS) |
 | `r` | anywhere | Refresh now |
 | `q` | anywhere | Quit the dashboard (the backend keeps running) |
+
+### Mouse and touch
+
+The dashboard takes the mouse, so it works by touch in a terminal that sends
+taps as clicks:
+
+- Tap a repo (a tree row or a tab) to select it; tap an owner row to fold it.
+- Tap a PR to select it, and tap it again for its action menu.
+- Tap any key hint to press that key: the hints along the bottom, a dialog's
+  `[m] Merge` choices, and each key in its last line (`y: yes`, `esc: close`).
+- The wheel, or a drag where the terminal turns drags into wheel ticks, moves
+  through the list under it and scrolls the details. In a dialog it is `↑` / `↓`.
+
+While pr-mon has the mouse, selecting text is up to your terminal: usually
+Shift-drag (Option-drag in some), or a long press on a phone.
+
+### Small screens
+
+Under 100 columns (a phone, a split pane) the panes stack: repos become a row
+of tabs, the PR list sits under them and the details under that. `←` / `→`
+move between tabs, which scroll sideways (`‹` and `›` mark more out of sight),
+and `↓` or `enter` goes into the PR list. Tabs show every repo, whatever is
+collapsed in the tree. PR rows keep the status icon, number and title; the
+author and the status in words are in the details. Under 16 lines the key
+hints make way for the panes.
 
 ## Indicators
 

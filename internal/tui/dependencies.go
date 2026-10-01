@@ -276,7 +276,7 @@ func (d *dependencyModal) view(model *Model) string {
 	case modePick:
 		return d.pickView(model)
 	case modeGraph:
-		return d.graphView(model.modalInner())
+		return d.graphView(model)
 	}
 	lines := []string{bold.Render(d.title()), ""}
 	current, ok := d.pr(model)
@@ -302,11 +302,11 @@ func (d *dependencyModal) view(model *Model) string {
 		}
 	}
 	hint := "a: add   d: remove   g: graph   esc: close"
-	return strings.Join(append(lines, "", dim.Render(hint)), "\n")
+	return strings.Join(append(lines, "", model.hints(hint, model.modalInner())), "\n")
 }
 
 func (d *dependencyModal) pickView(model *Model) string {
-	lines := []string{bold.Render(fmt.Sprintf("%s#%d waits on…", d.repo, d.number)), d.input.View()}
+	lines := []string{bold.Render(fmt.Sprintf("%s#%d waits on…", d.repo, d.number)), fitInput(&d.input, model)}
 	candidates := d.candidates(model)
 	for index, ref := range candidates[:min(len(candidates), pickerRows)] {
 		box := "[ ] "
@@ -333,10 +333,10 @@ func (d *dependencyModal) pickView(model *Model) string {
 		lines = append(lines, style.Render(d.message))
 	}
 	hint := "↑/↓: choose   space: pick several   enter: add   esc: back"
-	return strings.Join(append(lines, "", dim.Render(hint)), "\n")
+	return strings.Join(append(lines, "", model.hints(hint, model.modalInner())), "\n")
 }
 
-func (d *dependencyModal) graphView(width int) string {
+func (d *dependencyModal) graphView(model *Model) string {
 	lines := []string{bold.Render("Dependency graph"), ""}
 	switch {
 	case d.graphErr != "":
@@ -344,9 +344,9 @@ func (d *dependencyModal) graphView(width int) string {
 	case d.graph == nil:
 		lines = append(lines, dim.Render("Loading…"))
 	default:
-		lines = append(lines, graphLines(*d.graph, width)...)
+		lines = append(lines, graphLines(*d.graph, model.modalInner())...)
 	}
-	return strings.Join(append(lines, "", dim.Render("esc: back")), "\n")
+	return strings.Join(append(lines, "", model.hints("esc: back", model.modalInner())), "\n")
 }
 
 // graphLines draws a graph as two trees around the PR: what it waits on above,

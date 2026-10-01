@@ -49,8 +49,9 @@ don't touch a PR's `updated_at`, which is why the in-flight tier exists.
   go vet. Keep both clean.
 - Tests are standard `testing`, table-driven where it helps, with the fakes in
   `internal/testfixtures`.
-- Dependencies: BurntSushi/toml and Charm's bubbletea, bubbles and lipgloss.
-  Ask before adding more.
+- Dependencies: BurntSushi/toml, Charm's bubbletea, bubbles and lipgloss, and
+  lrstanley/bubblezone (where the mouse can act in the dashboard). Ask before
+  adding more.
 
 ## Mac app
 

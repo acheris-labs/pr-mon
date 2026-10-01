@@ -4,6 +4,19 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc25]
+
+### Added
+
+- The dashboard fits small screens. Under 100 columns it stacks: repos as a
+  row of tabs that scrolls sideways, the PR list, then the details. Dialogs,
+  toasts and the header shrink to the screen too.
+- The details pane scrolls with `J` / `K` and `PgDn` / `PgUp`, and wraps long
+  lines instead of cutting them off.
+- Mouse and touch in the dashboard: tap a repo, a PR (twice for its actions) or
+  any key hint, and scroll with the wheel. Selecting text now needs your
+  terminal's bypass, usually Shift-drag.
+
 ## [0.2.0-rc24]
 
 ### Changed

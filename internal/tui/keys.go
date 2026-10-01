@@ -1,5 +1,5 @@
 // Keys: A add, D remove, N notifications, S settings, r refresh, q quit,
-// enter acts, w dependencies, arrows and tab navigate.
+// enter acts, w dependencies, arrows and tab navigate, J/K scroll the details.
 
 package tui
 
@@ -42,6 +42,21 @@ func (m *Model) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "shift+tab":
 		m.focus = paneRepos
 		return m, nil
+	case "J":
+		m.scrollDetails(1)
+		return m, nil
+	case "K":
+		m.scrollDetails(-1)
+		return m, nil
+	case "pgdown":
+		m.scrollDetails(m.detailsPage())
+		return m, nil
+	case "pgup":
+		m.scrollDetails(-m.detailsPage())
+		return m, nil
+	}
+	if m.focus == paneRepos && m.compact() {
+		return m.handleTabKey(key)
 	}
 	if m.focus == paneRepos {
 		return m.handleTreeKey(key)
@@ -49,18 +64,40 @@ func (m *Model) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.handlePRKey(key)
 }
 
+// detailsPage is how far page up and page down scroll the details.
+func (m *Model) detailsPage() int {
+	_, height := m.detailsSize()
+	return max(1, height-3)
+}
+
+// moveRepo steps the repo cursor, stopping at either end.
+func (m *Model) moveRepo(by int) {
+	if next := m.cursor + by; next >= 0 && next < len(m.rows) {
+		m.cursor = next
+		m.prCursor = 0
+	}
+}
+
+// handleTabKey is the repo keys on a narrow screen: the tabs run sideways and
+// the PR list sits below them.
+func (m *Model) handleTabKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch key.String() {
+	case "left", "h":
+		m.moveRepo(-1)
+	case "right", "l":
+		m.moveRepo(1)
+	case "down", "j", "enter":
+		return m, m.enterRow()
+	}
+	return m, nil
+}
+
 func (m *Model) handleTreeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.String() {
 	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
-			m.prCursor = 0
-		}
+		m.moveRepo(-1)
 	case "down", "j":
-		if m.cursor < len(m.rows)-1 {
-			m.cursor++
-			m.prCursor = 0
-		}
+		m.moveRepo(1)
 	case "left", "h":
 		return m, m.collapseOrParent()
 	case "right", "l":

@@ -12,7 +12,13 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/models"
 )
 
-const treeWidth = 34
+const (
+	treeWidth = 34
+	// Below this many columns the panes stack: repo tabs, PRs, details.
+	compactBelow = 100
+	// Below this many lines the stacked layout gives its key hints' room away.
+	hintsFrom = 16
+)
 
 var (
 	green  = lipgloss.Color("2")
@@ -71,15 +77,22 @@ func (m *Model) View() string {
 	if m.quitting {
 		return ""
 	}
-	body := lipgloss.JoinHorizontal(lipgloss.Top, m.treeView(), m.rightView())
-	screen := lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.footerView())
+	m.marked = m.marked[:0]
+	var screen string
+	if m.compact() {
+		screen = m.compactView()
+	} else {
+		body := lipgloss.JoinHorizontal(lipgloss.Top, m.treeView(), m.rightView())
+		screen = lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.footerView())
+	}
 	if m.modal != nil {
+		m.marked = m.marked[:0] // a dialog covers everything else
 		screen = m.overlay(screen, m.modalView())
 	}
 	if len(m.toasts) > 0 {
 		screen = m.overlayToasts(screen)
 	}
-	return screen
+	return m.zones.Scan(screen)
 }
 
 func (m *Model) headerView() string {
@@ -89,7 +102,7 @@ func (m *Model) headerView() string {
 	}
 	line := m.statusLine()
 	rest := strings.TrimPrefix(strings.TrimPrefix(line, "●"), "○")
-	text := titleBar.Render("pr-mon") + dim.Render(" — ") + dot + dim.Render(rest)
+	text := clip(titleBar.Render("pr-mon")+dim.Render(" — ")+dot+dim.Render(rest), m.width)
 	return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(text)
 }
 
@@ -148,12 +161,13 @@ func (m *Model) treeView() string {
 		if index == m.cursor && m.focus == paneRepos {
 			line = selected.Render(padTo(line, treeWidth-4))
 		}
-		lines = append(lines, line)
+		lines = append(lines, m.mark(fmt.Sprintf("%s%d", zoneRepo, index), padTo(line, treeWidth-2)))
 	}
 	if len(lines) == 0 {
 		lines = append(lines, dim.Render("Press A to add a repository"))
 	}
-	return framePane("Repos", treeWidth, height, m.focus == paneRepos, strings.Join(lines, "\n"))
+	return m.mark(zonePane+"repos",
+		framePane("Repos", treeWidth, height, m.focus == paneRepos, strings.Join(lines, "\n")))
 }
 
 func (m *Model) treeRow(item row) string {
@@ -246,13 +260,49 @@ func (m *Model) badgeStyle(alert bool) lipgloss.Style {
 }
 
 func (m *Model) rightView() string {
-	width := max(20, m.width-treeWidth)
-	height := m.paneHeight()
-	top := height/2 + height%2
+	width, bottom := m.detailsSize()
+	top := m.paneHeight() - bottom
 	return lipgloss.JoinVertical(lipgloss.Left,
-		framePane(m.prTitle(), width, top, m.focus == panePRs, m.prTable(width-6, top-2)),
-		framePane("Details", width, height-top, false, m.detailsView(width-6)),
+		m.mark(zonePane+"prs",
+			framePane(m.prTitle(), width, top, m.focus == panePRs, m.prTable(width-6, top-2))),
+		m.detailsPane(width, bottom),
 	)
+}
+
+// detailsSize is the details pane's width and height, border included.
+func (m *Model) detailsSize() (int, int) {
+	if m.compact() {
+		_, details := m.compactHeights()
+		return m.width, details
+	}
+	height := m.paneHeight()
+	return max(20, m.width-treeWidth), height / 2
+}
+
+// detailsPane frames the details from where they're scrolled to, and says they
+// scroll when they don't all fit.
+func (m *Model) detailsPane(width, height int) string {
+	lines := m.detailLines(width - 2)
+	title := "Details"
+	hidden := max(0, len(lines)-(height-2))
+	if hidden > 0 {
+		title = "Details (J/K scroll)"
+	}
+	start := min(m.detailScroll, hidden)
+	return m.mark(zonePane+"details",
+		framePane(title, width, height, false, strings.Join(lines[start:], "\n")))
+}
+
+// detailLines is the details text, wrapped to width.
+func (m *Model) detailLines(width int) []string {
+	return strings.Split(lipgloss.NewStyle().Width(width).Render(m.detailsText()), "\n")
+}
+
+// scrollDetails moves the details by some lines, stopping at either end.
+func (m *Model) scrollDetails(by int) {
+	width, height := m.detailsSize()
+	hidden := max(0, len(m.detailLines(width-2))-(height-2))
+	m.detailScroll = max(0, min(m.detailScroll+by, hidden))
 }
 
 func (m *Model) prTitle() string {
@@ -267,6 +317,8 @@ func (m *Model) prTitle() string {
 	return fmt.Sprintf("PRs — %s (%d)", repo.Name, repo.PRTotal)
 }
 
+// prTable is the PR list. A narrow screen drops the heading, the author and the
+// status in words, which leaves the title its room.
 func (m *Model) prTable(width, height int) string {
 	prs := m.prs()
 	name := m.selectedRepo()
@@ -290,13 +342,18 @@ func (m *Model) prTable(width, height int) string {
 		authorWidth = 14
 	)
 	titleWidth := max(10, width-numberWidth-statusWidth-authorWidth-2)
-	header := dim.Render("  " + padTo("#", numberWidth) + padTo("Status", statusWidth) +
-		padTo("Author", authorWidth) + "Title")
-	lines := []string{header}
-	start := 0
-	if m.prCursor >= height-1 {
-		start = m.prCursor - height + 2
+	lines := []string{}
+	compact := m.compact()
+	if !compact {
+		lines = append(lines, dim.Render("  "+padTo("#", numberWidth)+padTo("Status", statusWidth)+
+			padTo("Author", authorWidth)+"Title"))
 	}
+	// On a narrow screen the numbers line up on the longest one.
+	shortNumber := 0
+	for _, pr := range prs {
+		shortNumber = max(shortNumber, len(fmt.Sprintf("#%d ", pr.Number)))
+	}
+	start := max(0, m.prCursor-(height-len(lines))+1)
 	for index := start; index < len(prs) && len(lines) < height; index++ {
 		pr := prs[index]
 		icon, style := statusStyle(pr.Status)
@@ -311,22 +368,32 @@ func (m *Model) prTable(width, height int) string {
 		if unseen[pr.Number] {
 			text = bold
 		}
+		auto := lipgloss.NewStyle().Foreground(cyan).Render(marker)
+		number := text.Render(fmt.Sprintf("#%d", pr.Number))
 		// Each cell is padded after styling, so colour codes don't eat the width.
-		cells := style.Render(icon) + " " +
-			padTo(text.Render(fmt.Sprintf("#%d", pr.Number)), numberWidth) +
-			padTo(style.Render(string(pr.Status))+lipgloss.NewStyle().Foreground(cyan).Render(marker),
-				statusWidth) +
-			padTo(dim.Render(truncate(pr.Author, authorWidth-1)), authorWidth) +
-			text.Render(truncate(pr.Title, titleWidth))
+		var cells string
+		if compact {
+			if marker != "" {
+				auto = lipgloss.NewStyle().Foreground(cyan).Render(marker[1:]) + " "
+			}
+			room := width - 2 - shortNumber - lipgloss.Width(auto)
+			cells = style.Render(icon) + " " + padTo(number, shortNumber) + auto +
+				text.Render(truncate(pr.Title, max(1, room)))
+		} else {
+			cells = style.Render(icon) + " " + padTo(number, numberWidth) +
+				padTo(style.Render(string(pr.Status))+auto, statusWidth) +
+				padTo(dim.Render(truncate(pr.Author, authorWidth-1)), authorWidth) +
+				text.Render(truncate(pr.Title, titleWidth))
+		}
 		if index == m.prCursor && m.focus == panePRs {
 			cells = selected.Render(padTo(cells, width))
 		}
-		lines = append(lines, cells)
+		lines = append(lines, m.mark(fmt.Sprintf("%s%d", zonePR, index), padTo(cells, width)))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func (m *Model) detailsView(width int) string {
+func (m *Model) detailsText() string {
 	name := m.selectedRepo()
 	if name == "" {
 		if len(m.backend.Config().Repos) == 0 {
@@ -421,10 +488,11 @@ func (m *Model) footerView() string {
 	}
 	parts := []string{}
 	for _, item := range keys {
-		parts = append(parts, keyStyle.Render(" "+item.key+" ")+" "+item.label)
+		parts = append(parts, m.mark(zoneKey+item.key, keyStyle.Render(" "+item.key+" ")+" "+item.label))
 	}
 	left := strings.Join(parts, "  ")
-	right := keyStyle.Render(" w ") + " Dependencies  " + keyStyle.Render(" ⏎ ") + " Actions"
+	right := m.mark(zoneKey+"w", keyStyle.Render(" w ")+" Dependencies") + "  " +
+		m.mark(zoneKey+"⏎", keyStyle.Render(" ⏎ ")+" Actions")
 	gap := max(1, m.width-lipgloss.Width(left)-lipgloss.Width(right))
 	return left + strings.Repeat(" ", gap) + right
 }
@@ -438,7 +506,9 @@ func (m *Model) overlay(screen, dialog string) string {
 func (m *Model) overlayToasts(screen string) string {
 	lines := []string{}
 	for _, item := range m.toasts {
-		style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+		// Long messages wrap inside the screen.
+		style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1).
+			Width(min(lipgloss.Width(item.message)+2, m.width-2))
 		switch item.severity {
 		case "error":
 			style = style.BorderForeground(red)

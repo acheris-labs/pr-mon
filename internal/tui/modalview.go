@@ -6,15 +6,29 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/acheris-labs/pr-mon/internal/models"
 )
 
 // modalWidth is a dialog's width, padding included; modalInner is its text's.
-func (m *Model) modalWidth() int { return min(max(50, m.width-10), 90) }
+// A narrow screen gets a dialog as wide as it is, border and all.
+func (m *Model) modalWidth() int { return min(max(50, m.width-10), 90, m.width-2) }
 
-func (m *Model) modalInner() int { return m.modalWidth() - 4 }
+func (m *Model) modalInner() int {
+	_, sides := m.modalPadding()
+	return m.modalWidth() - 2*sides
+}
+
+// modalPadding is the space inside a dialog's border, above and beside its
+// text. A narrow screen keeps one column and gives the rest to the text.
+func (m *Model) modalPadding() (int, int) {
+	if m.compact() {
+		return 0, 1
+	}
+	return 1, 2
+}
 
 func (m *Model) modalView() string {
 	body := m.modal.view(m)
@@ -22,13 +36,20 @@ func (m *Model) modalView() string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.ThickBorder()).
 		BorderForeground(blue).
-		Padding(1, 2).
+		Padding(m.modalPadding()).
 		Width(width).
 		Render(body)
 }
 
-func key(shortcut, label string) string {
-	return bold.Render("["+shortcut+"] ") + label
+// fitInput draws a text field no wider than its dialog.
+func fitInput(input *textinput.Model, model *Model) string {
+	input.Width = min(60, model.modalInner()-lipgloss.Width(input.Prompt)-1)
+	return input.View()
+}
+
+// key is a choice in a dialog, and a place to tap for it.
+func (m *Model) key(shortcut, label string) string {
+	return m.mark(zoneKey+shortcut, bold.Render("["+shortcut+"] ")+label)
 }
 
 func unavailable(shortcut, label, reason string) string {
@@ -47,16 +68,16 @@ func (a *actionMenu) view(model *Model) string {
 				Render("This "+*option.Note+"."))
 		}
 		lines = append(lines, "It merges past branch protection, as GitHub lets you.")
-		return strings.Join(append(lines, "", dim.Render("y: force merge   n/esc: back")), "\n")
+		return strings.Join(append(lines, "", model.hints("y: force merge   n/esc: back", model.modalInner())), "\n")
 	}
 	if a.choosing != nil {
 		lines := []string{bold.Render("Merge method")}
 		for _, choice := range methodKeys {
 			if contains(a.methods(), choice.method) {
-				lines = append(lines, key(choice.key, choice.label))
+				lines = append(lines, model.key(choice.key, choice.label))
 			}
 		}
-		return strings.Join(append(lines, "", dim.Render("esc: back")), "\n")
+		return strings.Join(append(lines, "", model.hints("esc: back", model.modalInner())), "\n")
 	}
 	lines := []string{bold.Render(a.title()), ""}
 	for _, slot := range menuSlots {
@@ -71,16 +92,16 @@ func (a *actionMenu) view(model *Model) string {
 			if option.Note != nil {
 				line += lipgloss.NewStyle().Foreground(red).Render(" (" + *option.Note + ")")
 			}
-			lines = append(lines, line)
+			lines = append(lines, model.mark(zoneKey+slot.shortcut, line))
 		case !option.Available:
 			lines = append(lines, unavailable(slot.shortcut, option.Label, derefString(option.Reason)))
 		case option.Note != nil:
-			lines = append(lines, key(slot.shortcut, option.Label)+dim.Render(" ("+*option.Note+")"))
+			lines = append(lines, model.key(slot.shortcut, option.Label)+dim.Render(" ("+*option.Note+")"))
 		default:
-			lines = append(lines, key(slot.shortcut, option.Label))
+			lines = append(lines, model.key(slot.shortcut, option.Label))
 		}
 	}
-	dependencies := key("w", "Dependencies…")
+	dependencies := model.key("w", "Dependencies…")
 	if waits := len(a.pr.WaitsOn); waits > 0 {
 		dependencies += dim.Render(fmt.Sprintf(" (waits on %d)", waits))
 	}
@@ -91,14 +112,15 @@ func (a *actionMenu) view(model *Model) string {
 		if a.deleteBranch {
 			box = "[x]"
 		}
-		lines = append(lines, "", fmt.Sprintf("%s Delete remote branch %s", box, a.pr.HeadRef))
+		lines = append(lines, "", model.mark(zoneKey+"d",
+			fmt.Sprintf("%s Delete remote branch %s", box, a.pr.HeadRef)))
 		hint = "d: toggle delete   esc: close"
 	}
-	return strings.Join(append(lines, "", dim.Render(hint)), "\n")
+	return strings.Join(append(lines, "", model.hints(hint, model.modalInner())), "\n")
 }
 
 func (a *addRepoModal) view(model *Model) string {
-	lines := []string{a.title(), a.input.View()}
+	lines := []string{a.title(), fitInput(&a.input, model)}
 	if a.message != "" {
 		style := lipgloss.NewStyle().Foreground(red)
 		if a.adding {
@@ -106,11 +128,11 @@ func (a *addRepoModal) view(model *Model) string {
 		}
 		lines = append(lines, style.Render(a.message))
 	}
-	return strings.Join(append(lines, "", dim.Render("enter: add   esc: cancel")), "\n")
+	return strings.Join(append(lines, "", model.hints("enter: add   esc: cancel", model.modalInner())), "\n")
 }
 
 func (c *confirmModal) view(model *Model) string {
-	return c.message + "\n\n" + dim.Render("y: yes   n/esc: no")
+	return c.message + "\n\n" + model.hints("y: yes   n/esc: no", model.modalInner())
 }
 
 func (n *notificationsModal) view(model *Model) string {
@@ -125,7 +147,7 @@ func (n *notificationsModal) view(model *Model) string {
 	lines := []string{bold.Render(n.title()), strings.Join(tabs, ""), ""}
 	switch n.tab {
 	case tabMessage:
-		lines = append(lines, "Template", n.message.View())
+		lines = append(lines, "Template", fitInput(&n.message, model))
 		variables := []string{}
 		for _, name := range n.form.Variables {
 			variables = append(variables, "{{"+name+"}}")
@@ -154,7 +176,7 @@ func (n *notificationsModal) view(model *Model) string {
 			n.eventCursor == len(n.form.Events)))
 	case tabScript:
 		lines = append(lines, n.checkbox(n.settings.ScriptEnabled, "Run script", false),
-			n.script.View(), dim.Render(n.form.ScriptHelp))
+			fitInput(&n.script, model), dim.Render(n.form.ScriptHelp))
 	case tabDesktop:
 		enabled := n.settings.DesktopEnabled && n.notifier != nil
 		lines = append(lines, n.checkbox(enabled, "Show desktop notification", false))
@@ -166,7 +188,10 @@ func (n *notificationsModal) view(model *Model) string {
 		}
 	}
 	hint := "ctrl+s: save   ctrl+t: send test   ←/→: tabs   esc: cancel"
-	return strings.Join(append(lines, "", dim.Render(hint)), "\n")
+	if n.tab != tabMessage {
+		hint = "space: toggle   " + hint
+	}
+	return strings.Join(append(lines, "", model.hints(hint, model.modalInner())), "\n")
 }
 
 func (n *notificationsModal) checkbox(checked bool, label string, cursor bool) string {
