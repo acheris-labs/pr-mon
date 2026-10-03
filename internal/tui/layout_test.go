@@ -370,3 +370,31 @@ func TestTooSmallAScreenSaysSo(t *testing.T) {
 		})
 	}
 }
+
+func TestToastsSitOverTheDashboard(t *testing.T) {
+	model, _ := newModel()
+	model.Update(eventMsg(service.Event{Kind: "toast", Message: "Merged acme/api#1", Severity: "information"}))
+	view := model.View()
+	assertFits(t, view, 120, 40)
+	for _, want := range []string{"Merged acme/api#1", "PRs — acme/api", "tool", "Details"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("%q should show with the toast:\n%s", want, view)
+		}
+	}
+	row := line(view, "Merged acme/api#1")
+	if strings.HasPrefix(row, " ") || lipgloss.Width(row) != 120 {
+		t.Errorf("the toast should sit at the right with the dashboard beside it: %q", row)
+	}
+	if lines := strings.Split(view, "\n"); !strings.Contains(lines[len(lines)-1], "╯") {
+		t.Errorf("the toast should sit at the bottom:\n%s", view)
+	}
+}
+
+func TestTapsWorkWhileAToastShows(t *testing.T) {
+	model, _ := newModel()
+	model.Update(eventMsg(service.Event{Kind: "toast", Message: "Merged acme/api#1", Severity: "information"}))
+	tap(t, model, "web")
+	if model.selectedRepo() != "acme/web" {
+		t.Errorf("selected %q", model.selectedRepo())
+	}
+}

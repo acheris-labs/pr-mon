@@ -4,6 +4,13 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0-rc27]
+
+### Fixed
+
+- Toasts in the dashboard sit over its bottom right corner instead of
+  blanking the screen while they show, so it stays readable and tappable.
+
 ## [0.2.0-rc26]
 
 ### Added

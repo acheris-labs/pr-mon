@@ -553,6 +553,8 @@ func (m *Model) overlay(screen, dialog string) string {
 		lipgloss.WithWhitespaceChars(" "))
 }
 
+// overlayToasts draws the toasts over the bottom right of the screen, the
+// dashboard showing round them.
 func (m *Model) overlayToasts(screen string) string {
 	lines := []string{}
 	for _, item := range m.toasts {
@@ -567,9 +569,26 @@ func (m *Model) overlayToasts(screen string) string {
 		}
 		lines = append(lines, style.Render(item.message))
 	}
-	stack := lipgloss.JoinVertical(lipgloss.Right, lines...)
-	return lipgloss.Place(m.width, m.height, lipgloss.Right, lipgloss.Bottom, stack,
-		lipgloss.WithWhitespaceChars(" "))
+	stack := strings.Split(lipgloss.JoinVertical(lipgloss.Right, lines...), "\n")
+	rows := strings.Split(screen, "\n")
+	for len(rows) < m.height {
+		rows = append(rows, "")
+	}
+	// A stack taller than the screen loses its oldest toasts' tops.
+	stack = stack[max(0, len(stack)-len(rows)):]
+	top := len(rows) - len(stack)
+	for index, toastLine := range stack {
+		// Narrower toasts are padded on the left: the screen shows there.
+		toastLine = strings.TrimLeft(toastLine, " ")
+		keep := m.width - lipgloss.Width(toastLine)
+		left := ""
+		if keep > 0 {
+			left = padTo(clip(rows[top+index], keep), keep)
+		}
+		// Whatever style or link the cut line left open ends before the toast.
+		rows[top+index] = left + "\x1b[0m" + linkStart + "\x1b\\" + toastLine
+	}
+	return strings.Join(rows, "\n")
 }
 
 func padTo(text string, width int) string {
