@@ -31,10 +31,14 @@ type actionMenu struct {
 	deleteBranch bool
 	// a force merge waiting for y/n: it bypasses branch protection
 	confirming *models.Action
+	// opened by a dashboard hotkey rather than enter: backing out of the
+	// method or the confirmation goes back to the dashboard, not the menu
+	quick bool
 }
 
 var menuSlots = []struct{ key, shortcut string }{
 	{"merge", "m"}, {"auto_merge", "a"}, {"update", "u"}, {"draft", "t"}, {"rerun", "r"},
+	{"mute", "n"},
 }
 
 var methodKeys = []struct {
@@ -82,13 +86,16 @@ func (a *actionMenu) update(model *Model, key tea.KeyMsg) (modal, tea.Cmd) {
 			action := *a.confirming
 			return nil, model.perform(a.repo.Name, a.pr.Number, action)
 		case "n", "esc", "escape":
+			if a.quick {
+				return nil, nil
+			}
 			a.confirming = nil
 		}
 		return a, nil
 	}
 	switch key.String() {
 	case "esc", "escape":
-		if a.choosing != nil {
+		if a.choosing != nil && !a.quick {
 			a.choosing = nil
 			return a, nil
 		}

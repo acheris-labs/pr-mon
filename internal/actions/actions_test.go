@@ -251,3 +251,14 @@ func TestForceMerge(t *testing.T) {
 		}
 	}
 }
+
+func TestMuteToggle(t *testing.T) {
+	loud := menu(ready, nil)["mute"]
+	if loud.Kind != "mute" || !loud.Available || loud.Label != "Mute notifications" {
+		t.Errorf("loud PR = %+v", loud)
+	}
+	quiet := menu(func(pr *models.PullRequest) { pr.Muted = true }, nil)["mute"]
+	if quiet.Kind != "unmute" || !quiet.Available || quiet.Label != "Unmute notifications" {
+		t.Errorf("muted PR = %+v", quiet)
+	}
+}

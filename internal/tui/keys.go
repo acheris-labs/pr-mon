@@ -1,6 +1,7 @@
-// Keys: A add, D remove, N notifications, S settings, r refresh, q quit,
-// enter acts, w dependencies, left and right pick a repo, up and down a PR,
-// tab goes round the panes, J/K scroll the details from anywhere.
+// Keys: S settings (adding, removing and notifications live there), r
+// refresh, q quit, enter acts, m merges, a auto-merges, w dependencies, left
+// and right pick a repo, up and down a PR, tab goes round the panes, J/K
+// scroll the details from anywhere.
 
 package tui
 
@@ -23,13 +24,6 @@ func (m *Model) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "r":
 		return m, run(m.backend.RefreshAll)
-	case "A":
-		m.modal = newAddRepo()
-		return m, nil
-	case "D":
-		return m, m.removeRepo()
-	case "N":
-		return m, m.openNotifications()
 	case "S":
 		dialog, cmd := newSettings(m)
 		m.modal = dialog
@@ -71,8 +65,8 @@ func (m *Model) cycleFocus(by int) tea.Cmd {
 	return m.markSeen()
 }
 
-// handleDetailsKey scrolls the details with the arrows. Enter and w act on the
-// PR they show, as in the PR list.
+// handleDetailsKey scrolls the details with the arrows. Enter, m, a and w act
+// on the PR they show, as in the PR list.
 func (m *Model) handleDetailsKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.String() {
 	case "up", "k":
@@ -86,7 +80,7 @@ func (m *Model) handleDetailsKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.scrollDetails(len(m.detailLines(width - 2)))
 	case "left", "h", "esc", "escape":
 		m.focus = panePRs
-	case "enter", "w":
+	case "enter", "w", "m", "a":
 		return m.handlePRKey(key)
 	}
 	return m, nil
@@ -154,10 +148,38 @@ func (m *Model) handlePRKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		return m, m.openActions()
+	case "m":
+		return m, m.quickAction("merge", key)
+	case "a":
+		return m, m.quickAction("auto_merge", key)
 	case "w":
 		return m, m.openDependencies()
 	}
 	return m, nil
+}
+
+// quickAction runs one of the action menu's entries straight from the
+// dashboard. The menu still asks for a merge method or a confirmation when it
+// must; an entry that isn't possible says why instead.
+func (m *Model) quickAction(slot string, key tea.KeyMsg) tea.Cmd {
+	repo, found := m.backend.Repo(m.selectedRepo())
+	pr, ok := m.selectedPR()
+	if !found || !ok {
+		return nil
+	}
+	menu := newActionMenu(repo, pr)
+	menu.quick = true
+	option, offered := menu.option(slot)
+	if !offered {
+		return nil
+	}
+	if !option.Available {
+		m.addToast(option.Label+": "+derefString(option.Reason), "warning")
+		return nil
+	}
+	next, cmd := menu.update(m, key)
+	m.modal = next
+	return cmd
 }
 
 func (m *Model) openDependencies() tea.Cmd {
@@ -181,34 +203,27 @@ func (m *Model) openActions() tea.Cmd {
 	return nil
 }
 
-func (m *Model) removeRepo() tea.Cmd {
-	name := m.selectedRepo()
-	if name == "" {
-		return nil
-	}
-	m.modal = newConfirm("Stop monitoring "+name+"?", func(model *Model) tea.Cmd {
+// removeRepo asks before it stops monitoring the selected repo.
+func (m *Model) removeRepo(name string) modal {
+	return newConfirm("Stop monitoring "+name+"?", func(model *Model) tea.Cmd {
 		return run(func() error { return model.backend.RemoveRepo(name) })
 	})
-	return nil
 }
 
-func (m *Model) openNotifications() tea.Cmd {
-	name := m.selectedRepo()
-	if name == "" {
-		m.addToast("Select a repository to configure its notifications", "warning")
-		return nil
-	}
+// openNotifications is the selected repo's notification settings; nil, with
+// a toast, when the backend can't say what to offer.
+func (m *Model) openNotifications(name string) (modal, tea.Cmd) {
 	form, err := m.backend.NotificationForm()
 	if err != nil {
 		m.addToast(err.Error(), "error")
-		return nil
+		return nil, nil
 	}
 	settings, found := m.backend.Config().Notifications[name]
 	if !found {
 		settings = form.Defaults
 	}
-	m.modal = newNotifications(name, settings, form, m.backend.Status().Notifier)
-	return m.modal.(*notificationsModal).preview(m)
+	dialog := newNotifications(name, settings, form, m.backend.Status().Notifier)
+	return dialog, dialog.preview(m)
 }
 
 // perform sends an action and reports failures as toasts.

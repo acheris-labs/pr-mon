@@ -113,12 +113,12 @@ enum Fixtures {
         let snapshot = try Fixtures.snapshot()
         let api = try #require(snapshot.repos["acme/api"])
         let ready = api.prs[0].actions
-        #expect(ready.map(\.key) == ["merge", "auto_merge", "draft"])
+        #expect(ready.map(\.key) == ["merge", "auto_merge", "draft", "mute"])
         #expect(ready[0].available && ready[0].needsMethod && ready[0].offersDeleteBranch)
         #expect(ready[1].reason == "already mergeable")
-        #expect(api.prs[4].actions.map(\.kind) == ["merge", "auto_merge_on", "update", "convert_to_draft"])
+        #expect(api.prs[4].actions.map(\.kind) == ["merge", "auto_merge_on", "update", "convert_to_draft", "mute"])
         // A PR with a failed GitHub Actions run offers to re-run it.
-        #expect(api.prs[2].actions.map(\.key) == ["merge", "auto_merge", "draft", "rerun"])
+        #expect(api.prs[2].actions.map(\.key) == ["merge", "auto_merge", "draft", "rerun", "mute"])
         #expect(api.prs[2].checks.first?.runId == 4242)
         // Failing, but the user may bypass branch protection: merge becomes force merge.
         #expect(api.prs[2].canBypass == true)
@@ -126,6 +126,10 @@ enum Fixtures {
         #expect(api.prs[2].actions[0].note == "bypasses Check failed: lint")
         #expect(api.prs[0].canBypass == false)
         #expect(api.prs[0].actions.contains { $0.key == "rerun" } == false)
+        // A muted PR says so, and its menu offers to unmute it.
+        #expect(api.prs[0].muted == false)
+        #expect(api.prs[3].muted == true)
+        #expect(api.prs[3].actions.last?.kind == "unmute")
 
         let rich = try #require(snapshot.repos["Textualize/rich"])
         #expect(rich.mergeMethods == [.squash])
@@ -200,6 +204,7 @@ enum Fixtures {
             try Wire.encode(Request(id: 22, op: "perform", args: action("mark_ready", nil, false))),
             try Wire.encode(Request(id: 23, op: "perform", args: action("rerun_checks", nil, false))),
             try Wire.encode(Request(id: 24, op: "perform", args: action("force_merge", .squash, false))),
+            try Wire.encode(Request(id: 25, op: "perform", args: action("mute", nil, false))),
             try Wire.encode(Request(id: 9, op: "add_repo", args: NameArgs(name: "acme/web"))),
             try Wire.encode(Request(id: 10, op: "remove_repo", args: NameArgs(name: "acme/web"))),
             try Wire.encode(Request(id: 11, op: "set_collapsed",

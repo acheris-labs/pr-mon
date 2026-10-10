@@ -453,10 +453,12 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 	}
 	m.fetched[name] = repo
 	m.pruneDependenciesLocked(repo)
+	m.pruneMutedLocked(repo)
 	repo = m.decorateLocked(repo)
 	m.repos[name] = repo
 	changes := m.track.Changes(repo)
 	settings, configured := m.config.Notifications[name]
+	muted := m.mutedLocked(name)
 	firstLoad := !m.loaded[name]
 	m.loaded[name] = true
 	alerted := len(m.track.Update(repo)) > 0
@@ -477,6 +479,9 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 
 	if configured && !firstLoad {
 		for _, notification := range notify.Select(repo, changes, settings) {
+			if muted[notification.PR.Number] {
+				continue
+			}
 			variables := notify.PRVariables(notification.Repo, notification.PR, notification.State, "")
 			m.send(settings, variables, false)
 		}
@@ -562,7 +567,7 @@ func (m *Monitor) arm(name string, number int, merge models.ArmedMerge) error {
 }
 
 // rebuildLocked works out a repo's dependencies and action menus again, after
-// its armed merges or dependencies changed.
+// its armed merges, dependencies or muting changed.
 func (m *Monitor) rebuildLocked(name string) {
 	if repo, found := m.fetched[name]; found {
 		m.repos[name] = m.decorateLocked(repo)
@@ -570,11 +575,14 @@ func (m *Monitor) rebuildLocked(name string) {
 }
 
 // decorateLocked adds what the backend knows beyond GitHub to a fetched repo:
-// what each PR waits on (holding it back until those merge), and its actions.
+// what each PR waits on (holding it back until those merge), whether it is
+// muted, and its actions.
 func (m *Monitor) decorateLocked(repo models.Repo) models.Repo {
 	graph := dependencies.Graph(m.state.Dependencies)
+	muted := m.mutedLocked(repo.Name)
 	prs := make([]models.PullRequest, len(repo.PRs))
 	for i, pr := range repo.PRs {
+		pr.Muted = muted[pr.Number]
 		key := models.PRKey(repo.Name, pr.Number)
 		pr.WaitsOn = m.refsLocked(graph.WaitsOn(key))
 		pr.RequiredBy = m.refsLocked(graph.RequiredBy(key))
@@ -627,8 +635,9 @@ func (m *Monitor) autoMerge(name string, pr models.PullRequest, merge models.Arm
 func (m *Monitor) notifyResult(name string, pr models.PullRequest, state, reason string) {
 	m.mutex.Lock()
 	settings, configured := m.config.Notifications[name]
+	muted := m.mutedLocked(name)[pr.Number]
 	m.mutex.Unlock()
-	if !configured {
+	if !configured || muted {
 		return
 	}
 	for _, event := range settings.Events {

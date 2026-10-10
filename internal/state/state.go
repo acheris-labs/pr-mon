@@ -1,6 +1,6 @@
 // Package state persists what the UI remembers: per-PR status and seen flags,
-// collapsed repo groups, PRs armed for merge-when-ready, and which PRs wait on
-// which.
+// collapsed repo groups, PRs armed for merge-when-ready, which PRs wait on
+// which, and which PRs don't notify.
 package state
 
 import (
@@ -28,6 +28,8 @@ type AppState struct {
 	Collapsed []string                              `json:"collapsed"` // lower-cased owners
 	// {"owner/repo#12": ["other/repo#3", …]}: PRs that must merge first.
 	Dependencies map[string][]string `json:"dependencies"`
+	// PRs whose notifications are silenced: {repo: [number, …]}
+	Muted map[string][]int `json:"muted"`
 	// Tracker records: {repo: {"<number>": {"status": …, "seen": …}}}
 	PRs map[string]map[string]Record `json:"prs"`
 }
@@ -37,6 +39,7 @@ func New() AppState {
 		Armed:        map[string]map[string]json.RawMessage{},
 		Collapsed:    []string{},
 		Dependencies: map[string][]string{},
+		Muted:        map[string][]int{},
 		PRs:          map[string]map[string]Record{},
 	}
 }
@@ -60,6 +63,7 @@ func Load(path string) (AppState, string) {
 		Armed        json.RawMessage `json:"armed"`
 		Collapsed    json.RawMessage `json:"collapsed"`
 		Dependencies json.RawMessage `json:"dependencies"`
+		Muted        json.RawMessage `json:"muted"`
 		PRs          json.RawMessage `json:"prs"`
 	}
 	if err := json.Unmarshal(text, &parts); err != nil {
@@ -90,6 +94,12 @@ func Load(path string) (AppState, string) {
 			loaded.Dependencies = dependencies
 		}
 	}
+	if len(parts.Muted) > 0 {
+		var muted map[string][]int
+		if json.Unmarshal(parts.Muted, &muted) == nil && muted != nil {
+			loaded.Muted = muted
+		}
+	}
 	return loaded, ""
 }
 
@@ -116,6 +126,9 @@ func Save(path string, state AppState) error {
 	}
 	if state.Dependencies == nil {
 		state.Dependencies = map[string][]string{}
+	}
+	if state.Muted == nil {
+		state.Muted = map[string][]int{}
 	}
 	if state.PRs == nil {
 		state.PRs = map[string]map[string]Record{}

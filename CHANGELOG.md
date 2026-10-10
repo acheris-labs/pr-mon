@@ -4,6 +4,25 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.0]
+
+### Added
+
+- `m` and `a` merge and toggle auto-merge straight from the PR list or the
+  details. The key hints follow the selected PR: **Force merge** in red when
+  that's what `m` would do, dimmed when it can't, and pressing a dimmed one
+  says why.
+- Mute a PR's notifications from its action menu (`n` in the dashboard, the
+  Pull Request menu in the app). A muted PR shows a bell (🔕 in the dashboard)
+  and sends nothing, its merges included, until it is unmuted or closes.
+  Protocol: `PullRequest.muted`, actions `mute` and `unmute`.
+
+### Changed
+
+- Adding and removing repos and their notification settings moved into
+  Settings (`S`, then `a`, `d` or `n`); `A`, `D` and `N` are gone from the
+  dashboard, and its key hints show only what applies.
+
 ## [0.2.0-rc27]
 
 ### Fixed

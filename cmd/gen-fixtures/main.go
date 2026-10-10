@@ -61,8 +61,8 @@ func graph() models.DependencyGraph {
 }
 
 // state is a backend in a representative state: every status, an armed merge,
-// a repo that failed to load, GitHub's own auto-merge, and a PR waiting on two
-// others (one in a repo pr-mon doesn't monitor).
+// a muted PR, a repo that failed to load, GitHub's own auto-merge, and a PR
+// waiting on two others (one in a repo pr-mon doesn't monitor).
 func state() protocol.Snapshot {
 	api := testfixtures.Repo("acme/api", []models.PullRequest{
 		pr(1, func(p *models.PullRequest) {
@@ -91,7 +91,10 @@ func state() protocol.Snapshot {
 			p.ChecksTotal = 5
 			p.CanBypass = true // so it offers force merge
 		}),
-		pr(4, testfixtures.Conflict),
+		pr(4, func(p *models.PullRequest) {
+			testfixtures.Conflict(p)
+			p.Muted = true
+		}),
 		pr(5, func(p *models.PullRequest) {
 			testfixtures.Behind(p)
 			p.ReviewDecision = models.Ptr("REVIEW_REQUIRED")
@@ -227,6 +230,7 @@ func requests(squash, merge models.MergeMethod) []map[string]any {
 		perform(22, models.Action{Kind: "mark_ready"}),
 		perform(23, models.Action{Kind: "rerun_checks"}),
 		perform(24, models.Action{Kind: "force_merge", Method: &squash}),
+		perform(25, models.Action{Kind: "mute"}),
 		{"id": 9, "op": "add_repo", "args": map[string]any{"name": "acme/web"}},
 		{"id": 10, "op": "remove_repo", "args": map[string]any{"name": "acme/web"}},
 		{"id": 11, "op": "set_collapsed", "args": map[string]any{"owner": "acme", "collapsed": true}},

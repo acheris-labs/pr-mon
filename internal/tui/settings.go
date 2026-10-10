@@ -1,5 +1,6 @@
-// The settings dialog: how often the backend checks GitHub, and (on macOS)
-// whether it starts at login, as in the app's Settings › General.
+// The settings dialog: how often the backend checks GitHub, (on macOS)
+// whether it starts at login, as in the app's Settings › General, and the
+// things done to a repo now and then: adding, removing, its notifications.
 
 package tui
 
@@ -52,7 +53,7 @@ func defaultLoginItem(paths daemon.Paths) LoginItem {
 }
 
 type settingsModal struct {
-	cursor int // 0: poll interval, 1: start at login
+	cursor int // in rows()
 	// Start at login, as last read; changing it takes a few seconds.
 	atLogin  bool
 	checking bool
@@ -80,22 +81,62 @@ func newSettings(model *Model) (*settingsModal, tea.Cmd) {
 
 func (s *settingsModal) title() string { return "Settings" }
 
-func (s *settingsModal) rows(model *Model) int {
-	if model.loginItem == nil {
-		return 1
+type settingsRow int
+
+const (
+	rowInterval settingsRow = iota
+	rowLogin
+	rowAdd
+	rowRemove
+	rowNotify
+)
+
+// repoRows are the rows that open another dialog, by their keys.
+var repoRows = []struct {
+	row settingsRow
+	key string
+}{{rowAdd, "a"}, {rowRemove, "d"}, {rowNotify, "n"}}
+
+// rows are the dialog's rows, top to bottom. Removing and notifications need
+// a repo selected.
+func (s *settingsModal) rows(model *Model) []settingsRow {
+	rows := []settingsRow{rowInterval}
+	if model.loginItem != nil {
+		rows = append(rows, rowLogin)
 	}
-	return 2
+	rows = append(rows, rowAdd)
+	if model.selectedRepo() != "" {
+		rows = append(rows, rowRemove, rowNotify)
+	}
+	return rows
 }
 
 func (s *settingsModal) update(model *Model, key tea.KeyMsg) (modal, tea.Cmd) {
+	rows := s.rows(model)
+	s.cursor = min(s.cursor, len(rows)-1)
 	switch key.String() {
 	case "esc", "escape", "q", "S":
 		return nil, nil
-	case "up", "k", "down", "j", "tab":
-		s.cursor = (s.cursor + 1) % s.rows(model)
+	case "down", "j", "tab":
+		s.cursor = (s.cursor + 1) % len(rows)
+		return s, nil
+	case "up", "k", "shift+tab":
+		s.cursor = (s.cursor + len(rows) - 1) % len(rows)
 		return s, nil
 	}
-	if s.cursor == 0 {
+	for _, repoRow := range repoRows {
+		if key.String() == repoRow.key && slices.Contains(rows, repoRow.row) {
+			return s.open(model, repoRow.row)
+		}
+	}
+	switch rows[s.cursor] {
+	case rowAdd, rowRemove, rowNotify:
+		switch key.String() {
+		case "enter", " ", "space":
+			return s.open(model, rows[s.cursor])
+		}
+		return s, nil
+	case rowInterval:
 		switch key.String() {
 		case "left", "h", "right", "l":
 			up := key.String() == "right" || key.String() == "l"
@@ -122,6 +163,32 @@ func (s *settingsModal) update(model *Model, key tea.KeyMsg) (modal, tea.Cmd) {
 		}
 	}
 	return s, nil
+}
+
+// open swaps the settings for the dialog a repo row stands for.
+func (s *settingsModal) open(model *Model, row settingsRow) (modal, tea.Cmd) {
+	name := model.selectedRepo()
+	switch row {
+	case rowRemove:
+		return model.removeRepo(name), nil
+	case rowNotify:
+		if dialog, cmd := model.openNotifications(name); dialog != nil {
+			return dialog, cmd
+		}
+		return s, nil
+	}
+	return newAddRepo(), nil
+}
+
+// rowLabel is a repo row's text.
+func rowLabel(row settingsRow, repo string) string {
+	switch row {
+	case rowRemove:
+		return "Remove " + repo + "…"
+	case rowNotify:
+		return "Notifications for " + repo + "…"
+	}
+	return "Add repository…"
 }
 
 func (s *settingsModal) checked(done loginChecked) {
@@ -160,33 +227,46 @@ func intervalLabel(seconds int) string {
 }
 
 func (s *settingsModal) view(model *Model) string {
-	rows := []string{"Check GitHub:  ◀ " + intervalLabel(model.backend.Config().PollInterval) + " ▶"}
-	if model.loginItem != nil {
-		box := "[ ]"
-		if s.atLogin {
-			box = "[x]"
-		}
-		row := box + " Start the backend at login"
-		if s.checking {
-			row += dim.Render("  …")
-		}
-		rows = append(rows, row)
-	}
-	for index := range rows {
+	lines := []string{bold.Render(s.title()), ""}
+	for index, row := range s.rows(model) {
+		style := lipgloss.NewStyle()
 		if index == s.cursor {
-			rows[index] = selected.Render(rows[index])
+			style = selected
+		}
+		switch row {
+		case rowInterval:
+			lines = append(lines, style.Render(
+				"Check GitHub:  ◀ "+intervalLabel(model.backend.Config().PollInterval)+" ▶"))
+		case rowLogin:
+			box := "[ ]"
+			if s.atLogin {
+				box = "[x]"
+			}
+			text := style.Render(box + " Start the backend at login")
+			if s.checking {
+				text += dim.Render("  …")
+			}
+			lines = append(lines, text)
+			// What the toggle means, and what went wrong with it, sit under it.
+			if s.problem != "" {
+				lines = append(lines, lipgloss.NewStyle().Foreground(red).
+					Width(model.modalInner()).Render(s.problem))
+			}
+			lines = append(lines, lipgloss.NewStyle().Faint(true).Width(model.modalInner()).Render(
+				"On: the backend starts at login and runs all the time. Off: it runs while "+
+					"this dashboard or the app is open, and stops two minutes after the last one quits."))
+		default:
+			if row == rowAdd {
+				lines = append(lines, "")
+			}
+			for _, repoRow := range repoRows {
+				if repoRow.row == row {
+					text := "[" + repoRow.key + "] " + rowLabel(row, model.selectedRepo())
+					lines = append(lines, model.mark(zoneKey+repoRow.key, style.Render(text)))
+				}
+			}
 		}
 	}
-	lines := append([]string{bold.Render(s.title()), ""}, rows...)
-	if s.problem != "" {
-		lines = append(lines, "", lipgloss.NewStyle().Foreground(red).Width(model.modalInner()).
-			Render(s.problem))
-	}
-	if model.loginItem != nil {
-		lines = append(lines, "", lipgloss.NewStyle().Faint(true).Width(model.modalInner()).Render(
-			"On: the backend starts at login and runs all the time. Off: it runs while "+
-				"this dashboard or the app is open, and stops two minutes after the last one quits."))
-	}
-	hint := "↑/↓: choose   ←/→/space: change   esc: close"
+	hint := "↑/↓: choose   ←/→/space: change   enter: open   esc: close"
 	return strings.Join(append(lines, "", model.hints(hint, model.modalInner())), "\n")
 }

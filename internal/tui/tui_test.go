@@ -463,9 +463,9 @@ func TestUnavailableActionDoesNothing(t *testing.T) {
 func TestAddRepo(t *testing.T) {
 	model, backend := newModel()
 	backend.addName = "Acme/New"
-	press(t, model, "A")
+	press(t, model, "S", "a")
 	if model.modal == nil {
-		t.Fatal("A should open the add dialog")
+		t.Fatal("S a should open the add dialog")
 	}
 	press(t, model, "n", "o", "p", "e") // not owner/name
 	press(t, model, "enter")
@@ -487,7 +487,7 @@ func TestAddRepo(t *testing.T) {
 func TestAddRepoFailureStaysOpen(t *testing.T) {
 	model, backend := newModel()
 	backend.addErr = errors.New("Repository a/b not found")
-	press(t, model, "A", "a", "/", "b", "enter")
+	press(t, model, "S", "a", "a", "/", "b", "enter")
 	if model.modal == nil {
 		t.Fatal("the dialog should stay open")
 	}
@@ -498,7 +498,7 @@ func TestAddRepoFailureStaysOpen(t *testing.T) {
 
 func TestRemoveRepoAsksFirst(t *testing.T) {
 	model, backend := newModel()
-	press(t, model, "D")
+	press(t, model, "S", "d")
 	if !strings.Contains(model.View(), "Stop monitoring acme/api?") {
 		t.Fatalf("view = \n%s", model.View())
 	}
@@ -506,7 +506,7 @@ func TestRemoveRepoAsksFirst(t *testing.T) {
 	if contains2(backend.recorded(), "remove acme/api") {
 		t.Error("answering no should not remove anything")
 	}
-	press(t, model, "D", "y")
+	press(t, model, "S", "d", "y")
 	if !contains2(backend.recorded(), "remove acme/api") {
 		t.Errorf("calls = %v", backend.recorded())
 	}
@@ -514,9 +514,9 @@ func TestRemoveRepoAsksFirst(t *testing.T) {
 
 func TestNotificationsDialog(t *testing.T) {
 	model, backend := newModel()
-	press(t, model, "N")
+	press(t, model, "S", "n")
 	if model.modal == nil {
-		t.Fatal("N should open the notifications dialog")
+		t.Fatal("S n should open the notifications dialog")
 	}
 	view := model.View()
 	if !strings.Contains(view, "Notifications — acme/api") || !strings.Contains(view, "Preview:") {
@@ -542,19 +542,6 @@ func TestNotificationsDialog(t *testing.T) {
 	}
 	if model.modal != nil {
 		t.Error("saving should close the dialog")
-	}
-}
-
-func TestNotificationsNeedsARepo(t *testing.T) {
-	model, backend := newModel()
-	backend.config.Repos = nil // nothing monitored yet
-	model.reloadRepos("")
-	press(t, model, "N")
-	if model.modal != nil {
-		t.Error("no dialog without a repo selected")
-	}
-	if len(model.toasts) == 0 || !strings.Contains(model.toasts[0].message, "Select a repository") {
-		t.Errorf("toasts = %+v", model.toasts)
 	}
 }
 

@@ -304,6 +304,8 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public var strictlyReady: Bool
     public var lastCheckStartedAt: String?
     public var actions: [ActionOption]
+    /// The user has silenced its notifications; nil from a backend older than muting.
+    public var muted: Bool?
     /// PRs that must merge before this one, and PRs waiting for this one.
     public var waitsOn: [PRRef]
     public var requiredBy: [PRRef]
@@ -312,7 +314,7 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public func key(in repo: String) -> String { "\(repo)#\(number)" }
 
     enum CodingKeys: String, CodingKey {
-        case id, number, title, url, author, mergeable, checks, status, reasons, actions
+        case id, number, title, url, author, mergeable, checks, status, reasons, actions, muted
         case waitsOn = "waits_on"
         case requiredBy = "required_by"
         case createdAt = "created_at"

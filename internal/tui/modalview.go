@@ -60,6 +60,11 @@ func unavailable(shortcut, label, reason string) string {
 }
 
 func (a *actionMenu) view(model *Model) string {
+	// From a hotkey there's no menu to go back to.
+	back := "back"
+	if a.quick {
+		back = "cancel"
+	}
 	if a.confirming != nil {
 		danger := lipgloss.NewStyle().Bold(true).Foreground(red)
 		lines := []string{danger.Render(fmt.Sprintf("Force merge #%d?", a.pr.Number)), ""}
@@ -68,7 +73,7 @@ func (a *actionMenu) view(model *Model) string {
 				Render("This "+*option.Note+"."))
 		}
 		lines = append(lines, "It merges past branch protection, as GitHub lets you.")
-		return strings.Join(append(lines, "", model.hints("y: force merge   n/esc: back", model.modalInner())), "\n")
+		return strings.Join(append(lines, "", model.hints("y: force merge   n/esc: "+back, model.modalInner())), "\n")
 	}
 	if a.choosing != nil {
 		lines := []string{bold.Render("Merge method")}
@@ -77,7 +82,7 @@ func (a *actionMenu) view(model *Model) string {
 				lines = append(lines, model.key(choice.key, choice.label))
 			}
 		}
-		return strings.Join(append(lines, "", model.hints("esc: back", model.modalInner())), "\n")
+		return strings.Join(append(lines, "", model.hints("esc: "+back, model.modalInner())), "\n")
 	}
 	lines := []string{bold.Render(a.title()), ""}
 	for _, slot := range menuSlots {

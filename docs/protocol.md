@@ -205,7 +205,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 
 ### Object: `PullRequest`
 
-The backend computes the last seven fields; clients display them rather than
+The backend computes the last eight fields; clients display them rather than
 reimplement the rules.
 
 | Field | Type | Meaning |
@@ -237,6 +237,7 @@ reimplement the rules.
 | `strictly_ready` | bool | Safe to merge unattended (what merge when ready waits for). |
 | `last_check_started_at` | timestamp or null | |
 | `actions` | [`ActionOption`] | The PR's action menu, in display order. |
+| `muted` | bool | The user has silenced this PR's notifications (`mute`). |
 | `waits_on` | [`PRRef`] | PRs that must merge before this one, in the order they were added. |
 | `required_by` | [`PRRef`] | PRs waiting for this one to merge. |
 
@@ -309,7 +310,7 @@ disabled with its `reason`.
 
 | Field | Type | Meaning |
 |:------|:-----|:--------|
-| `key` | string | Menu slot: `merge`, `auto_merge`, `update`, `draft` or `rerun` (the TUI's `m`, `a`, `u`, `t`, `r`). |
+| `key` | string | Menu slot: `merge`, `auto_merge`, `update`, `draft`, `rerun` or `mute` (the TUI's `m`, `a`, `u`, `t`, `r`, `n`). |
 | `kind` | string | The `Action` kind to send when chosen. |
 | `label` | string | Text to show. |
 | `available` | bool | False: show it disabled. |
@@ -348,6 +349,8 @@ To act on an entry, send `perform` with
 | `mark_ready` | Take the PR out of draft. |
 | `convert_to_draft` | Put the PR back into draft. |
 | `rerun_checks` | Re-run the failed jobs of this PR's GitHub Actions runs. Offered only while one of its Actions checks has failed. |
+| `mute` | Send no notifications about this PR, until it is unmuted or closes. |
+| `unmute` | Undo `mute`. |
 | `force_merge` | Merge past branch protection (failing checks, missing reviews, behind base). Offered in the `merge` slot only when `can_bypass` is true and nothing else stands in the way: never for conflicts, drafts, or a PR waiting on dependencies. Clients should confirm it and show it as dangerous. |
 
 `MergeMethod` is one of `SQUASH`, `MERGE`, `REBASE`.

@@ -118,7 +118,7 @@ type ArmedMerge struct {
 
 // ActionOption is one entry of a PR's action menu, as the backend decides it.
 type ActionOption struct {
-	Key                string  `json:"key"`  // "merge" | "auto_merge" | "update" | "draft" | "rerun"
+	Key                string  `json:"key"`  // "merge" | "auto_merge" | "update" | "draft" | "rerun" | "mute"
 	Kind               string  `json:"kind"` // the Action kind to send
 	Label              string  `json:"label"`
 	Available          bool    `json:"available"`
@@ -159,6 +159,8 @@ type PullRequest struct {
 	StrictlyReady      bool           `json:"strictly_ready"`
 	LastCheckStartedAt *string        `json:"last_check_started_at"`
 	Actions            []ActionOption `json:"actions"`
+	// The user has silenced this PR's notifications.
+	Muted bool `json:"muted"`
 	// PRs that must merge before this one, and PRs waiting for this one.
 	WaitsOn    []PRRef `json:"waits_on"`
 	RequiredBy []PRRef `json:"required_by"`
@@ -185,7 +187,8 @@ type Repo struct {
 
 // Action is a user-requested change to a PR.
 type Action struct {
-	// "merge" | "update" | "auto_merge_on" | "auto_merge_off" | "arm_merge" | "disarm_merge"
+	// "merge" | "update" | "auto_merge_on" | "auto_merge_off" | "arm_merge" | "disarm_merge",
+	// "mark_ready" | "convert_to_draft" | "rerun_checks" | "mute" | "unmute" | "force_merge"
 	Kind         string       `json:"kind"`
 	Method       *MergeMethod `json:"method"`
 	DeleteBranch bool         `json:"delete_branch"`

@@ -123,12 +123,12 @@ func TestTapsWorkInDialogs(t *testing.T) {
 
 func TestEachKeyInAHintIsItsOwnTap(t *testing.T) {
 	model, backend := newModel()
-	press(t, model, "D") // "y: yes   n/esc: no"
+	press(t, model, "S", "d") // "y: yes   n/esc: no"
 	tap(t, model, "n/esc")
 	if model.modal != nil || contains2(backend.recorded(), "remove acme/api") {
 		t.Fatalf("tapping n should back out: modal %T, calls %v", model.modal, backend.recorded())
 	}
-	press(t, model, "D")
+	press(t, model, "S", "d")
 	tap(t, model, "y: yes")
 	if !contains2(backend.recorded(), "remove acme/api") {
 		t.Errorf("tapping y should confirm: %v", backend.recorded())
@@ -191,9 +191,10 @@ func TestTapOnATab(t *testing.T) {
 	if model.selectedRepo() != "acme/web" {
 		t.Errorf("selected %q", model.selectedRepo())
 	}
-	tap(t, model, "Add")
+	tap(t, model, "Settings")
+	tap(t, model, "Add repository")
 	if _, ok := model.modal.(*addRepoModal); !ok {
-		t.Errorf("tapping Add should open the dialog, got %T", model.modal)
+		t.Errorf("tapping Add repository should open the dialog, got %T", model.modal)
 	}
 }
 
@@ -221,7 +222,7 @@ func TestTapFindsTheRowInAScrolledList(t *testing.T) {
 func TestHintsWrapWholeOnNarrowScreens(t *testing.T) {
 	model, backend := newModel()
 	resize(model, 40, 24)
-	press(t, model, "N")
+	press(t, model, "S", "n")
 	for _, hint := range []string{"ctrl+s: save", "ctrl+t: send test", "esc: cancel"} {
 		if !strings.Contains(model.View(), hint) {
 			t.Errorf("%q should stay on one line:\n%s", hint, model.View())
@@ -239,7 +240,7 @@ func TestHintsWrapWholeOnNarrowScreens(t *testing.T) {
 
 func TestEventsTabOffersSpaceToTap(t *testing.T) {
 	model, _ := newModel()
-	press(t, model, "N", "right") // the Events tab
+	press(t, model, "S", "n", "right") // the Events tab
 	before := fmt.Sprint(model.modal.(*notificationsModal).settings.Events)
 	tap(t, model, "space: toggle")
 	if after := fmt.Sprint(model.modal.(*notificationsModal).settings.Events); after == before {

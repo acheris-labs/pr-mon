@@ -79,7 +79,7 @@ func (m *Monitor) AddRepo(ctx context.Context, name string) (string, error) {
 	return repo.Name, nil
 }
 
-// RemoveRepo forgets a repo, its notification settings and its armed merges.
+// RemoveRepo forgets a repo, its notification settings, armed merges and muted PRs.
 func (m *Monitor) RemoveRepo(name string) error {
 	m.mutex.Lock()
 	if err := m.requireRepoLocked(name); err != nil {
@@ -100,6 +100,7 @@ func (m *Monitor) RemoveRepo(name string) error {
 	delete(m.loaded, name)
 	m.track.Forget(name)
 	delete(m.state.Armed, name)
+	delete(m.state.Muted, name)
 	m.forgetWaitingLocked(func(repo string, _ int) bool { return repo == name })
 	m.saveConfigLocked()
 	m.saveStateLocked()
@@ -199,6 +200,9 @@ func (m *Monitor) Perform(ctx context.Context, repoName string, number int, acti
 		m.disarm(repoName, number)
 		m.toast(fmt.Sprintf("Cancelled merge when ready for %s", label))
 		m.emit(Event{Kind: "repo", Name: repoName})
+		return nil
+	case "mute", "unmute":
+		m.setMuted(repoName, number, action.Kind == "mute")
 		return nil
 	}
 

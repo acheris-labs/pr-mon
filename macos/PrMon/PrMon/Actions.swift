@@ -195,6 +195,7 @@ struct PullRequestCommands: Commands {
         case "auto_merge": "a"
         case "draft": "t"
         case "rerun": "r"
+        case "mute": "n"
         default: "u"
         }
     }

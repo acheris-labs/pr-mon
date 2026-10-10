@@ -92,8 +92,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": []
           },
@@ -154,8 +165,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": []
           }
@@ -242,8 +264,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": []
           },
@@ -316,8 +349,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": [
               {
@@ -419,8 +463,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": []
           },
@@ -486,8 +541,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "unmute",
+                "label": "Unmute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": true,
             "waits_on": [],
             "required_by": []
           },
@@ -567,8 +633,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": []
           },
@@ -634,8 +711,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": []
           },
@@ -701,8 +789,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": []
           },
@@ -766,8 +865,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [],
             "required_by": []
           },
@@ -833,8 +943,19 @@
                 "note": null,
                 "needs_method": false,
                 "offers_delete_branch": false
+              },
+              {
+                "key": "mute",
+                "kind": "mute",
+                "label": "Mute notifications",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
               }
             ],
+            "muted": false,
             "waits_on": [
               {
                 "repo": "acme/api",

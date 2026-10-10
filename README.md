@@ -106,29 +106,28 @@ checkout.
 Either way launchd restarts the backend if it crashes, but not after
 `pr-mon stop`, and `pr-mon autostart disable` removes whichever agent is
 installed. macOS shows a "Background Items Added" notice the first time. If `im` notifications stop working under
-autostart, use Send test in the `N` dialog and approve the Automation prompt.
+autostart, use Send test in the notifications dialog (`S`, then `n`) and approve the Automation prompt.
 
 ## Keys
 
 | Key | Where | Action |
 |-----|-------|--------|
-| `A` | anywhere | Add a repo (`owner/name`) |
-| `D` | anywhere | Remove the selected repo |
 | `←` / `→` | repo tabs | Previous / next repo |
 | `↓` / `enter` | repo tabs | Into the repo's PR list (`←` or `esc` comes back) |
 | `tab` / `shift+tab` | anywhere | Go round the panes: repos, PR list, details (and back the other way) |
 | `enter` | PR list | Action menu |
 | `J` / `K`, `PgDn` / `PgUp` | anywhere | Scroll the details pane when it says `(J/K scroll)` |
-| `↑` / `↓` | details | Scroll; `←` or `esc` goes back to the PR list, `enter` and `w` act on the PR shown |
+| `↑` / `↓` | details | Scroll; `←` or `esc` goes back to the PR list, `enter`, `m`, `a` and `w` act on the PR shown |
+| `m` / `a` | PR list or details | Merge / toggle auto-merge without opening the menu, as below. The key hints show what each would do; a dimmed one says why it can't when pressed |
 | `m` | action menu | Merge (asks `s`/`m`/`r` if the repo allows several methods). Shown in red as **Force merge** when branch protection blocks it but GitHub lets you bypass that; asks `y`/`n` first |
 | `a` | action menu | Toggle auto-merge: GitHub's if the repo allows it, otherwise pr-mon's "merge when ready" (asks `s`/`m`/`r` if several methods) |
 | `u` | action menu | Update branch (when behind base) |
 | `t` | action menu | Toggle draft: mark ready for review, or convert back to draft |
 | `r` | action menu | Re-run this PR's failed GitHub Actions jobs |
-| `space` | action menu | Toggle "delete remote branch" |
+| `n` | action menu | Mute (or unmute) this PR's notifications, until it merges or closes |
+| `d` | action menu | Toggle "delete remote branch" |
 | `w` | PR list or action menu | Dependencies: what the PR waits on (`a` add, `d` remove, `g` graph) |
-| `N` | anywhere | Notification settings for the selected repo |
-| `S` | anywhere | Settings: how often to check GitHub, start the backend at login (macOS) |
+| `S` | anywhere | Settings: how often to check GitHub, start the backend at login (macOS), and for the selected repo `a` add a repo (`owner/name`), `d` remove it, `n` its notification settings |
 | `r` | anywhere | Refresh now |
 | `q` | anywhere | Quit the dashboard (the backend keeps running) |
 

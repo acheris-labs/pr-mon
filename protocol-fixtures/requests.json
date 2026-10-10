@@ -115,6 +115,19 @@
   },
   {
     "args": {
+      "action": {
+        "kind": "mute",
+        "method": null,
+        "delete_branch": false
+      },
+      "number": 1,
+      "repo": "acme/api"
+    },
+    "id": 25,
+    "op": "perform"
+  },
+  {
+    "args": {
       "name": "acme/web"
     },
     "id": 9,

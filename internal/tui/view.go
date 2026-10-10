@@ -185,7 +185,7 @@ func clip(line string, width int) string {
 // shows, with ‹ and › where more are out of sight.
 func (m *Model) tabsView() string {
 	if len(m.repos) == 0 {
-		return clip(dim.Render(" Press A to add a repository"), m.width)
+		return clip(dim.Render(" Press S to add a repository"), m.width)
 	}
 	tabs := []string{}
 	for index, repo := range m.repos {
@@ -406,6 +406,14 @@ func (m *Model) prTable(width, height int) string {
 		if unseen[pr.Number] {
 			text = bold
 		}
+		muted := ""
+		if pr.Muted {
+			muted = "🔕 "
+		}
+		// The bell takes two columns, so it stays out of the truncating.
+		title := func(width int) string {
+			return text.Render(muted + truncate(pr.Title, max(1, width-lipgloss.Width(muted))))
+		}
 		auto := lipgloss.NewStyle().Foreground(cyan).Render(marker)
 		number := text.Render(fmt.Sprintf("#%d", pr.Number))
 		// Each cell is padded after styling, so colour codes don't eat the width.
@@ -416,12 +424,12 @@ func (m *Model) prTable(width, height int) string {
 			}
 			room := width - 2 - shortNumber - lipgloss.Width(auto)
 			cells = style.Render(icon) + " " + padTo(number, shortNumber) + auto +
-				text.Render(truncate(pr.Title, max(1, room)))
+				title(room)
 		} else {
 			cells = style.Render(icon) + " " + padTo(number, numberWidth) +
 				padTo(style.Render(string(pr.Status))+auto, statusWidth) +
 				padTo(dim.Render(truncate(pr.Author, authorWidth-1)), authorWidth) +
-				text.Render(truncate(pr.Title, titleWidth))
+				title(titleWidth)
 		}
 		// The PR stays marked while the details have the focus: they are its.
 		if index == m.prCursor && m.focus != paneRepos {
@@ -436,7 +444,7 @@ func (m *Model) detailsText() string {
 	name := m.selectedRepo()
 	if name == "" {
 		if len(m.backend.Config().Repos) == 0 {
-			return dim.Render("Press A to add a repository")
+			return dim.Render("Press S to add a repository")
 		}
 		return dim.Render("Select a repository")
 	}
@@ -466,6 +474,9 @@ func (m *Model) detailsText() string {
 	}
 	if pr.HeadSha != nil {
 		lines = append(lines, dim.Render("Head SHA:    ")+*pr.HeadSha)
+	}
+	if pr.Muted {
+		lines = append(lines, "🔕 Notifications muted")
 	}
 	for index, issue := range pr.ClosingIssues {
 		label := "Closes:      "
@@ -530,19 +541,62 @@ func labelled(label string, refs []models.PRRef, repo string) []string {
 	return lines
 }
 
+type hintLook int
+
+const (
+	hintPlain  hintLook = iota
+	hintOff             // not possible now: pressing it says why
+	hintDanger          // force merge
+)
+
+type keyHint struct {
+	key, label string
+	look       hintLook
+}
+
+// footerHints are the keys worth showing now. With a PR selected that starts
+// with its merge and auto-merge, as the backend labels them.
+func (m *Model) footerHints() []keyHint {
+	hints := []keyHint{}
+	if pr, ok := m.selectedPR(); ok && m.focus != paneRepos {
+		for _, slot := range menuSlots[:2] { // merge, auto-merge
+			for _, option := range pr.Actions {
+				if option.Key != slot.key {
+					continue
+				}
+				look := hintPlain
+				switch {
+				case option.Kind == "force_merge":
+					look = hintDanger
+				case !option.Available:
+					look = hintOff
+				}
+				hints = append(hints, keyHint{slot.shortcut, option.Label, look})
+			}
+		}
+		hints = append(hints, keyHint{"w", "Deps", hintPlain}, keyHint{"⏎", "Actions", hintPlain})
+	}
+	return append(hints, keyHint{"S", "Settings", hintPlain}, keyHint{"r", "Refresh", hintPlain},
+		keyHint{"q", "Quit", hintPlain})
+}
+
 // footerView is the key hints, wrapped to the screen; a short screen goes
 // without them. mark makes each a place to tap.
 func (m *Model) footerView(mark func(name, text string) string) []string {
 	if m.height < hintsFrom {
 		return nil
 	}
-	hints := []struct{ key, label string }{
-		{"A", "Add"}, {"D", "Remove"}, {"N", "Notify"}, {"S", "Settings"},
-		{"r", "Refresh"}, {"q", "Quit"}, {"w", "Deps"}, {"⏎", "Actions"},
-	}
+	danger := lipgloss.NewStyle().Bold(true).Foreground(red)
 	items := []string{}
-	for _, hint := range hints {
-		items = append(items, mark(zoneKey+hint.key, keyStyle.Render(hint.key)+" "+hint.label))
+	for _, hint := range m.footerHints() {
+		text := keyStyle.Render(hint.key) + " " + hint.label
+		switch hint.look {
+		case hintOff:
+			text = dim.Render(hint.key + " " + hint.label)
+		case hintDanger:
+			text = danger.Render(hint.key + " " + hint.label)
+		}
+		items = append(items, mark(zoneKey+hint.key, text))
 	}
 	return wrapItems(items, "  ", m.width)
 }

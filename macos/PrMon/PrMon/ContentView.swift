@@ -371,6 +371,11 @@ private struct PRRow: View {
                     Text(verbatim: "#\(pr.number)")
                     Text(pr.author)
                     Text(pr.status.title).foregroundStyle(pr.status.color)
+                    if pr.muted == true {
+                        Image(systemName: "bell.slash")
+                            .help("Notifications muted")
+                            .accessibilityLabel("Notifications muted")
+                    }
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

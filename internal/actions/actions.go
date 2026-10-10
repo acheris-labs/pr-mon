@@ -49,7 +49,19 @@ func Available(repo models.Repo, pr models.PullRequest, armed *models.ArmedMerge
 	if rerun := rerunOption(pr); rerun != nil {
 		options = append(options, *rerun)
 	}
-	return options
+	return append(options, muteOption(pr))
+}
+
+// muteOption silences the PR's notifications, or brings them back.
+func muteOption(pr models.PullRequest) models.ActionOption {
+	if pr.Muted {
+		return models.ActionOption{
+			Key: "mute", Kind: "unmute", Label: "Unmute notifications", Available: true,
+		}
+	}
+	return models.ActionOption{
+		Key: "mute", Kind: "mute", Label: "Mute notifications", Available: true,
+	}
 }
 
 // rerunOption re-runs the failed jobs of this PR's checks; nil unless a

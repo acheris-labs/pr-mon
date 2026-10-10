@@ -45,6 +45,7 @@ func TestRoundTrip(t *testing.T) {
 			`{"method":"SQUASH","delete_branch":true,"armed_at":"2026-09-17"}`)},
 	}
 	saved.Dependencies = map[string][]string{"acme/api#12": {"acme/lib#3", "other/x#9"}}
+	saved.Muted = map[string][]int{"acme/api": {12, 14}}
 	if err := state.Save(file, saved); err != nil {
 		t.Fatal(err)
 	}
@@ -60,6 +61,9 @@ func TestRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.Dependencies, saved.Dependencies) {
 		t.Errorf("dependencies = %v", loaded.Dependencies)
+	}
+	if !reflect.DeepEqual(loaded.Muted, saved.Muted) {
+		t.Errorf("muted = %v", loaded.Muted)
 	}
 	// The atomic write leaves no temporary files behind.
 	entries, err := os.ReadDir(filepath.Dir(file))
@@ -77,6 +81,8 @@ func TestBadSectionsAreIgnored(t *testing.T) {
 		"armed repo not a map":  `{"prs": {}, "armed": {"a/b": "x"}}`,
 		"armed entry not a map": `{"prs": {}, "armed": {"a/b": {"1": "x"}}}`,
 		"collapsed not a list":  `{"prs": {}, "collapsed": "acme"}`,
+		"muted not a map":       `{"prs": {}, "muted": ["a/b"]}`,
+		"muted not numbers":     `{"prs": {}, "muted": {"a/b": ["x"]}}`,
 	}
 	for name, text := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -86,7 +92,7 @@ func TestBadSectionsAreIgnored(t *testing.T) {
 			if warning != "" {
 				t.Errorf("warning = %q, want none", warning)
 			}
-			if len(loaded.Armed) != 0 || len(loaded.Collapsed) != 0 {
+			if len(loaded.Armed) != 0 || len(loaded.Collapsed) != 0 || len(loaded.Muted) != 0 {
 				t.Errorf("state = %+v, want the bad section dropped", loaded)
 			}
 		})

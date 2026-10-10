@@ -278,11 +278,11 @@ func TestDialogsFitNarrowScreens(t *testing.T) {
 		keys []string
 	}{
 		{"action menu", []string{"down", "enter"}},
-		{"add repo", []string{"A"}},
-		{"remove repo", []string{"D"}},
+		{"add repo", []string{"S", "a"}},
+		{"remove repo", []string{"S", "d"}},
 		{"dependencies", []string{"down", "w"}},
 		{"dependency picker", []string{"down", "w", "a"}},
-		{"notifications", []string{"N"}},
+		{"notifications", []string{"S", "n"}},
 		{"settings", []string{"S"}},
 	}
 	for _, test := range cases {
@@ -339,7 +339,7 @@ func TestDetailsScrollOnANarrowScreen(t *testing.T) {
 func TestNotificationsDialogFitsAPhone(t *testing.T) {
 	model, _ := newModel()
 	resize(model, 42, 20)
-	press(t, model, "N")
+	press(t, model, "S", "n")
 	view := model.View()
 	assertFits(t, view, 42, 20)
 	if !strings.Contains(view, "Notifications — acme/api") {
