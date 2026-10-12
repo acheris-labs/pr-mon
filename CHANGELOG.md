@@ -4,6 +4,14 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.1]
+
+### Changed
+
+- The dashboard's PR list always has room for three PRs, so a repo with one
+  or two no longer gets a sliver of a pane, and a long list stops at 30% of
+  the screen instead of half, leaving the details more room.
+
 ## [0.2.0]
 
 ### Added

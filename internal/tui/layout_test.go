@@ -398,3 +398,38 @@ func TestTapsWorkWhileAToastShows(t *testing.T) {
 		t.Errorf("selected %q", model.selectedRepo())
 	}
 }
+
+// The PR list fits its PRs, with room for at least three and at most 30% of
+// the screen, and the details always keep a line.
+func TestThePRListFitsBetweenThreeRowsAnd30Percent(t *testing.T) {
+	cases := []struct {
+		name               string
+		count              int
+		width, height, prs int
+	}{
+		{"few keep room for three", 2, 120, 40, 6},
+		{"some fit exactly", 5, 120, 40, 8},
+		{"many stop at 30%", 20, 120, 40, 12},
+		{"narrow has no headings", 20, 40, 16, 5},
+		{"the smallest leaves the details a line", 20, 120, 10, 5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			model, backend := newModel()
+			prs := []models.PullRequest{}
+			for number := 1; number <= tc.count; number++ {
+				prs = append(prs, testfixtures.PR(number))
+			}
+			backend.repos["acme/api"] = testfixtures.Repo("acme/api", prs)
+			resize(model, tc.width, tc.height)
+			got, details := model.paneHeights()
+			if got != tc.prs {
+				t.Errorf("the PR pane is %d high, want %d", got, tc.prs)
+			}
+			if details < 3 {
+				t.Errorf("the details pane is %d high, want a line inside its border", details)
+			}
+			assertFits(t, model.View(), tc.width, tc.height)
+		})
+	}
+}

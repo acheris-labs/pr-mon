@@ -127,15 +127,20 @@ func (m *Model) tooSmall() string {
 }
 
 // paneHeights splits what the header, tabs and key hints leave: the PR list
-// takes what it needs, up to half, and the details get the rest.
+// fits its PRs, with room for at least three and at most 30% of the screen,
+// and the details get the rest, never less than one line.
 func (m *Model) paneHeights() (prs, details int) {
 	unmarked := func(_, text string) string { return text }
 	room := max(6, m.height-2-len(m.footerView(unmarked)))
-	rows := max(1, len(m.prs()))
+	rows := len(m.prs())
+	least := 3
 	if !m.narrow() {
 		rows++ // the column headings
+		least++
 	}
-	prs = min(room/2, rows+2)
+	least += 2 // the border
+	most := max(m.height*3/10, least)
+	prs = min(max(rows+2, least), most, room-3)
 	return prs, room - prs
 }
 
