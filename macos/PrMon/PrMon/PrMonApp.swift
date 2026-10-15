@@ -45,6 +45,7 @@ struct PrMonApp: App {
                     .disabled(!store.isConnected)
                 Divider()
             }
+            ListJumpCommands()
             PullRequestCommands()
         }
 

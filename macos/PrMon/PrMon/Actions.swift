@@ -158,6 +158,34 @@ extension FocusedValues {
     @Entry var pullRequest: PullRequestContext?
 }
 
+enum ListFocus { case repos, prs }
+
+/// The first nine rows of the list Command-1 to Command-9 pick from.
+struct ListJump {
+    var titles: [String]
+    var select: (Int) -> Void
+}
+
+extension FocusedValues {
+    @Entry var listJump: ListJump?
+}
+
+struct ListJumpCommands: Commands {
+    @FocusedValue(\.listJump) private var jump
+
+    var body: some Commands {
+        CommandGroup(after: .toolbar) {
+            if let jump, !jump.titles.isEmpty {
+                Divider()
+                ForEach(Array(jump.titles.enumerated()), id: \.offset) { index, title in
+                    Button(title) { jump.select(index) }
+                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
+                }
+            }
+        }
+    }
+}
+
 struct PullRequestCommands: Commands {
     @FocusedValue(\.pullRequest) private var context
 

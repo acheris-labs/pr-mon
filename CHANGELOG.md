@@ -4,6 +4,14 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.2.2]
+
+### Added
+
+- In the Mac app, Command-1 to Command-9 pick from the list you last chose
+  a row in: the first nine repos in the sidebar, or the first nine pull
+  requests. The View menu names what each one selects.
+
 ## [0.2.1]
 
 ### Changed

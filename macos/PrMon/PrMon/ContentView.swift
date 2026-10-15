@@ -15,6 +15,8 @@ struct ContentView: View {
     @State private var waitingTarget: PRTarget?
     @State private var graphTarget: PRTarget?
     @State private var columns = NavigationSplitViewVisibility.all
+    /// The list you last picked a row in: Command-1 to Command-9 pick from it.
+    @State private var listFocus = ListFocus.prs
 
     private var state: BackendState? { store.state }
 
@@ -32,13 +34,13 @@ struct ContentView: View {
             if let state {
                 NavigationSplitView(columnVisibility: $columns) {
                     Sidebar(
-                        store: store, state: state, selection: $repoName,
+                        store: store, state: state, selection: picked($repoName, in: .repos),
                         openRepoSettings: openRepoSettings
                     )
                         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 360)
                 } content: {
                     PRList(
-                        entry: entry, state: state, selection: $prID,
+                        entry: entry, state: state, selection: picked($prID, in: .prs),
                         act: { pr, option in act(on: pr, option) },
                         depend: { pr, command in depend(pr, command) }
                     )
@@ -75,6 +77,7 @@ struct ContentView: View {
         .sheet(item: $waitingTarget) { DependencyPicker(store: store, target: $0) }
         .sheet(item: $graphTarget) { DependencyGraphSheet(store: store, target: $0) }
         .focusedSceneValue(\.pullRequest, focusedContext)
+        .focusedSceneValue(\.listJump, listJump)
         .onChange(of: repoName) {
             selection.repo = repoName
             prID = nil
@@ -101,6 +104,25 @@ struct ContentView: View {
             repo: repo, pr: pr, act: { option in act(on: pr, option) },
             depend: { command in depend(pr, command) }
         )
+    }
+
+    /// A list's selection, noting that you picked from it. Command-1 to
+    /// Command-9 set the selection directly, so they don't move it.
+    private func picked<T>(_ selection: Binding<T>, in list: ListFocus) -> Binding<T> {
+        Binding(get: { selection.wrappedValue }, set: {
+            selection.wrappedValue = $0
+            listFocus = list
+        })
+    }
+
+    private var listJump: ListJump? {
+        guard let state else { return nil }
+        if listFocus == .repos {
+            let repos = state.owners.filter { !$0.collapsed }.flatMap(\.repos).prefix(9)
+            return ListJump(titles: repos.map(\.name)) { repoName = repos[repos.startIndex + $0].name }
+        }
+        let prs = (entry?.repo?.prs ?? []).prefix(9)
+        return ListJump(titles: prs.map { "#\($0.number) \($0.title)" }) { prID = prs[prs.startIndex + $0].id }
     }
 
     private func depend(_ pr: PullRequest, _ command: DependencyCommand) {
