@@ -4,6 +4,15 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.3.1]
+
+### Changed
+
+- The Mac app shows a PR's status as a chip under its title, next to the
+  merge chips, instead of as text beside the author. Checks that have failed
+  while others still run show two chips, Failed and Running, rather than one
+  long label. Running is blue.
+
 ## [0.3.0]
 
 ### Added

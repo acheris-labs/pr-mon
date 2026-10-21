@@ -21,6 +21,17 @@ extension PRStatus {
         }
     }
 
+    /// The chips under a PR in the list. Checks that have failed while others
+    /// still run show both chips rather than a status of their own.
+    var chips: [(text: String, tint: Color)] {
+        switch self {
+        case .failing: [("Failed", .red)]
+        case .pending: [("Running", .blue)]
+        case .earlyFail: [("Failed", .red), ("Running", .blue)]
+        default: [(title, color)]
+        }
+    }
+
     var symbol: String {
         switch self {
         case .ready: "checkmark.circle.fill"
@@ -42,7 +53,8 @@ extension PRStatus {
         case .blocked, .behind: .orange
         case .earlyFail: .yellow
         case .waiting: .cyan
-        case .pending, .draft, .checking, .unknown: .secondary
+        case .pending: .blue
+        case .draft, .checking, .unknown: .secondary
         }
     }
 }

@@ -392,7 +392,6 @@ private struct PRRow: View {
                 HStack(spacing: 6) {
                     Text(verbatim: "#\(pr.number)")
                     Text(pr.author)
-                    Text(pr.status.title).foregroundStyle(pr.status.color)
                     if pr.muted == true {
                         Image(systemName: "bell.slash")
                             .help("Notifications muted")
@@ -401,12 +400,17 @@ private struct PRRow: View {
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                if pr.autoMerge != nil {
-                    MergeChip(text: "Auto-merge", tint: .green)
-                        .help("GitHub auto-merge is on")
-                } else if armed {
-                    MergeChip(text: "Merge when ready", tint: .accentColor)
-                        .help("pr-mon merges it once it's ready")
+                HStack(spacing: 4) {
+                    ForEach(pr.status.chips, id: \.text) { chip in
+                        Chip(text: chip.text, tint: chip.tint)
+                    }
+                    if pr.autoMerge != nil {
+                        Chip(text: "Auto-merge", tint: .green, symbol: "arrow.triangle.merge")
+                            .help("GitHub auto-merge is on")
+                    } else if armed {
+                        Chip(text: "Merge when ready", tint: .accentColor, symbol: "arrow.triangle.merge")
+                            .help("pr-mon merges it once it's ready")
+                    }
                 }
             }
         }
@@ -414,20 +418,30 @@ private struct PRRow: View {
     }
 }
 
-/// A merge waiting to happen, in a colour of its own so it stands out in the
-/// list: green for GitHub's auto-merge, the accent colour for pr-mon's.
-private struct MergeChip: View {
+/// A short tag under a PR's title, tinted by what it says: its status, or a
+/// merge waiting to happen (green for GitHub's auto-merge, the accent colour
+/// for pr-mon's).
+private struct Chip: View {
     let text: String
     let tint: Color
+    var symbol: String?
 
     var body: some View {
-        Label(text, systemImage: "arrow.triangle.merge")
+        label
             .font(.caption.weight(.semibold))
             .foregroundStyle(tint)
             .padding(.vertical, 1)
             .padding(.horizontal, 6)
             .background(tint.opacity(0.15), in: Capsule())
             .fixedSize()
+    }
+
+    @ViewBuilder private var label: some View {
+        if let symbol {
+            Label(text, systemImage: symbol)
+        } else {
+            Text(text)
+        }
     }
 }
 
