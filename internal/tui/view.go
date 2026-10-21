@@ -486,6 +486,9 @@ func (m *Model) detailsText() string {
 	if pr.Muted {
 		lines = append(lines, "🔕 Notifications muted")
 	}
+	if pr.AutoRetry {
+		lines = append(lines, "↻ Failed checks retry automatically, once")
+	}
 	for index, issue := range pr.ClosingIssues {
 		label := "Closes:      "
 		if index > 0 {

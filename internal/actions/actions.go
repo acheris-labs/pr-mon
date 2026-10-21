@@ -49,6 +49,9 @@ func Available(repo models.Repo, pr models.PullRequest, armed *models.ArmedMerge
 	if rerun := rerunOption(pr); rerun != nil {
 		options = append(options, *rerun)
 	}
+	if retry := autoRetryOption(pr); retry != nil {
+		options = append(options, *retry)
+	}
 	return append(options, muteOption(pr))
 }
 
@@ -77,6 +80,26 @@ func rerunOption(pr models.PullRequest) *models.ActionOption {
 	return &models.ActionOption{
 		Key: "rerun", Kind: "rerun_checks", Label: "Re-run failed checks", Available: true,
 	}
+}
+
+// autoRetryOption has pr-mon re-run the failed jobs once their run finishes,
+// or stops it; nil when the PR has no GitHub Actions checks.
+func autoRetryOption(pr models.PullRequest) *models.ActionOption {
+	if pr.AutoRetry {
+		return &models.ActionOption{
+			Key: "auto_retry", Kind: "auto_retry_off", Label: "Stop retrying failed checks",
+			Available: true,
+		}
+	}
+	for _, check := range pr.Checks {
+		if check.RunID != nil {
+			return &models.ActionOption{
+				Key: "auto_retry", Kind: "auto_retry_on", Label: "Retry failed checks automatically",
+				Available: true,
+			}
+		}
+	}
+	return nil
 }
 
 // forceMergeOption merges past branch protection, for someone GitHub lets

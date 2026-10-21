@@ -284,7 +284,7 @@ func (m *Monitor) applyChanged(ctx context.Context, name string, listed github.O
 }
 
 // RefreshInFlight re-fetches only the PRs that are moving: checks running, or
-// armed for merge. Their repos are left alone.
+// armed for merge or an automatic retry. Their repos are left alone.
 func (m *Monitor) RefreshInFlight(ctx context.Context) {
 	m.mutex.Lock()
 	if !m.pausedUntil.IsZero() && time.Now().Before(m.pausedUntil) {
@@ -303,9 +303,10 @@ func (m *Monitor) RefreshInFlight(ctx context.Context) {
 	byRepo := map[string][]int{}
 	for name, repo := range m.repos {
 		armed := m.armedLocked(name)
+		retry := m.autoRetryLocked(name)
 		for _, pr := range repo.PRs {
 			_, isArmed := armed[pr.Number]
-			if !isArmed && !watched[name][pr.Number] && !moving(pr, time.Now()) {
+			if !isArmed && !retry[pr.Number] && !watched[name][pr.Number] && !moving(pr, time.Now()) {
 				continue
 			}
 			if len(byRepo[name]) == activeLimit {

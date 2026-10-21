@@ -105,6 +105,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           },
@@ -178,6 +179,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           }
@@ -277,6 +279,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           },
@@ -362,6 +365,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": [
               {
@@ -465,6 +469,16 @@
                 "offers_delete_branch": false
               },
               {
+                "key": "auto_retry",
+                "kind": "auto_retry_on",
+                "label": "Retry failed checks automatically",
+                "available": true,
+                "reason": null,
+                "note": null,
+                "needs_method": false,
+                "offers_delete_branch": false
+              },
+              {
                 "key": "mute",
                 "kind": "mute",
                 "label": "Mute notifications",
@@ -476,6 +490,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           },
@@ -554,6 +569,7 @@
               }
             ],
             "muted": true,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           },
@@ -646,6 +662,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           },
@@ -724,6 +741,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           },
@@ -802,6 +820,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           },
@@ -878,6 +897,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [],
             "required_by": []
           },
@@ -956,6 +976,7 @@
               }
             ],
             "muted": false,
+            "auto_retry": false,
             "waits_on": [
               {
                 "repo": "acme/api",

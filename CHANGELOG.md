@@ -4,6 +4,22 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [Unreleased]
+
+### Added
+
+- Retry failed checks automatically: `R` in the dashboard's action menu,
+  ⇧⌥⌘R in the app. pr-mon re-runs a PR's failed GitHub Actions jobs once, as
+  soon as their run finishes (GitHub won't re-run a run that's still going),
+  then switches off. A new commit switches it off too.
+- A PR whose checks have failed while others are still running shows
+  `EARLY_FAIL` (a yellow clock in the app) instead of "Checks Failing".
+
+### Changed
+
+- The dashboard's status colours match the app's: pending is gray, blocked
+  and behind are orange.
+
 ## [0.2.2]
 
 ### Added

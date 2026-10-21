@@ -79,7 +79,8 @@ func (m *Monitor) AddRepo(ctx context.Context, name string) (string, error) {
 	return repo.Name, nil
 }
 
-// RemoveRepo forgets a repo, its notification settings, armed merges and muted PRs.
+// RemoveRepo forgets a repo, its notification settings, armed merges, muted
+// PRs and automatic retries.
 func (m *Monitor) RemoveRepo(name string) error {
 	m.mutex.Lock()
 	if err := m.requireRepoLocked(name); err != nil {
@@ -101,6 +102,7 @@ func (m *Monitor) RemoveRepo(name string) error {
 	m.track.Forget(name)
 	delete(m.state.Armed, name)
 	delete(m.state.Muted, name)
+	delete(m.state.Retry, name)
 	m.forgetWaitingLocked(func(repo string, _ int) bool { return repo == name })
 	m.saveConfigLocked()
 	m.saveStateLocked()
@@ -203,6 +205,12 @@ func (m *Monitor) Perform(ctx context.Context, repoName string, number int, acti
 		return nil
 	case "mute", "unmute":
 		m.setMuted(repoName, number, action.Kind == "mute")
+		return nil
+	case "auto_retry_on", "auto_retry_off":
+		m.setAutoRetry(repoName, pr, action.Kind == "auto_retry_on")
+		if repo, found := m.Repo(repoName); found {
+			m.checkAutoRetry(repoName, repo)
+		}
 		return nil
 	}
 

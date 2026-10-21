@@ -32,6 +32,8 @@ type AppState struct {
 	Muted map[string][]int `json:"muted"`
 	// Tracker records: {repo: {"<number>": {"status": …, "seen": …}}}
 	PRs map[string]map[string]Record `json:"prs"`
+	// PRs to re-run failed checks for once: {repo: {"<number>": head SHA when asked}}
+	Retry map[string]map[string]string `json:"retry"`
 }
 
 func New() AppState {
@@ -41,6 +43,7 @@ func New() AppState {
 		Dependencies: map[string][]string{},
 		Muted:        map[string][]int{},
 		PRs:          map[string]map[string]Record{},
+		Retry:        map[string]map[string]string{},
 	}
 }
 
@@ -65,6 +68,7 @@ func Load(path string) (AppState, string) {
 		Dependencies json.RawMessage `json:"dependencies"`
 		Muted        json.RawMessage `json:"muted"`
 		PRs          json.RawMessage `json:"prs"`
+		Retry        json.RawMessage `json:"retry"`
 	}
 	if err := json.Unmarshal(text, &parts); err != nil {
 		return New(), fmt.Sprintf("Ignoring invalid state %s: expected an object", path)
@@ -100,6 +104,12 @@ func Load(path string) (AppState, string) {
 			loaded.Muted = muted
 		}
 	}
+	if len(parts.Retry) > 0 {
+		var retry map[string]map[string]string
+		if json.Unmarshal(parts.Retry, &retry) == nil && retry != nil {
+			loaded.Retry = retry
+		}
+	}
 	return loaded, ""
 }
 
@@ -132,6 +142,9 @@ func Save(path string, state AppState) error {
 	}
 	if state.PRs == nil {
 		state.PRs = map[string]map[string]Record{}
+	}
+	if state.Retry == nil {
+		state.Retry = map[string]map[string]string{}
 	}
 	text, err := json.MarshalIndent(state, "", " ")
 	if err != nil {

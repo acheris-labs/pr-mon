@@ -38,7 +38,7 @@ type actionMenu struct {
 
 var menuSlots = []struct{ key, shortcut string }{
 	{"merge", "m"}, {"auto_merge", "a"}, {"update", "u"}, {"draft", "t"}, {"rerun", "r"},
-	{"mute", "n"},
+	{"auto_retry", "R"}, {"mute", "n"},
 }
 
 var methodKeys = []struct {

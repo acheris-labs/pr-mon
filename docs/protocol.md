@@ -238,6 +238,7 @@ reimplement the rules.
 | `last_check_started_at` | timestamp or null | |
 | `actions` | [`ActionOption`] | The PR's action menu, in display order. |
 | `muted` | bool | The user has silenced this PR's notifications (`mute`). |
+| `auto_retry` | bool | pr-mon will re-run this PR's failed checks once (`auto_retry_on`). |
 | `waits_on` | [`PRRef`] | PRs that must merge before this one, in the order they were added. |
 | `required_by` | [`PRRef`] | PRs waiting for this one to merge. |
 
@@ -310,7 +311,7 @@ disabled with its `reason`.
 
 | Field | Type | Meaning |
 |:------|:-----|:--------|
-| `key` | string | Menu slot: `merge`, `auto_merge`, `update`, `draft`, `rerun` or `mute` (the TUI's `m`, `a`, `u`, `t`, `r`, `n`). |
+| `key` | string | Menu slot: `merge`, `auto_merge`, `update`, `draft`, `rerun`, `auto_retry` or `mute` (the TUI's `m`, `a`, `u`, `t`, `r`, `R`, `n`). |
 | `kind` | string | The `Action` kind to send when chosen. |
 | `label` | string | Text to show. |
 | `available` | bool | False: show it disabled. |
@@ -349,6 +350,8 @@ To act on an entry, send `perform` with
 | `mark_ready` | Take the PR out of draft. |
 | `convert_to_draft` | Put the PR back into draft. |
 | `rerun_checks` | Re-run the failed jobs of this PR's GitHub Actions runs. Offered only while one of its Actions checks has failed. |
+| `auto_retry_on` | Re-run the failed jobs of this PR's GitHub Actions runs once, as soon as a run with a failure has finished. Switches off after retrying, when the PR gets a new head commit, or when it closes. Offered while the PR has Actions checks. |
+| `auto_retry_off` | Undo `auto_retry_on`. |
 | `mute` | Send no notifications about this PR, until it is unmuted or closes. |
 | `unmute` | Undo `mute`. |
 | `force_merge` | Merge past branch protection (failing checks, missing reviews, behind base). Offered in the `merge` slot only when `can_bypass` is true and nothing else stands in the way: never for conflicts, drafts, or a PR waiting on dependencies. Clients should confirm it and show it as dangerous. |

@@ -117,8 +117,8 @@ enum Fixtures {
         #expect(ready[0].available && ready[0].needsMethod && ready[0].offersDeleteBranch)
         #expect(ready[1].reason == "already mergeable")
         #expect(api.prs[4].actions.map(\.kind) == ["merge", "auto_merge_on", "update", "convert_to_draft", "mute"])
-        // A PR with a failed GitHub Actions run offers to re-run it.
-        #expect(api.prs[2].actions.map(\.key) == ["merge", "auto_merge", "draft", "rerun", "mute"])
+        // A PR with a failed GitHub Actions run offers to re-run it, now or automatically.
+        #expect(api.prs[2].actions.map(\.key) == ["merge", "auto_merge", "draft", "rerun", "auto_retry", "mute"])
         #expect(api.prs[2].checks.first?.runId == 4242)
         // Failing, but the user may bypass branch protection: merge becomes force merge.
         #expect(api.prs[2].canBypass == true)

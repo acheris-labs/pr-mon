@@ -124,6 +124,7 @@ autostart, use Send test in the notifications dialog (`S`, then `n`) and approve
 | `u` | action menu | Update branch (when behind base) |
 | `t` | action menu | Toggle draft: mark ready for review, or convert back to draft |
 | `r` | action menu | Re-run this PR's failed GitHub Actions jobs |
+| `R` | action menu | Re-run them automatically, once, when their run finishes (off again after a new commit) |
 | `n` | action menu | Mute (or unmute) this PR's notifications, until it merges or closes |
 | `d` | action menu | Toggle "delete remote branch" |
 | `w` | PR list or action menu | Dependencies: what the PR waits on (`a` add, `d` remove, `g` graph) |

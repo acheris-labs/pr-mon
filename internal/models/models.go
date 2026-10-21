@@ -120,7 +120,7 @@ type ArmedMerge struct {
 
 // ActionOption is one entry of a PR's action menu, as the backend decides it.
 type ActionOption struct {
-	Key                string  `json:"key"`  // "merge" | "auto_merge" | "update" | "draft" | "rerun" | "mute"
+	Key                string  `json:"key"`  // "merge" | "auto_merge" | "update" | "draft" | "rerun" | "auto_retry" | "mute"
 	Kind               string  `json:"kind"` // the Action kind to send
 	Label              string  `json:"label"`
 	Available          bool    `json:"available"`
@@ -163,6 +163,8 @@ type PullRequest struct {
 	Actions            []ActionOption `json:"actions"`
 	// The user has silenced this PR's notifications.
 	Muted bool `json:"muted"`
+	// pr-mon re-runs this PR's failed Actions jobs once, when their run finishes.
+	AutoRetry bool `json:"auto_retry"`
 	// PRs that must merge before this one, and PRs waiting for this one.
 	WaitsOn    []PRRef `json:"waits_on"`
 	RequiredBy []PRRef `json:"required_by"`
@@ -190,7 +192,8 @@ type Repo struct {
 // Action is a user-requested change to a PR.
 type Action struct {
 	// "merge" | "update" | "auto_merge_on" | "auto_merge_off" | "arm_merge" | "disarm_merge",
-	// "mark_ready" | "convert_to_draft" | "rerun_checks" | "mute" | "unmute" | "force_merge"
+	// "mark_ready" | "convert_to_draft" | "rerun_checks" | "auto_retry_on" | "auto_retry_off",
+	// "mute" | "unmute" | "force_merge"
 	Kind         string       `json:"kind"`
 	Method       *MergeMethod `json:"method"`
 	DeleteBranch bool         `json:"delete_branch"`

@@ -491,6 +491,7 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 	}
 	m.holdForDependencies(name)
 	m.checkArmed(name, repo)
+	m.checkAutoRetry(name, repo)
 	m.emit(Event{Kind: "repo", Name: name})
 }
 
@@ -576,13 +577,15 @@ func (m *Monitor) rebuildLocked(name string) {
 
 // decorateLocked adds what the backend knows beyond GitHub to a fetched repo:
 // what each PR waits on (holding it back until those merge), whether it is
-// muted, and its actions.
+// muted or retried automatically, and its actions.
 func (m *Monitor) decorateLocked(repo models.Repo) models.Repo {
 	graph := dependencies.Graph(m.state.Dependencies)
 	muted := m.mutedLocked(repo.Name)
+	retry := m.autoRetryLocked(repo.Name)
 	prs := make([]models.PullRequest, len(repo.PRs))
 	for i, pr := range repo.PRs {
 		pr.Muted = muted[pr.Number]
+		pr.AutoRetry = retry[pr.Number]
 		key := models.PRKey(repo.Name, pr.Number)
 		pr.WaitsOn = m.refsLocked(graph.WaitsOn(key))
 		pr.RequiredBy = m.refsLocked(graph.RequiredBy(key))

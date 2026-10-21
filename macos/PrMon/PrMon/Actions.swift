@@ -203,7 +203,7 @@ struct PullRequestCommands: Commands {
                         context.act(option)
                     }
                         .disabled(!option.available)
-                        .keyboardShortcut(Self.shortcut(option.key), modifiers: [.command, .option])
+                        .keyboardShortcut(Self.shortcut(option.key))
                 }
                 Divider()
                 Button("Wait for Another Pull Request…") { context.depend(.waitFor) }
@@ -217,14 +217,16 @@ struct PullRequestCommands: Commands {
         }
     }
 
-    private static func shortcut(_ key: String) -> KeyEquivalent {
-        switch key {
-        case "merge": "m"
-        case "auto_merge": "a"
-        case "draft": "t"
-        case "rerun": "r"
-        case "mute": "n"
-        default: "u"
+    private static func shortcut(_ key: String) -> KeyboardShortcut {
+        let modifiers: EventModifiers = [.command, .option]
+        return switch key {
+        case "merge": KeyboardShortcut("m", modifiers: modifiers)
+        case "auto_merge": KeyboardShortcut("a", modifiers: modifiers)
+        case "draft": KeyboardShortcut("t", modifiers: modifiers)
+        case "rerun": KeyboardShortcut("r", modifiers: modifiers)
+        case "auto_retry": KeyboardShortcut("r", modifiers: modifiers.union(.shift))
+        case "mute": KeyboardShortcut("n", modifiers: modifiers)
+        default: KeyboardShortcut("u", modifiers: modifiers)
         }
     }
 }
