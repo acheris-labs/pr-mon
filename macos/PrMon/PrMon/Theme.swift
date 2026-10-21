@@ -9,6 +9,7 @@ extension PRStatus {
         switch self {
         case .ready: "Ready"
         case .failing: "Checks Failing"
+        case .earlyFail: "Checks Running, Some Failed"
         case .conflict: "Merge Conflict"
         case .blocked: "Blocked"
         case .behind: "Behind Base"
@@ -27,7 +28,7 @@ extension PRStatus {
         case .conflict: "exclamationmark.triangle.fill"
         case .blocked: "minus.circle.fill"
         case .behind: "arrow.down.circle.fill"
-        case .pending: "clock.fill"
+        case .pending, .earlyFail: "clock.fill"
         case .draft: "pencil.circle"
         case .waiting: "hourglass.circle.fill"
         case .checking, .unknown: "questionmark.circle"
@@ -39,6 +40,7 @@ extension PRStatus {
         case .ready: .green
         case .failing, .conflict: .red
         case .blocked, .behind: .orange
+        case .earlyFail: .yellow
         case .waiting: .cyan
         case .pending, .draft, .checking, .unknown: .secondary
         }

@@ -29,6 +29,7 @@ var (
 	green  = lipgloss.Color("2")
 	red    = lipgloss.Color("1")
 	yellow = lipgloss.Color("3")
+	orange = lipgloss.Color("208")
 	cyan   = lipgloss.Color("6")
 	blue   = lipgloss.Color("4")
 
@@ -55,10 +56,12 @@ func statusStyle(status models.Status) (string, lipgloss.Style) {
 	case models.StatusConflict, models.StatusFailing:
 		return "✗", lipgloss.NewStyle().Bold(true).Foreground(red)
 	case models.StatusBlocked:
-		return "⚠", lipgloss.NewStyle().Bold(true).Foreground(red)
+		return "⚠", lipgloss.NewStyle().Bold(true).Foreground(orange)
 	case models.StatusBehind:
-		return "↓", lipgloss.NewStyle().Foreground(yellow)
+		return "↓", lipgloss.NewStyle().Foreground(orange)
 	case models.StatusPending:
+		return "⋯", dim
+	case models.StatusEarlyFail:
 		return "⋯", lipgloss.NewStyle().Foreground(yellow)
 	case models.StatusDraft:
 		return "◌", dim
@@ -381,7 +384,7 @@ func (m *Model) prTable(width, height int) string {
 	armed := m.backend.Armed(name)
 	const (
 		numberWidth = 8
-		statusWidth = 14
+		statusWidth = 16
 		authorWidth = 14
 	)
 	titleWidth := max(10, width-numberWidth-statusWidth-authorWidth-2)

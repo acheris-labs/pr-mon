@@ -189,7 +189,7 @@ func TestSpecEnumerations(t *testing.T) {
 	text := spec(t)
 	groups := [][]string{
 		config.EventNames,
-		{"DRAFT", "CHECKING", "CONFLICT", "FAILING", "PENDING", "BEHIND", "BLOCKED", "WAITING", "READY"},
+		{"DRAFT", "CHECKING", "CONFLICT", "FAILING", "EARLY_FAIL", "PENDING", "BEHIND", "BLOCKED", "WAITING", "READY"},
 		{"SQUASH", "MERGE", "REBASE"},
 	}
 	for _, values := range groups {

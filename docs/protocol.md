@@ -232,7 +232,7 @@ reimplement the rules.
 | `closing_issues` | [`LinkedIssue`] | Issues this PR closes on merge; empty when none are linked. |
 | `last_commit_at` | timestamp or null | |
 | `head_sha` | string or null | |
-| `status` | string | One of `DRAFT`, `CHECKING`, `CONFLICT`, `FAILING`, `PENDING`, `BEHIND`, `BLOCKED`, `WAITING`, `READY`. `WAITING`: mergeable, but waiting on other PRs to merge first. |
+| `status` | string | One of `DRAFT`, `CHECKING`, `CONFLICT`, `FAILING`, `EARLY_FAIL`, `PENDING`, `BEHIND`, `BLOCKED`, `WAITING`, `READY`. `EARLY_FAIL`: a check has failed while others are still running. `WAITING`: mergeable, but waiting on other PRs to merge first. |
 | `reasons` | [`Reason`] | Why it is (or isn't) mergeable, in display order. |
 | `strictly_ready` | bool | Safe to merge unattended (what merge when ready waits for). |
 | `last_check_started_at` | timestamp or null | |

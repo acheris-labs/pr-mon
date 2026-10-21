@@ -93,6 +93,11 @@ func PRStatus(pr models.PullRequest) models.Status {
 	case pr.Mergeable == "CONFLICTING" || pr.MergeState == "DIRTY":
 		return models.StatusConflict
 	case (state == "FAILURE" || state == "ERROR") && pr.MergeState != "UNSTABLE":
+		for _, check := range pr.Checks {
+			if CheckPending(check) {
+				return models.StatusEarlyFail
+			}
+		}
 		return models.StatusFailing
 	case state == "PENDING" || state == "EXPECTED":
 		return models.StatusPending

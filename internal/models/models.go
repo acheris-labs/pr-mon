@@ -16,8 +16,10 @@ const (
 	StatusConflict Status = "CONFLICT"
 	StatusFailing  Status = "FAILING"
 	StatusPending  Status = "PENDING"
-	StatusBehind   Status = "BEHIND"
-	StatusBlocked  Status = "BLOCKED"
+	// A check has failed while others are still running.
+	StatusEarlyFail Status = "EARLY_FAIL"
+	StatusBehind    Status = "BEHIND"
+	StatusBlocked   Status = "BLOCKED"
 	// Mergeable as far as GitHub is concerned, but waiting on other PRs to merge first.
 	StatusWaiting Status = "WAITING"
 	StatusReady   Status = "READY"

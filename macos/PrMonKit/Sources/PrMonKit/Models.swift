@@ -21,6 +21,8 @@ public enum PRStatus: String, LenientEnum {
     case checking = "CHECKING"
     case conflict = "CONFLICT"
     case failing = "FAILING"
+    /// A check has failed while others are still running.
+    case earlyFail = "EARLY_FAIL"
     case pending = "PENDING"
     case behind = "BEHIND"
     case blocked = "BLOCKED"
