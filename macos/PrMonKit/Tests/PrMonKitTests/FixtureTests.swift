@@ -129,6 +129,9 @@ enum Fixtures {
         // A muted PR says so, and its menu offers to unmute it.
         #expect(api.prs[0].muted == false)
         #expect(api.prs[3].muted == true)
+        // A PR set to retry its failed checks says so.
+        #expect(api.prs[0].autoRetry == false)
+        #expect(api.prs[2].autoRetry == true)
         #expect(api.prs[3].actions.last?.kind == "unmute")
 
         let rich = try #require(snapshot.repos["Textualize/rich"])

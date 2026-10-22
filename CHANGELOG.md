@@ -4,6 +4,13 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.3.2]
+
+### Added
+
+- The Mac app shows an Auto-retry chip under a PR set to retry its failed
+  checks.
+
 ## [0.3.1]
 
 ### Changed

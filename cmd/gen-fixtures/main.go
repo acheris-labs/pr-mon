@@ -61,7 +61,7 @@ func graph() models.DependencyGraph {
 }
 
 // state is a backend in a representative state: every status, an armed merge,
-// a muted PR, a repo that failed to load, GitHub's own auto-merge, and a PR
+// a muted PR, a PR set to retry its failed checks, a repo that failed to load, GitHub's own auto-merge, and a PR
 // waiting on two others (one in a repo pr-mon doesn't monitor).
 func state() protocol.Snapshot {
 	api := testfixtures.Repo("acme/api", []models.PullRequest{
@@ -90,6 +90,7 @@ func state() protocol.Snapshot {
 			}
 			p.ChecksTotal = 5
 			p.CanBypass = true // so it offers force merge
+			p.AutoRetry = true
 		}),
 		pr(4, func(p *models.PullRequest) {
 			testfixtures.Conflict(p)

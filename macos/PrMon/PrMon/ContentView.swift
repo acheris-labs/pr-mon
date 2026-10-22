@@ -411,6 +411,10 @@ private struct PRRow: View {
                         Chip(text: "Merge when ready", tint: .accentColor, symbol: "arrow.triangle.merge")
                             .help("pr-mon merges it once it's ready")
                     }
+                    if pr.autoRetry == true {
+                        Chip(text: "Auto-retry", tint: .purple, symbol: "arrow.clockwise")
+                            .help("pr-mon re-runs failed checks once, when their run finishes")
+                    }
                 }
             }
         }

@@ -471,8 +471,8 @@
               },
               {
                 "key": "auto_retry",
-                "kind": "auto_retry_on",
-                "label": "Retry failed checks automatically",
+                "kind": "auto_retry_off",
+                "label": "Stop retrying failed checks",
                 "available": true,
                 "reason": null,
                 "note": null,
@@ -491,7 +491,7 @@
               }
             ],
             "muted": false,
-            "auto_retry": false,
+            "auto_retry": true,
             "waits_on": [],
             "required_by": []
           },

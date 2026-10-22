@@ -308,6 +308,9 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public var actions: [ActionOption]
     /// The user has silenced its notifications; nil from a backend older than muting.
     public var muted: Bool?
+    /// pr-mon re-runs its failed checks once, when their run finishes; nil
+    /// from a backend older than automatic retry.
+    public var autoRetry: Bool?
     /// PRs that must merge before this one, and PRs waiting for this one.
     public var waitsOn: [PRRef]
     public var requiredBy: [PRRef]
@@ -336,6 +339,7 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
         case headSha = "head_sha"
         case strictlyReady = "strictly_ready"
         case lastCheckStartedAt = "last_check_started_at"
+        case autoRetry = "auto_retry"
     }
 }
 
