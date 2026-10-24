@@ -20,6 +20,33 @@ type Record struct {
 	Seen   bool   `json:"seen"`
 }
 
+// Button is what one opaque key on a chat message does.
+type Button struct {
+	// Kind is merge, force_merge (asks to confirm), confirm_force_merge,
+	// cancel, rerun_checks or dismiss.
+	Kind         string `json:"kind"`
+	Method       string `json:"method,omitempty"`
+	DeleteBranch bool   `json:"delete_branch,omitempty"`
+}
+
+// Message is a chat message sent about one PR, remembered so its buttons keep
+// working across restarts.
+type Message struct {
+	Repo    string            `json:"repo"`
+	Number  int               `json:"number"`
+	Event   string            `json:"event"`
+	Status  string            `json:"status"`
+	HeadSha string            `json:"head_sha"`
+	SentAt  string            `json:"sent_at"`
+	Title   string            `json:"title"` // the text as sent, for an edit
+	Lines   []string          `json:"lines"` // when it can't be deleted
+	Keys    map[string]Button `json:"keys"`
+	// When "Force merge #N?" was shown (RFC 3339); "" when it isn't.
+	ConfirmAskedAt string `json:"confirm_asked_at"`
+	// Why the message is being retired, while that waits for the handler.
+	Retiring string `json:"retiring,omitempty"`
+}
+
 // AppState is state.json. Fields are alphabetical because that's the order the
 // file has always been written in.
 type AppState struct {
@@ -30,6 +57,8 @@ type AppState struct {
 	Dependencies map[string][]string `json:"dependencies"`
 	// PRs whose notifications are silenced: {repo: [number, …]}
 	Muted map[string][]int `json:"muted"`
+	// Tracked chat messages, keyed by channel message ID.
+	Messages map[string]Message `json:"messages"`
 	// Tracker records: {repo: {"<number>": {"status": …, "seen": …}}}
 	PRs map[string]map[string]Record `json:"prs"`
 	// PRs to re-run failed checks for once: {repo: {"<number>": head SHA when asked}}
@@ -41,6 +70,7 @@ func New() AppState {
 		Armed:        map[string]map[string]json.RawMessage{},
 		Collapsed:    []string{},
 		Dependencies: map[string][]string{},
+		Messages:     map[string]Message{},
 		Muted:        map[string][]int{},
 		PRs:          map[string]map[string]Record{},
 		Retry:        map[string]map[string]string{},
@@ -66,6 +96,7 @@ func Load(path string) (AppState, string) {
 		Armed        json.RawMessage `json:"armed"`
 		Collapsed    json.RawMessage `json:"collapsed"`
 		Dependencies json.RawMessage `json:"dependencies"`
+		Messages     json.RawMessage `json:"messages"`
 		Muted        json.RawMessage `json:"muted"`
 		PRs          json.RawMessage `json:"prs"`
 		Retry        json.RawMessage `json:"retry"`
@@ -96,6 +127,12 @@ func Load(path string) (AppState, string) {
 		var dependencies map[string][]string
 		if json.Unmarshal(parts.Dependencies, &dependencies) == nil && dependencies != nil {
 			loaded.Dependencies = dependencies
+		}
+	}
+	if len(parts.Messages) > 0 {
+		var messages map[string]Message
+		if json.Unmarshal(parts.Messages, &messages) == nil && messages != nil {
+			loaded.Messages = messages
 		}
 	}
 	if len(parts.Muted) > 0 {
@@ -136,6 +173,9 @@ func Save(path string, state AppState) error {
 	}
 	if state.Dependencies == nil {
 		state.Dependencies = map[string][]string{}
+	}
+	if state.Messages == nil {
+		state.Messages = map[string]Message{}
 	}
 	if state.Muted == nil {
 		state.Muted = map[string][]int{}

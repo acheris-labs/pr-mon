@@ -59,6 +59,8 @@ type Hello struct {
 	Version  string  `json:"version"`
 	PID      *int    `json:"pid"`
 	Notifier *string `json:"notifier"`
+	// TwoWay is the running two-way channel's name ("Telegram"), or nil.
+	TwoWay *string `json:"two_way"`
 	// A client restarting an outdated backend waits while this is true.
 	Merging bool `json:"merging"`
 }

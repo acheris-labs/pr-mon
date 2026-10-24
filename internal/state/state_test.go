@@ -121,3 +121,64 @@ func TestDefaultPath(t *testing.T) {
 		t.Errorf("path = %q", got)
 	}
 }
+
+func TestMessagesRoundTrip(t *testing.T) {
+	file := path(t, "state.json")
+	saved := state.New()
+	saved.Messages = map[string]state.Message{
+		"501": {
+			Repo: "acme/api", Number: 12, Event: "ready", Status: "READY",
+			HeadSha: "abc123", SentAt: "2026-10-22T10:00:00Z",
+			ConfirmAskedAt: "2026-10-22T10:05:00Z", Retiring: "PR closed",
+			Title: "acme/api #12 · Fix it", Lines: []string{"alice · fix → main"},
+			Keys: map[string]state.Button{
+				"k1": {Kind: "merge", Method: "squash", DeleteBranch: true},
+				"k2": {Kind: "dismiss"},
+			},
+		},
+	}
+	if err := state.Save(file, saved); err != nil {
+		t.Fatal(err)
+	}
+	loaded, warning := state.Load(file)
+	if warning != "" || !reflect.DeepEqual(loaded, saved) {
+		t.Errorf("loaded = %+v, warning = %q", loaded, warning)
+	}
+}
+
+func TestBadMessagesSectionKeepsTheRest(t *testing.T) {
+	file := path(t, "state.json")
+	write(t, file, `{"collapsed": ["acme"], "messages": 7}`)
+	loaded, warning := state.Load(file)
+	if warning != "" {
+		t.Errorf("warning = %q", warning)
+	}
+	if loaded.Messages == nil || len(loaded.Messages) != 0 {
+		t.Errorf("messages = %#v, want empty", loaded.Messages)
+	}
+	if !reflect.DeepEqual(loaded.Collapsed, []string{"acme"}) {
+		t.Errorf("collapsed = %v", loaded.Collapsed)
+	}
+}
+
+func TestOldStateHasNoMessages(t *testing.T) {
+	file := path(t, "state.json")
+	write(t, file, `{"collapsed": []}`)
+	loaded, _ := state.Load(file)
+	if loaded.Messages == nil || len(loaded.Messages) != 0 {
+		t.Errorf("messages = %#v, want empty non-nil", loaded.Messages)
+	}
+}
+
+// Before confirm_asked_at, a message being confirmed said "confirming": true.
+func TestOldConfirmingFlagLoads(t *testing.T) {
+	file := path(t, "state.json")
+	write(t, file, `{"messages": {"7": {"repo": "acme/api", "number": 1, "confirming": true}}}`)
+	loaded, warning := state.Load(file)
+	if warning != "" {
+		t.Errorf("warning = %q", warning)
+	}
+	if got := loaded.Messages["7"]; got.Repo != "acme/api" || got.Number != 1 {
+		t.Errorf("messages = %+v, want message 7 kept", loaded.Messages)
+	}
+}

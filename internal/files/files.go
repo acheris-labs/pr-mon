@@ -45,3 +45,17 @@ func WriteAtomic(path, text string) error {
 	}
 	return os.Rename(name, path)
 }
+
+// OpenLog opens a log for appending, readable only by its owner: new files are
+// created 0600 and an existing one is tightened to 0600.
+func OpenLog(path string) (*os.File, error) {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
+}

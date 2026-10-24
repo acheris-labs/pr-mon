@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/acheris-labs/pr-mon/internal/files"
 	"github.com/acheris-labs/pr-mon/internal/protocol"
 	"github.com/acheris-labs/pr-mon/internal/state"
 )
@@ -227,7 +228,7 @@ func Spawn(paths Paths, timeout time.Duration) (int, error) {
 	if runtime.GOOS == "darwin" {
 		return spawnSession(paths, executable, timeout)
 	}
-	logFile, err := os.OpenFile(paths.Log(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	logFile, err := files.OpenLog(paths.Log())
 	if err != nil {
 		return 0, err
 	}

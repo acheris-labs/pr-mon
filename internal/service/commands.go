@@ -31,6 +31,16 @@ func (m *Monitor) saveConfigLocked() {
 	}
 }
 
+// requireSavableConfigLocked refuses a settings change when the config file
+// couldn't be read: saving would replace the user's file with defaults.
+func (m *Monitor) requireSavableConfigLocked() error {
+	if m.config.Ignored == "" {
+		return nil
+	}
+	return &Error{Message: fmt.Sprintf("Settings can't be saved. %s. Fix the file, then restart the backend.",
+		m.config.Ignored)}
+}
+
 func (m *Monitor) requireRepoLocked(name string) error {
 	for _, repo := range m.config.Repos {
 		if repo == name {
@@ -51,6 +61,10 @@ func (m *Monitor) RefreshAll() {
 // AddRepo starts monitoring a repo and returns the name as GitHub spells it.
 func (m *Monitor) AddRepo(ctx context.Context, name string) (string, error) {
 	m.mutex.Lock()
+	if err := m.requireSavableConfigLocked(); err != nil {
+		m.mutex.Unlock()
+		return "", err
+	}
 	for _, repo := range m.config.Repos {
 		if strings.EqualFold(repo, name) {
 			m.mutex.Unlock()
@@ -80,9 +94,13 @@ func (m *Monitor) AddRepo(ctx context.Context, name string) (string, error) {
 }
 
 // RemoveRepo forgets a repo, its notification settings, armed merges, muted
-// PRs and automatic retries.
+// PRs and automatic retries, and deletes its two-way messages.
 func (m *Monitor) RemoveRepo(name string) error {
 	m.mutex.Lock()
+	if err := m.requireSavableConfigLocked(); err != nil {
+		m.mutex.Unlock()
+		return err
+	}
 	if err := m.requireRepoLocked(name); err != nil {
 		m.mutex.Unlock()
 		return err
@@ -104,10 +122,24 @@ func (m *Monitor) RemoveRepo(name string) error {
 	delete(m.state.Muted, name)
 	delete(m.state.Retry, name)
 	m.forgetWaitingLocked(func(repo string, _ int) bool { return repo == name })
+	channel := m.twoWay
+	retiring := []retiree{}
+	for id, message := range m.state.Messages {
+		if message.Repo == name {
+			retiring = append(retiring, m.claimLocked(id, whyRemoved))
+		}
+	}
 	m.saveConfigLocked()
 	m.saveStateLocked()
 	m.mutex.Unlock()
 
+	if channel != nil && len(retiring) > 0 {
+		m.spawn(func() {
+			for _, gone := range retiring {
+				m.retire(channel, gone)
+			}
+		})
+	}
 	m.emit(Event{Kind: "repos"})
 	return nil
 }
@@ -155,6 +187,21 @@ func (m *Monitor) SetCollapsed(owner string, collapsed bool) {
 // Perform runs one action against a PR. GitHub failures are reported as toasts,
 // because the user asked for them from a menu, not as a request that failed.
 func (m *Monitor) Perform(ctx context.Context, repoName string, number int, action models.Action) error {
+	return m.performAction(ctx, repoName, number, action, "", true)
+}
+
+// perform is Perform for callers that need the outcome: it returns every
+// failure, GitHub's included, and toasts none of them. A non-empty
+// expectedHead pins a merge to that commit; GitHub refuses if the head moved.
+func (m *Monitor) perform(ctx context.Context, repoName string, number int,
+	action models.Action, expectedHead string) error {
+	return m.performAction(ctx, repoName, number, action, expectedHead, false)
+}
+
+// performAction is the body of both; toastFailure says who reports a GitHub
+// failure, the toast (Perform) or the return value (perform).
+func (m *Monitor) performAction(ctx context.Context, repoName string, number int,
+	action models.Action, expectedHead string, toastFailure bool) error {
 	repo, found := m.Repo(repoName)
 	var pr models.PullRequest
 	var havePR bool
@@ -228,28 +275,31 @@ func (m *Monitor) Perform(ctx context.Context, repoName string, number int, acti
 		}
 		m.mutex.Unlock()
 	}
-	err := m.runAction(ctx, repoName, pr, action, label)
+	err := m.runAction(ctx, repoName, pr, action, label, expectedHead)
 	if manualMerge {
 		m.mutex.Lock()
 		delete(m.merging, key)
 		m.mutex.Unlock()
 	}
-	if err != nil {
+	if err != nil && toastFailure {
 		what := strings.ToUpper(action.Kind[:1]) + strings.ReplaceAll(action.Kind[1:], "_", " ")
 		m.toast(fmt.Sprintf("%s failed for %s: %v", what, label, err), "error")
 	}
 	m.RefreshRepo(ctx, repoName, 0)
-	return nil
+	if toastFailure {
+		return nil
+	}
+	return err
 }
 
 func (m *Monitor) runAction(ctx context.Context, repoName string, pr models.PullRequest,
-	action models.Action, label string) error {
+	action models.Action, label, expectedHead string) error {
 	switch action.Kind {
 	case "merge":
 		if action.Method == nil {
 			return &Error{Message: "merging needs a merge method"}
 		}
-		if err := m.client.Merge(ctx, pr.ID, *action.Method, ""); err != nil {
+		if err := m.client.Merge(ctx, pr.ID, *action.Method, expectedHead); err != nil {
 			return err
 		}
 		m.toast(fmt.Sprintf("Merged %s (%s)", label, action.Method.Lower()))
@@ -280,7 +330,7 @@ func (m *Monitor) runAction(ctx context.Context, repoName string, pr models.Pull
 		}
 		// The same merge; GitHub lets it past branch protection because the
 		// user may bypass it (viewerCanMergeAsAdmin).
-		if err := m.client.Merge(ctx, pr.ID, *action.Method, ""); err != nil {
+		if err := m.client.Merge(ctx, pr.ID, *action.Method, expectedHead); err != nil {
 			return err
 		}
 		m.toast(fmt.Sprintf("Force-merged %s (%s), bypassing branch protection",
@@ -338,6 +388,10 @@ func failedRuns(pr models.PullRequest) []int {
 // SaveNotifications stores one repo's notification settings.
 func (m *Monitor) SaveNotifications(repo string, settings config.NotifyConfig) error {
 	m.mutex.Lock()
+	if err := m.requireSavableConfigLocked(); err != nil {
+		m.mutex.Unlock()
+		return err
+	}
 	if err := m.requireRepoLocked(repo); err != nil {
 		m.mutex.Unlock()
 		return err
@@ -353,6 +407,12 @@ func (m *Monitor) SaveNotifications(repo string, settings config.NotifyConfig) e
 // SendTest fires a sample notification with unsaved settings.
 func (m *Monitor) SendTest(repo string, settings config.NotifyConfig) {
 	m.send(settings, notify.SampleVariables(repo), true)
+	m.mutex.Lock()
+	channel := m.twoWay
+	m.mutex.Unlock()
+	if channel != nil && settings.TwoWayEnabled {
+		m.spawn(func() { m.postSample(channel, repo) })
+	}
 }
 
 // SetPollInterval changes how often the backend checks GitHub.
@@ -362,6 +422,10 @@ func (m *Monitor) SetPollInterval(seconds int) error {
 			MinPollInterval, MaxPollInterval)}
 	}
 	m.mutex.Lock()
+	if err := m.requireSavableConfigLocked(); err != nil {
+		m.mutex.Unlock()
+		return err
+	}
 	if seconds == m.config.PollInterval {
 		m.mutex.Unlock()
 		return nil

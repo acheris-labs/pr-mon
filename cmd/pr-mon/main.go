@@ -10,6 +10,7 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/autostart"
 	"github.com/acheris-labs/pr-mon/internal/config"
 	"github.com/acheris-labs/pr-mon/internal/daemon"
+	"github.com/acheris-labs/pr-mon/internal/files"
 	"github.com/acheris-labs/pr-mon/internal/github"
 	"github.com/acheris-labs/pr-mon/internal/state"
 	"github.com/acheris-labs/pr-mon/internal/tui"
@@ -92,7 +93,7 @@ func logStartupError(paths daemon.Paths, err error) {
 	if os.MkdirAll(paths.Directory, 0o755) != nil {
 		return
 	}
-	file, openErr := os.OpenFile(paths.Log(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	file, openErr := files.OpenLog(paths.Log())
 	if openErr != nil {
 		return
 	}

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/acheris-labs/pr-mon/internal/files"
 	"github.com/acheris-labs/pr-mon/internal/github"
 	"github.com/acheris-labs/pr-mon/internal/notify"
 	"github.com/acheris-labs/pr-mon/internal/server"
@@ -33,7 +34,7 @@ type rotatingFile struct {
 }
 
 func openLog(path string) (*rotatingFile, error) {
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	file, err := files.OpenLog(path)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ func (r *rotatingFile) rotate() {
 		os.Rename(fmt.Sprintf("%s.%d", r.path, index), fmt.Sprintf("%s.%d", r.path, index+1))
 	}
 	os.Rename(r.path, r.path+".1")
-	file, err := os.OpenFile(r.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	file, err := files.OpenLog(r.path)
 	if err != nil {
 		return
 	}

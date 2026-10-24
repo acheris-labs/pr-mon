@@ -10,7 +10,8 @@
       "rate_limited_until": null,
       "warnings": [
         "Ignoring unreadable config: example"
-      ]
+      ],
+      "two_way": "Telegram"
     }
   }
 }

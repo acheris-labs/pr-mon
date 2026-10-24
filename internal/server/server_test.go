@@ -24,6 +24,7 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/server"
 	"github.com/acheris-labs/pr-mon/internal/service"
 	"github.com/acheris-labs/pr-mon/internal/testfixtures"
+	"github.com/acheris-labs/pr-mon/internal/twoway"
 )
 
 // fakeGitHub serves one repo and records merges.
@@ -113,6 +114,14 @@ func serve(t *testing.T) (*server.Server, *service.Monitor, string) {
 // serveWith is serve with an idle exit; zero never exits.
 func serveWith(t *testing.T, idleExit time.Duration) (*server.Server, *service.Monitor, string) {
 	t.Helper()
+	return serveOn(t, idleExit, nil)
+}
+
+// serveOn is serveWith with an optional two-way channel standing in for
+// Telegram; nil leaves [two_way] out of the config.
+func serveOn(t *testing.T, idleExit time.Duration,
+	channel twoway.Channel) (*server.Server, *service.Monitor, string) {
+	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "prmon")
 	if err != nil {
 		t.Fatal(err)
@@ -121,6 +130,9 @@ func serveWith(t *testing.T, idleExit time.Duration) (*server.Server, *service.M
 
 	saved := config.New()
 	saved.Repos = []string{"acme/api"}
+	if channel != nil {
+		saved.TwoWay = &config.TwoWayConfig{Command: "/bin/handler"}
+	}
 	configPath := filepath.Join(dir, "config.toml")
 	if err := config.Save(configPath, saved); err != nil {
 		t.Fatal(err)
@@ -129,12 +141,20 @@ func serveWith(t *testing.T, idleExit time.Duration) (*server.Server, *service.M
 		readiness.Assess(testfixtures.PR(1)),
 		readiness.Assess(testfixtures.PR(2, testfixtures.Pending)),
 	})
+	options := service.Options{
+		Version:  "1.2.3",
+		Notifier: "/x/tn",
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	if channel != nil {
+		options.TwoWay = func(_ context.Context, _ config.TwoWayConfig,
+			onChange func(twoway.Availability)) (twoway.Channel, error) {
+			onChange(twoway.Availability{Ready: true, Name: channel.Name()})
+			return channel, nil
+		}
+	}
 	monitor := service.New(&fakeGitHub{repo: repo}, configPath, filepath.Join(dir, "state.json"),
-		service.Options{
-			Version:  "1.2.3",
-			Notifier: "/x/tn",
-			Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		})
+		options)
 	socket := filepath.Join(dir, "d.sock")
 	listener := server.New(monitor, socket, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	listener.IdleExit = idleExit
@@ -516,6 +536,39 @@ func waitFor(t *testing.T, condition func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("condition never became true")
+}
+
+func TestHelloNamesTheTwoWayChannel(t *testing.T) {
+	cases := []struct {
+		name    string
+		channel twoway.Channel
+		want    string // "" means null
+	}{
+		{"none configured", nil, ""},
+		{"running", &testfixtures.TwoWay{}, "Fake"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, socket := serveOn(t, 0, tc.channel)
+			line, err := daemonHello(socket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var response struct {
+				Result protocol.Hello `json:"result"`
+			}
+			if err := json.Unmarshal([]byte(line), &response); err != nil {
+				t.Fatal(err)
+			}
+			got := ""
+			if response.Result.TwoWay != nil {
+				got = *response.Result.TwoWay
+			}
+			if got != tc.want {
+				t.Errorf("two_way = %q, want %q (hello %s)", got, tc.want, line)
+			}
+		})
+	}
 }
 
 // daemonHello asks once without subscribing, the way `pr-mon status` does.

@@ -43,12 +43,15 @@ enum Fixtures {
         #expect(hello.protocol == protocolVersion)
         #expect(hello.version == "0.0.0-fixture")
         #expect(hello.merging == false)
+        #expect(hello.twoWay == "Telegram")
     }
 
     @Test func snapshot() throws {
         let snapshot = try Fixtures.snapshot()
         #expect(snapshot.config.repos == ["acme/api", "acme/web", "Textualize/rich"])
         #expect(snapshot.config.notifications["acme/api"]?.scriptEnabled == true)
+        #expect(snapshot.config.notifications["acme/api"]?.twoWayEnabled == true)
+        #expect(snapshot.status.twoWay == "Telegram")
         #expect(snapshot.config.pollInterval == 120 && snapshot.config.focusInterval == 60
                 && snapshot.config.activeInterval == 10)
         #expect(snapshot.errors["acme/web"] == "Repository acme/web not found")
@@ -279,5 +282,26 @@ enum Fixtures {
         let reason = try JSONDecoder().decode(Reason.self, from: Data(json.utf8))
         #expect(reason.level == .unknown)
         #expect(try JSONDecoder().decode(PRStatus.self, from: Data(#""MERGING""#.utf8)) == .unknown)
+    }
+
+    /// Settings saved before two-way notifications existed have no two_way_enabled.
+    @Test func notifyConfigWithoutTwoWayDecodesAsOff() throws {
+        let json = #"""
+            {"message": "m", "events": ["READY"], "include_drafts": false,
+             "script_enabled": false, "script": "", "desktop_enabled": true}
+            """#
+        let settings = try JSONDecoder().decode(NotifyConfig.self, from: Data(json.utf8))
+        #expect(settings.twoWayEnabled == false)
+        #expect(settings.desktopEnabled == true)
+    }
+
+    /// An older backend's hello and status have no two_way.
+    @Test func helloAndStatusWithoutTwoWay() throws {
+        let hello = try JSONDecoder().decode(Hello.self, from: Data(
+            #"{"version": "0.0.9", "pid": 1, "notifier": null, "merging": false}"#.utf8))
+        #expect(hello.twoWay == nil)
+        let status = try JSONDecoder().decode(BackendStatus.self, from: Data(
+            #"{"connected": true, "version": "0.0.9", "warnings": []}"#.utf8))
+        #expect(status.twoWay == nil)
     }
 }

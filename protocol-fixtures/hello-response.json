@@ -6,6 +6,7 @@
     "version": "0.0.0-fixture",
     "pid": 4242,
     "notifier": "/opt/homebrew/bin/terminal-notifier",
+    "two_way": "Telegram",
     "merging": false
   }
 }

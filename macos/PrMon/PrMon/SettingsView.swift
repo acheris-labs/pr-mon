@@ -484,6 +484,7 @@ private struct NotificationSettings: View {
     @State private var preview: NotificationPreview?
 
     private var notifier: String? { store.state?.snapshot.status.notifier }
+    private var twoWay: String? { store.state?.snapshot.status.twoWay }
 
     private var backendSettings: NotifyConfig? {
         store.state?.snapshot.config.notifications[repo] ?? form?.defaults
@@ -530,6 +531,8 @@ private struct NotificationSettings: View {
                         .disabled(!settings.wrappedValue.scriptEnabled)
                     Toggle("Show a desktop notification", isOn: settings.desktopEnabled)
                         .disabled(notifier == nil)
+                    Toggle("Send to \(twoWay ?? "a chat") with buttons", isOn: settings.twoWayEnabled)
+                        .disabled(twoWay == nil)
                 } header: {
                     Text("Notify \(repo) by")
                 } footer: {
@@ -539,6 +542,11 @@ private struct NotificationSettings: View {
                             Text("Desktop notifications use \(notifier).")
                         } else {
                             Text("No desktop notifier found (install terminal-notifier).")
+                        }
+                        if let twoWay {
+                            Text("Two-way notifications use \(twoWay).")
+                        } else {
+                            Text("No two-way channel set up ([two_way] in config.toml).")
                         }
                     }
                     .font(.caption)
@@ -598,11 +606,15 @@ private struct NotificationSettings: View {
         }
     }
 
-    /// Without a notifier the desktop switch is disabled; keep whatever was saved.
+    /// Without a notifier or a two-way channel that switch is disabled; keep
+    /// whatever was saved.
     private func outgoing(_ edited: NotifyConfig) -> NotifyConfig {
         var value = edited
         if notifier == nil, let saved {
             value.desktopEnabled = saved.desktopEnabled
+        }
+        if twoWay == nil, let saved {
+            value.twoWayEnabled = saved.twoWayEnabled
         }
         return value
     }
