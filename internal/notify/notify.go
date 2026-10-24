@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,13 @@ var EventLabels = map[string]string{
 	"MERGE_FAILED": "pr-mon auto-merge failed",
 }
 
+// NotifyForLabels describe each NotifyConfig.NotifyFor value to the user.
+var NotifyForLabels = map[string]string{
+	config.NotifyMine:     "My PRs",
+	config.NotifyBots:     "Bot PRs",
+	config.NotifyEveryone: "Everyone's PRs",
+}
+
 var placeholder = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_]+)\s*\}\}`)
 
 var sampleVariables = map[string]string{
@@ -72,7 +80,41 @@ type Notification struct {
 	State string // a Status value, or "NEW"
 }
 
-// EventOption is one event a settings editor offers.
+// People says whose PRs are the user's own and which authors are bots, for
+// NotifyConfig.NotifyFor.
+type People struct {
+	Mine []string
+	Bots []string
+	// Who the user is couldn't be found out: every PR notifies, so nothing of
+	// theirs is missed.
+	Unknown bool
+}
+
+// Wants reports whether these settings notify about this PR's author.
+func Wants(settings config.NotifyConfig, people People, pr models.PullRequest) bool {
+	if settings.ForEveryone() || people.Unknown {
+		return true
+	}
+	if slices.Contains(settings.NotifyFor, config.NotifyMine) && hasLogin(people.Mine, pr.Author) {
+		return true
+	}
+	return slices.Contains(settings.NotifyFor, config.NotifyBots) &&
+		(pr.AuthorIsBot || hasLogin(people.Bots, pr.Author))
+}
+
+// hasLogin compares as GitHub does, ignoring case; "name[bot]" (how the REST
+// API and the web name an app) matches "name" (how GraphQL does).
+func hasLogin(logins []string, author string) bool {
+	author = strings.TrimSuffix(strings.ToLower(author), "[bot]")
+	for _, login := range logins {
+		if strings.TrimSuffix(strings.ToLower(login), "[bot]") == author {
+			return true
+		}
+	}
+	return false
+}
+
+// EventOption is one event (or NotifyFor value) a settings editor offers.
 type EventOption struct {
 	Name  string `json:"name"`
 	Label string `json:"label"`
@@ -81,6 +123,7 @@ type EventOption struct {
 // Form is what a notification settings editor offers, as the backend defines it.
 type Form struct {
 	Events     []EventOption       `json:"events"`
+	NotifyFor  []EventOption       `json:"notify_for"`
 	Variables  []string            `json:"variables"`
 	ScriptHelp string              `json:"script_help"`
 	Defaults   config.NotifyConfig `json:"defaults"`
@@ -142,8 +185,13 @@ func NotificationForm() Form {
 	for _, name := range config.EventNames {
 		events = append(events, EventOption{Name: name, Label: EventLabels[name]})
 	}
+	notifyFor := []EventOption{}
+	for _, name := range config.NotifyForNames {
+		notifyFor = append(notifyFor, EventOption{Name: name, Label: NotifyForLabels[name]})
+	}
 	return Form{
 		Events:     events,
+		NotifyFor:  notifyFor,
 		Variables:  VariableNames,
 		ScriptHelp: ScriptHelp,
 		Defaults:   config.NewNotifyConfig(),
@@ -169,7 +217,8 @@ func PRVariables(repo string, pr models.PullRequest, state, reason string) map[s
 }
 
 // Select picks the changes this repo's settings ask to be notified about.
-func Select(repo models.Repo, changes []tracker.Change, settings config.NotifyConfig) []Notification {
+func Select(repo models.Repo, changes []tracker.Change, settings config.NotifyConfig,
+	people People) []Notification {
 	byNumber := map[int]models.PullRequest{}
 	for _, pr := range repo.PRs {
 		byNumber[pr.Number] = pr
@@ -177,7 +226,7 @@ func Select(repo models.Repo, changes []tracker.Change, settings config.NotifyCo
 	found := []Notification{}
 	for _, change := range changes {
 		pr, ok := byNumber[change.Number]
-		if !ok || (pr.IsDraft && !settings.IncludeDrafts) {
+		if !ok || (pr.IsDraft && !settings.IncludeDrafts) || !Wants(settings, people, pr) {
 			continue
 		}
 		state := string(change.New)

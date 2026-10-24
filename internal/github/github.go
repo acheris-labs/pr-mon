@@ -37,7 +37,7 @@ const (
 var prFields = fmt.Sprintf(`
 fragment PrFields on PullRequest {
   id number state title url createdAt isDraft
-  author { login }
+  author { __typename login }
   headRefName baseRefName
   headRef { id }
   headRepository { nameWithOwner }
@@ -503,6 +503,19 @@ func (c *Client) LookupPRs(ctx context.Context, name string, numbers []int) ([]m
 		})
 	}
 	return refs, nil
+}
+
+// Viewer is the login of the user the token belongs to.
+func (c *Client) Viewer(ctx context.Context) (string, error) {
+	data, err := c.graphql(ctx, "query { viewer { login } }", nil)
+	if err != nil {
+		return "", err
+	}
+	var viewer login
+	if err := json.Unmarshal(data["viewer"], &viewer); err != nil || viewer.Login == "" {
+		return "", &Error{Message: "GitHub sent no viewer login"}
+	}
+	return viewer.Login, nil
 }
 
 // Merge merges the PR; with expectedHeadOid, GitHub refuses if the head has moved.

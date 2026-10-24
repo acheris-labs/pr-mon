@@ -40,6 +40,20 @@
         "label": "pr-mon auto-merge failed"
       }
     ],
+    "notify_for": [
+      {
+        "name": "mine",
+        "label": "My PRs"
+      },
+      {
+        "name": "bots",
+        "label": "Bot PRs"
+      },
+      {
+        "name": "everyone",
+        "label": "Everyone's PRs"
+      }
+    ],
     "variables": [
       "PR_REPO",
       "PR_NUM",
@@ -65,7 +79,11 @@
       "script_enabled": false,
       "script": "",
       "desktop_enabled": false,
-      "two_way_enabled": false
+      "two_way_enabled": false,
+      "notify_for": [
+        "mine",
+        "bots"
+      ]
     }
   }
 }

@@ -25,7 +25,11 @@
           "script_enabled": true,
           "script": "~/bin/im",
           "desktop_enabled": false,
-          "two_way_enabled": true
+          "two_way_enabled": true,
+          "notify_for": [
+            "mine",
+            "bots"
+          ]
         }
       }
     },

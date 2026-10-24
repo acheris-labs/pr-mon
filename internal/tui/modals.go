@@ -252,12 +252,13 @@ type notifyTab int
 const (
 	tabMessage notifyTab = iota
 	tabEvents
+	tabAuthors
 	tabScript
 	tabDesktop
 	tabTwoWay
 )
 
-var tabNames = []string{"Message", "Events", "Script", "Desktop", "Two-way"}
+var tabNames = []string{"Message", "Events", "Authors", "Script", "Desktop", "Two-way"}
 
 type notificationsModal struct {
 	repo     string
@@ -269,10 +270,12 @@ type notificationsModal struct {
 	tab    notifyTab
 	// which event checkbox the cursor sits on
 	eventCursor int
-	message     textinput.Model
-	script      textinput.Model
-	preview_    notify.Preview
-	previewErr  string
+	// which "notify about" checkbox the cursor sits on
+	authorCursor int
+	message      textinput.Model
+	script       textinput.Model
+	preview_     notify.Preview
+	previewErr   string
 }
 
 // previewReady carries a rendered preview back to the dialog.
@@ -343,6 +346,8 @@ func (n *notificationsModal) update(model *Model, key tea.KeyMsg) (modal, tea.Cm
 		return n, tea.Batch(cmd, n.preview(model))
 	case tabEvents:
 		return n.updateEvents(key)
+	case tabAuthors:
+		return n.updateAuthors(key)
 	case tabScript:
 		if key.String() == " " || key.String() == "space" {
 			n.settings.ScriptEnabled = !n.settings.ScriptEnabled
@@ -377,20 +382,37 @@ func (n *notificationsModal) updateEvents(key tea.KeyMsg) (modal, tea.Cmd) {
 			return n, nil
 		}
 		name := n.form.Events[n.eventCursor].Name
-		n.settings.Events = toggleEvent(n.settings.Events, name, n.form)
+		n.settings.Events = toggleOption(n.settings.Events, name, n.form.Events)
 	}
 	return n, nil
 }
 
-// toggleEvent adds or removes one event, keeping the backend's order.
-func toggleEvent(events []string, name string, form notify.Form) []string {
+func (n *notificationsModal) updateAuthors(key tea.KeyMsg) (modal, tea.Cmd) {
+	rows := len(n.form.NotifyFor)
+	if rows == 0 {
+		return n, nil
+	}
+	switch key.String() {
+	case "up", "k":
+		n.authorCursor = (n.authorCursor - 1 + rows) % rows
+	case "down", "j":
+		n.authorCursor = (n.authorCursor + 1) % rows
+	case " ", "space", "enter", "x":
+		name := n.form.NotifyFor[n.authorCursor].Name
+		n.settings.NotifyFor = toggleOption(n.settings.NotifyFor, name, n.form.NotifyFor)
+	}
+	return n, nil
+}
+
+// toggleOption adds or removes one value, keeping the backend's order.
+func toggleOption(values []string, name string, options []notify.EventOption) []string {
 	chosen := map[string]bool{}
-	for _, event := range events {
-		chosen[event] = true
+	for _, value := range values {
+		chosen[value] = true
 	}
 	chosen[name] = !chosen[name]
 	kept := []string{}
-	for _, option := range form.Events {
+	for _, option := range options {
 		if chosen[option.Name] {
 			kept = append(kept, option.Name)
 		}

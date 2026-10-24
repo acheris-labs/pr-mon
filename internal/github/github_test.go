@@ -520,6 +520,37 @@ func TestParsesClosingIssues(t *testing.T) {
 	}
 }
 
+func TestAuthorIsBot(t *testing.T) {
+	client, rec := serve(t, always(okData(repoResponse([]map[string]any{
+		rawPR(1),
+		rawPR(2, func(pr map[string]any) {
+			pr["author"] = map[string]any{"__typename": "Bot", "login": "dependabot"}
+		}),
+	}, 0))))
+	repo, err := client.FetchRepo(context.Background(), "acme/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.PRs[0].AuthorIsBot || !repo.PRs[1].AuthorIsBot || repo.PRs[1].Author != "dependabot" {
+		t.Errorf("prs = %+v", repo.PRs)
+	}
+	if !strings.Contains(query(rec.last()), "author { __typename login }") {
+		t.Errorf("query = %s", query(rec.last()))
+	}
+}
+
+func TestViewer(t *testing.T) {
+	client, _ := serve(t, always(okData(map[string]any{"viewer": map[string]any{"login": "octocat"}})))
+	login, err := client.Viewer(context.Background())
+	if err != nil || login != "octocat" {
+		t.Errorf("login = %q, err = %v", login, err)
+	}
+	client, _ = serve(t, always(graphqlError("FORBIDDEN", "nope")))
+	if _, err := client.Viewer(context.Background()); err == nil {
+		t.Error("a failed query should be an error")
+	}
+}
+
 func TestLookupPRs(t *testing.T) {
 	client, rec := serve(t, always(okData(map[string]any{"repository": map[string]any{
 		"nameWithOwner": "Acme/Lib",

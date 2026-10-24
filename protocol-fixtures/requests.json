@@ -172,7 +172,11 @@
         "script_enabled": false,
         "script": "im",
         "desktop_enabled": false,
-        "two_way_enabled": false
+        "two_way_enabled": false,
+        "notify_for": [
+          "mine",
+          "bots"
+        ]
       }
     },
     "id": 12,
@@ -194,7 +198,11 @@
         "script_enabled": false,
         "script": "",
         "desktop_enabled": false,
-        "two_way_enabled": false
+        "two_way_enabled": false,
+        "notify_for": [
+          "mine",
+          "bots"
+        ]
       }
     },
     "id": 13,

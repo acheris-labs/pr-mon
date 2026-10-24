@@ -40,7 +40,8 @@ func (r repoPayload) mergeMethods() []models.MergeMethod {
 }
 
 type login struct {
-	Login string `json:"login"`
+	Login    string `json:"login"`
+	Typename string `json:"__typename"`
 }
 
 type prNode struct {
@@ -161,6 +162,7 @@ func (p prNode) toPullRequest() models.PullRequest {
 	}
 	if p.Author != nil && p.Author.Login != "" {
 		pr.Author = p.Author.Login
+		pr.AuthorIsBot = p.Author.Typename == "Bot"
 	}
 	if p.HeadRef != nil {
 		pr.HeadRefID = models.Ptr(p.HeadRef.ID)

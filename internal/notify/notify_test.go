@@ -87,12 +87,12 @@ func TestSelect(t *testing.T) {
 	})
 	selected := func(changes []tracker.Change, settings config.NotifyConfig) []string {
 		found := []string{}
-		for _, notification := range notify.Select(repo, changes, settings) {
+		for _, notification := range notify.Select(repo, changes, settings, notify.People{}) {
 			found = append(found, notification.State)
 		}
 		return found
 	}
-	defaults := config.NewNotifyConfig()
+	defaults := config.LegacyNotifyConfig()
 	newOnly := config.NotifyConfig{Events: []string{"NEW"}}
 	drafts := config.NotifyConfig{Events: []string{"NEW"}, IncludeDrafts: true}
 
@@ -122,9 +122,37 @@ func TestSelect(t *testing.T) {
 	if got := selected(draft, drafts); !reflect.DeepEqual(got, []string{"NEW"}) {
 		t.Errorf("states = %v", got)
 	}
-	found := notify.Select(repo, became, defaults)
+	found := notify.Select(repo, became, defaults, notify.People{})
 	if len(found) != 1 || found[0].Repo != "acme/api" || found[0].PR.Number != 1 {
 		t.Errorf("notifications = %+v", found)
+	}
+}
+
+func TestWants(t *testing.T) {
+	people := notify.People{Mine: []string{"Octocat"}, Bots: []string{"release-robot[bot]"}}
+	mineAndBots := config.NotifyConfig{NotifyFor: []string{"mine", "bots"}}
+	cases := []struct {
+		name     string
+		settings config.NotifyConfig
+		people   notify.People
+		author   string
+		bot      bool
+		want     bool
+	}{
+		{"mine, any case", mineAndBots, people, "octocat", false, true},
+		{"someone else", mineAndBots, people, "bob", false, false},
+		{"an app", mineAndBots, people, "dependabot", true, true},
+		{"a listed bot, without [bot]", mineAndBots, people, "release-robot", false, true},
+		{"bots not chosen", config.NotifyConfig{NotifyFor: []string{"mine"}}, people, "dependabot", true, false},
+		{"everyone", config.NotifyConfig{NotifyFor: []string{"everyone"}}, people, "bob", false, true},
+		{"nothing chosen", config.NotifyConfig{}, people, "bob", false, true},
+		{"user unknown", mineAndBots, notify.People{Unknown: true}, "bob", false, true},
+	}
+	for _, tc := range cases {
+		pr := testfixtures.PR(1, func(pr *models.PullRequest) { pr.Author, pr.AuthorIsBot = tc.author, tc.bot })
+		if got := notify.Wants(tc.settings, tc.people, pr); got != tc.want {
+			t.Errorf("%s: wants = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 

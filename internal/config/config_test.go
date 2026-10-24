@@ -131,6 +131,9 @@ func TestNotifyDefaults(t *testing.T) {
 		settings.Script != "" {
 		t.Errorf("settings = %+v, want channels off", settings)
 	}
+	if !reflect.DeepEqual(settings.NotifyFor, []string{"mine", "bots"}) {
+		t.Errorf("notify_for = %v, want [mine bots]", settings.NotifyFor)
+	}
 }
 
 func TestNotificationsRoundTrip(t *testing.T) {
@@ -142,8 +145,9 @@ func TestNotificationsRoundTrip(t *testing.T) {
 		ScriptEnabled:  true,
 		Script:         "~/bin/send 'two words'",
 		DesktopEnabled: true,
+		NotifyFor:      []string{"mine", "bots"},
 	}
-	web := config.NotifyConfig{Events: []string{}, DesktopEnabled: true}
+	web := config.NotifyConfig{Events: []string{}, DesktopEnabled: true, NotifyFor: []string{"everyone"}}
 	saved := config.New()
 	saved.Repos = []string{"acme/api", "Acme.Org/web-app"}
 	saved.Notifications = map[string]config.NotifyConfig{"acme/api": api, "Acme.Org/web-app": web}
@@ -187,11 +191,56 @@ func TestPartialRepoSectionUsesDefaults(t *testing.T) {
 	if warning != "" {
 		t.Errorf("warning = %q", warning)
 	}
-	want := config.NewNotifyConfig()
+	// A section from before notify_for keeps notifying for everyone.
+	want := config.LegacyNotifyConfig()
 	want.ScriptEnabled = true
 	want.Script = "im"
 	if got := loaded.Notifications["acme/api"]; !got.Equal(want) {
 		t.Errorf("settings = %+v, want %+v", got, want)
+	}
+}
+
+func TestEmptyNotifyForMeansEveryone(t *testing.T) {
+	path := tempPath(t, "config.toml")
+	saved := config.New()
+	saved.Repos = []string{"acme/api"}
+	settings := config.NewNotifyConfig()
+	settings.NotifyFor = []string{}
+	if !settings.ForEveryone() {
+		t.Error("an empty notify_for should mean everyone")
+	}
+	saved.Notifications = map[string]config.NotifyConfig{"acme/api": settings}
+	if err := config.Save(path, saved); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _ := config.Load(path)
+	if got := loaded.Notifications["acme/api"].NotifyFor; !reflect.DeepEqual(got, []string{"everyone"}) {
+		t.Errorf("notify_for = %v, want [everyone]", got)
+	}
+}
+
+func TestLoginsRoundTripAndStayOffTheWire(t *testing.T) {
+	path := tempPath(t, "config.toml")
+	saved := config.New()
+	saved.Repos = []string{"acme/api"}
+	saved.MyLogins = []string{"octocat", "work-cat"}
+	saved.BotLogins = []string{"release-robot"}
+	if err := config.Save(path, saved); err != nil {
+		t.Fatal(err)
+	}
+	loaded, warning := config.Load(path)
+	if warning != "" {
+		t.Errorf("warning = %q", warning)
+	}
+	if !reflect.DeepEqual(loaded, saved) {
+		t.Errorf("config = %+v, want %+v", loaded, saved)
+	}
+	encoded, err := json.Marshal(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "octocat") || strings.Contains(string(encoded), "release-robot") {
+		t.Errorf("logins sent to clients: %s", encoded)
 	}
 }
 
@@ -201,6 +250,8 @@ func TestInvalidRepoSectionIsSkipped(t *testing.T) {
 		`events = ["READY", "EXPLODED"]`,
 		`script_enabled = "yes"`,
 		`message = 12`,
+		`notify_for = ["friends"]`,
+		`notify_for = "mine"`,
 	}
 	for _, body := range bodies {
 		t.Run(body, func(t *testing.T) {

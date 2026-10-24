@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -43,6 +45,8 @@ type fakeGitHub struct {
 	listETags map[string]string
 	baseETags map[string]string
 	updatedAt map[string]string
+	// Who the token belongs to; "" makes Viewer fail.
+	viewer string
 }
 
 func newFakeGitHub(repos ...models.Repo) *fakeGitHub {
@@ -54,6 +58,8 @@ func newFakeGitHub(repos ...models.Repo) *fakeGitHub {
 		listETags:   map[string]string{},
 		baseETags:   map[string]string{},
 		updatedAt:   map[string]string{},
+		// The fixtures' PRs are alice's, so by default they are the user's.
+		viewer: testfixtures.PR(1).Author,
 	}
 	for _, repo := range repos {
 		fake.repos[repo.Name] = repo
@@ -235,6 +241,16 @@ func (f *fakeGitHub) setState(key, state string) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	f.states[key] = state
+}
+
+func (f *fakeGitHub) Viewer(context.Context) (string, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.calls = append(f.calls, "viewer")
+	if f.viewer == "" {
+		return "", &github.Error{Message: "no viewer"}
+	}
+	return f.viewer, nil
 }
 
 func (f *fakeGitHub) LookupPRs(_ context.Context, repo string, numbers []int) ([]models.PRRef, error) {
@@ -532,6 +548,64 @@ func TestNotificationsWaitForTheFirstLoad(t *testing.T) {
 	sent := h.sent()
 	if len(sent) != 1 || sent[0]["PR_STATE"] != "READY" || sent[0]["PR_NUM"] != "1" {
 		t.Fatalf("sent = %v", sent)
+	}
+}
+
+func TestNotifyFor(t *testing.T) {
+	by := func(author string, bot bool) func(*models.PullRequest) {
+		return func(pr *models.PullRequest) { pr.Author, pr.AuthorIsBot = author, bot }
+	}
+	prs := func(mutate ...func(*models.PullRequest)) []models.PullRequest {
+		return []models.PullRequest{
+			testfixtures.PR(1, append(mutate, by("alice", false))...),
+			testfixtures.PR(2, append(mutate, by("bob", false))...),
+			testfixtures.PR(3, append(mutate, by("dependabot", true))...),
+			testfixtures.PR(4, append(mutate, by("release-robot", false))...),
+		}
+	}
+	cases := []struct {
+		name      string
+		notifyFor []string
+		myLogins  []string
+		viewer    string
+		want      []string
+		askViewer bool
+	}{
+		{"everyone", []string{"everyone"}, nil, "alice", []string{"1", "2", "3", "4"}, false},
+		{"empty means everyone", []string{}, nil, "alice", []string{"1", "2", "3", "4"}, false},
+		{"mine is the token's user", []string{"mine"}, nil, "alice", []string{"1"}, true},
+		{"mine and bots", []string{"mine", "bots"}, nil, "alice", []string{"1", "3", "4"}, true},
+		{"bots only", []string{"bots"}, nil, "alice", []string{"3", "4"}, true},
+		{"my_logins win over the token", []string{"mine"}, []string{"Bob"}, "alice", []string{"2"}, false},
+		{"unknown user notifies for everyone", []string{"mine"}, nil, "", []string{"1", "2", "3", "4"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := config.NewNotifyConfig()
+			settings.ScriptEnabled = true
+			settings.Script = "im"
+			settings.NotifyFor = tc.notifyFor
+			client := newFakeGitHub(repoWith("acme/api", prs(testfixtures.Pending)...))
+			client.viewer = tc.viewer
+			h := startWith(t, client, []string{"acme/api"},
+				map[string]config.NotifyConfig{"acme/api": settings}, func(saved *config.Config) {
+					saved.MyLogins = tc.myLogins
+					saved.BotLogins = []string{"release-robot[bot]"}
+				})
+			client.setRepo(repoWith("acme/api", prs()...))
+			h.poll()
+			got := []string{}
+			for _, sent := range h.sent() {
+				got = append(got, sent["PR_NUM"])
+			}
+			slices.Sort(got)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("notified about %v, want %v", got, tc.want)
+			}
+			if asked := len(client.callsMatching("viewer")) > 0; asked != tc.askViewer {
+				t.Errorf("asked GitHub who the user is: %v, want %v", asked, tc.askViewer)
+			}
+		})
 	}
 }
 
