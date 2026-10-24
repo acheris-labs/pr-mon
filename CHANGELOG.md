@@ -4,6 +4,22 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.4.1]
+
+### Added
+
+- A Telegram two-way notifier in `notifiers/telegram/`: the
+  `pr-mon-telegram` handler, plus the Lambdas and Terraform it runs against
+  (a public webhook for button taps, a sender, and a register function). The
+  app now carries `pr-mon-telegram` next to `pr-mon`, and the Homebrew cask
+  links it onto PATH, so it installs and upgrades with pr-mon. Point
+  `[two_way] command` at `/opt/homebrew/bin/pr-mon-telegram`.
+
+### Removed
+
+- Intel Macs: the app, `pr-mon` and `pr-mon-telegram` are built for Apple
+  silicon only, and the cask requires it.
+
 ## [0.4.0]
 
 ### Added
