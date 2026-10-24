@@ -27,7 +27,8 @@ That is the whole process. The `release` workflow then:
 
 1. Runs the tests (Go and Swift).
 2. Imports the Developer ID certificate into a temporary keychain.
-3. Builds the universal CLI and the handler, embeds them in the app, signs inside-out,
+3. Builds the CLI and the handler (Apple silicon only, like the app), embeds
+   them in the app, signs inside-out,
    notarizes, staples, and packages the zip and DMG.
 4. Creates the GitHub release, with notes from this version's `CHANGELOG.md`
    section when there is one.

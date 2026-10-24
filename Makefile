@@ -1,5 +1,5 @@
 .PHONY: build run install uninstall purge test lint fmt fixtures clean \
-	universal swift-test xcode app app-install icon sign zip dmg release \
+	binaries swift-test xcode app app-install icon sign zip dmg release \
 	verify setup-notary setup-secrets
 
 DESIGN ?= dots
@@ -70,22 +70,20 @@ swift-test:
 xcode:
 	cd macos/PrMon && xcodegen generate
 
-# A universal CLI, so one app bundle serves both Apple silicon and Intel. The
-# Telegram two-way handler (notifiers/telegram) is Apple silicon only.
-universal:
-	GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o build/pr-mon-arm64 ./cmd/pr-mon
-	GOOS=darwin GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o build/pr-mon-amd64 ./cmd/pr-mon
-	lipo -create -output build/pr-mon-universal build/pr-mon-arm64 build/pr-mon-amd64
+# The binaries the app carries: the CLI and the Telegram two-way handler
+# (notifiers/telegram). Apple silicon only, like the app.
+binaries:
+	GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o build/pr-mon-darwin ./cmd/pr-mon
 	GOOS=darwin GOARCH=arm64 go build -o build/pr-mon-telegram ./notifiers/telegram/cmd/pr-mon-telegram
 
 # The app carries the CLI and the Telegram handler: one install gives you the
 # window, the dashboard and the backend, and the cask symlinks both onto PATH.
-app: universal xcode
+app: binaries xcode
 	xcodebuild -project macos/PrMon/PrMon.xcodeproj -scheme PrMon -configuration Release \
 		-destination generic/platform=macOS -derivedDataPath $(APP_BUILD) -quiet \
 		MARKETING_VERSION="$(VERSION)" CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" build
 	mkdir -p $(CONTENTS)/Resources/bin
-	cp build/pr-mon-universal $(CONTENTS)/Resources/bin/pr-mon
+	cp build/pr-mon-darwin $(CONTENTS)/Resources/bin/pr-mon
 	cp build/pr-mon-telegram $(CONTENTS)/Resources/bin/pr-mon-telegram
 	# Adding a file invalidates Xcode's signature; re-sign ad-hoc so it still runs.
 	codesign --force --sign - $(CONTENTS)/Resources/bin/pr-mon
