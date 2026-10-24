@@ -188,7 +188,7 @@ pr-mon's Homebrew cask installs it with the app, at
 `PrMon.app/Contents/Resources/bin/`), and upgrades it with pr-mon. From source,
 `make install` here builds it to `~/.local/bin/pr-mon-telegram`.
 
-Its settings live in `~/.config/pr-mon-telegram/config.toml`, which must be
+Its settings live in `~/.config/pr-mon/telegram.toml`, which must be
 `chmod 600` (the handler refuses to start otherwise):
 
 ```toml
@@ -215,7 +215,7 @@ launchd gives pr-mon no shell environment, so `~` and `$PATH` don't work.
 
 ```toml
 [two_way]
-command = "/opt/homebrew/bin/pr-mon-telegram --config /Users/<you>/.config/pr-mon-telegram/config.toml"
+command = "/opt/homebrew/bin/pr-mon-telegram --config /Users/<you>/.config/pr-mon/telegram.toml"
 ```
 
 ## Tests
