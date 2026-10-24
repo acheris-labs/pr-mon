@@ -4,6 +4,24 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.4.0]
+
+### Added
+
+- Two-way notifications: pr-mon can post a PR's notification to a chat
+  service with buttons (Squash & merge, Re-run, Dismiss, ...) and act on the
+  taps that come back. pr-mon doesn't know the service: `[two_way] command`
+  names a handler program it runs and talks to over stdin and stdout.
+  `docs/two-way-handler.md` specifies the protocol, so a handler can be
+  written in any language. Turn it on per repo in its notification settings:
+  the Two-way tab in the dashboard, "Send to ... with buttons" in the app.
+
+### Changed
+
+- Settings changes are refused while the config file can't be read, instead
+  of saving defaults over it.
+- `daemon.log` is created readable only by you.
+
 ## [0.3.2]
 
 ### Added
