@@ -24,7 +24,8 @@
           "include_drafts": false,
           "script_enabled": true,
           "script": "~/bin/im",
-          "desktop_enabled": false
+          "desktop_enabled": false,
+          "two_way_enabled": true
         }
       }
     },
@@ -1037,7 +1038,8 @@
       "rate_limited_until": null,
       "warnings": [
         "Ignoring unreadable config: example"
-      ]
+      ],
+      "two_way": "Telegram"
     }
   }
 }

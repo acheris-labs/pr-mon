@@ -254,16 +254,19 @@ const (
 	tabEvents
 	tabScript
 	tabDesktop
+	tabTwoWay
 )
 
-var tabNames = []string{"Message", "Events", "Script", "Desktop"}
+var tabNames = []string{"Message", "Events", "Script", "Desktop", "Two-way"}
 
 type notificationsModal struct {
 	repo     string
 	settings config.NotifyConfig
 	form     notify.Form
 	notifier *string
-	tab      notifyTab
+	// twoWay is the running two-way channel's name, or nil when there is none.
+	twoWay *string
+	tab    notifyTab
 	// which event checkbox the cursor sits on
 	eventCursor int
 	message     textinput.Model
@@ -279,7 +282,7 @@ type previewReady struct {
 }
 
 func newNotifications(repo string, settings config.NotifyConfig, form notify.Form,
-	notifier *string) *notificationsModal {
+	notifier, twoWay *string) *notificationsModal {
 	message := textinput.New()
 	message.SetValue(settings.Message)
 	message.Prompt = "> "
@@ -291,7 +294,7 @@ func newNotifications(repo string, settings config.NotifyConfig, form notify.For
 	script.Prompt = "> "
 	script.Width = 60
 	return &notificationsModal{
-		repo: repo, settings: settings, form: form, notifier: notifier,
+		repo: repo, settings: settings, form: form, notifier: notifier, twoWay: twoWay,
 		message: message, script: script,
 	}
 }
@@ -325,11 +328,11 @@ func (n *notificationsModal) update(model *Model, key tea.KeyMsg) (modal, tea.Cm
 		settings := n.current()
 		return n, run(func() error { return model.backend.SendTest(n.repo, settings) })
 	case "left":
-		n.tab = (n.tab + 3) % 4
+		n.tab = (n.tab + notifyTab(len(tabNames)) - 1) % notifyTab(len(tabNames))
 		n.focusInputs()
 		return n, nil
 	case "right":
-		n.tab = (n.tab + 1) % 4
+		n.tab = (n.tab + 1) % notifyTab(len(tabNames))
 		n.focusInputs()
 		return n, nil
 	}
@@ -351,6 +354,10 @@ func (n *notificationsModal) update(model *Model, key tea.KeyMsg) (modal, tea.Cm
 	case tabDesktop:
 		if (key.String() == " " || key.String() == "space") && n.notifier != nil {
 			n.settings.DesktopEnabled = !n.settings.DesktopEnabled
+		}
+	case tabTwoWay:
+		if (key.String() == " " || key.String() == "space") && n.twoWay != nil {
+			n.settings.TwoWayEnabled = !n.settings.TwoWayEnabled
 		}
 	}
 	return n, nil

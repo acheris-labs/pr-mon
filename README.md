@@ -270,7 +270,14 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
   script_enabled = true
   script = "im --deliver tgram"
   desktop_enabled = false
+
+  [two_way]
+  command = "/path/to/handler"   # optional: a program that sends and receives two-way messages
   ```
+
+  A two-way handler is a separate program pr-mon runs and talks to over
+  stdin/stdout, so notifications can carry buttons (merge, re-run, dismiss) in
+  chat apps. See [docs/two-way-handler.md](docs/two-way-handler.md).
 
 - State (seen PRs, collapsed groups, armed merges, dependencies): `~/.local/state/pr-mon/state.json` (respects `XDG_STATE_HOME`)
 - Backend files, next to the state: `daemon.log` (rotated at 1 MB), `daemon.lock`

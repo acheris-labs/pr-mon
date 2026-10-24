@@ -171,7 +171,8 @@
         "include_drafts": false,
         "script_enabled": false,
         "script": "im",
-        "desktop_enabled": false
+        "desktop_enabled": false,
+        "two_way_enabled": false
       }
     },
     "id": 12,
@@ -192,7 +193,8 @@
         "include_drafts": false,
         "script_enabled": false,
         "script": "",
-        "desktop_enabled": false
+        "desktop_enabled": false,
+        "two_way_enabled": false
       }
     },
     "id": 13,

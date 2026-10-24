@@ -34,6 +34,7 @@ type fakeBackend struct {
 	addName      string
 	formErr      error
 	previews     []string
+	saved        *config.NotifyConfig // the last settings saved
 }
 
 func newFakeBackend() *fakeBackend {
@@ -162,6 +163,9 @@ func (f *fakeLoginItem) SetEnabled(enabled bool) error {
 
 func (f *fakeBackend) SaveNotifications(repo string, settings config.NotifyConfig) error {
 	f.record("save " + repo + " " + strings.Join(settings.Events, ",") + " " + settings.Message)
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.saved = &settings
 	return nil
 }
 
@@ -542,6 +546,65 @@ func TestNotificationsDialog(t *testing.T) {
 	}
 	if model.modal != nil {
 		t.Error("saving should close the dialog")
+	}
+}
+
+func TestNotificationsTwoWayTab(t *testing.T) {
+	cases := []struct {
+		name   string
+		twoWay *string
+		want   []string // in the Two-way tab
+		saved  bool     // TwoWayEnabled after space and ctrl+s
+	}{
+		{"channel running", models.Ptr("Telegram"),
+			[]string{"Send to Telegram with buttons", "Using Telegram"}, true},
+		{"no channel", nil,
+			[]string{"No two-way channel set up ([two_way] in config.toml)"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			model, backend := newModel()
+			backend.status.TwoWay = tc.twoWay
+			press(t, model, "S", "n")
+			press(t, model, "right", "right", "right", "right") // Events, Script, Desktop, Two-way
+			view := model.View()
+			if !strings.Contains(view, " Two-way ") {
+				t.Fatalf("there should be a Two-way tab:\n%s", view)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(view, want) {
+					t.Errorf("the Two-way tab should show %q:\n%s", want, view)
+				}
+			}
+			press(t, model, "space")
+			if want := "[x]"; tc.saved != strings.Contains(model.View(), want) {
+				t.Errorf("after space, ticked = %v, want %v:\n%s",
+					strings.Contains(model.View(), want), tc.saved, model.View())
+			}
+			press(t, model, "ctrl+s")
+			if backend.saved == nil {
+				t.Fatalf("nothing was saved: %v", backend.recorded())
+			}
+			if backend.saved.TwoWayEnabled != tc.saved {
+				t.Errorf("saved two_way_enabled = %v, want %v",
+					backend.saved.TwoWayEnabled, tc.saved)
+			}
+			if backend.saved.DesktopEnabled {
+				t.Error("space on the Two-way tab must not touch the desktop switch")
+			}
+		})
+	}
+}
+
+func TestNotificationsTabsWrapAround(t *testing.T) {
+	model, _ := newModel()
+	press(t, model, "S", "n", "left") // from Message back round to the last tab
+	if dialog := model.modal.(*notificationsModal); tabNames[dialog.tab] != "Two-way" {
+		t.Errorf("left from Message = %q, want Two-way", tabNames[dialog.tab])
+	}
+	press(t, model, "right")
+	if dialog := model.modal.(*notificationsModal); dialog.tab != tabMessage {
+		t.Errorf("right from Two-way = %q, want Message", tabNames[dialog.tab])
 	}
 }
 

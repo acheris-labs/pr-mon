@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/readiness"
 	"github.com/acheris-labs/pr-mon/internal/service"
 	"github.com/acheris-labs/pr-mon/internal/testfixtures"
+	"github.com/acheris-labs/pr-mon/internal/twoway"
 )
 
 // fakeGitHub stands in for the API: it replays repos and records calls.
@@ -263,6 +266,14 @@ type harness struct {
 	client     *fakeGitHub
 	configPath string
 	statePath  string
+	// The two-way channel the backend builds, when set: the fake, or an error.
+	twoWay   *testfixtures.TwoWay
+	buildErr error
+	onBuild  func()
+	// legacyTwoWay appends an old-style [two_way] table to the saved config.
+	legacyTwoWay bool
+	// What the backend gave the builder to report the channel's availability.
+	onChange   func(twoway.Availability)
 	mutex      sync.Mutex
 	events     []service.Event
 	deliveries []map[string]string
@@ -278,12 +289,24 @@ func start(t *testing.T, client *fakeGitHub, repos []string,
 func startWith(t *testing.T, client *fakeGitHub, repos []string,
 	notifications map[string]config.NotifyConfig, adjust func(*config.Config)) *harness {
 	t.Helper()
+	return launch(t, client, repos, notifications, adjust, nil)
+}
+
+// launch is startWith with a hook that runs once the temp paths exist and
+// before the monitor starts, to write files or choose the two-way channel.
+func launch(t *testing.T, client *fakeGitHub, repos []string,
+	notifications map[string]config.NotifyConfig, adjust func(*config.Config),
+	prepare func(*harness)) *harness {
+	t.Helper()
 	dir := t.TempDir()
 	h := &harness{
 		t:          t,
 		client:     client,
 		configPath: filepath.Join(dir, "config.toml"),
 		statePath:  filepath.Join(dir, "state.json"),
+	}
+	if prepare != nil {
+		prepare(h)
 	}
 	saved := config.New()
 	saved.Repos = repos
@@ -296,22 +319,46 @@ func startWith(t *testing.T, client *fakeGitHub, repos []string,
 	if err := config.Save(h.configPath, saved); err != nil {
 		t.Fatal(err)
 	}
-	deliver := func(_ context.Context, settings config.NotifyConfig, notifier string,
-		variables map[string]string) []notify.Result {
-		h.mutex.Lock()
-		defer h.mutex.Unlock()
-		h.deliveries = append(h.deliveries, variables)
-		if !settings.ScriptEnabled && !settings.DesktopEnabled {
-			return nil
+	if h.legacyTwoWay {
+		// Save can't write the old keys, so the file is written by hand.
+		text, err := os.ReadFile(h.configPath)
+		if err != nil {
+			t.Fatal(err)
 		}
-		return []notify.Result{{Channel: "script"}}
+		legacy := string(text) + "\n[two_way]\nkind = \"telegram\"\nregion = \"us-east-1\"\n"
+		if err := os.WriteFile(h.configPath, []byte(legacy), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
-	h.monitor = service.New(client, h.configPath, h.statePath, service.Options{
+	h.boot()
+	t.Cleanup(func() { h.monitor.Stop() })
+	return h
+}
+
+// boot starts a monitor on the harness's files.
+func (h *harness) boot() {
+	options := service.Options{
 		Version:  "1.2.3",
 		Notifier: "/x/tn",
-		Deliver:  deliver,
+		Deliver:  h.deliver,
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-	})
+	}
+	if h.twoWay != nil || h.buildErr != nil {
+		options.TwoWay = func(_ context.Context, _ config.TwoWayConfig,
+			onChange func(twoway.Availability)) (twoway.Channel, error) {
+			if h.onBuild != nil {
+				h.onBuild()
+			}
+			if h.buildErr != nil {
+				return nil, h.buildErr
+			}
+			// Ready at once, as a handler that has said hello is.
+			h.onChange = onChange
+			onChange(twoway.Availability{Ready: true, Name: "Fake"})
+			return h.twoWay, nil
+		}
+	}
+	h.monitor = service.New(h.client, h.configPath, h.statePath, options)
 	h.monitor.AddListener(func(event service.Event) {
 		h.mutex.Lock()
 		defer h.mutex.Unlock()
@@ -319,8 +366,24 @@ func startWith(t *testing.T, client *fakeGitHub, repos []string,
 	})
 	h.monitor.Start(context.Background())
 	h.monitor.WaitIdle()
-	t.Cleanup(h.monitor.Stop)
-	return h
+}
+
+// restart stops the monitor and starts a fresh one on the same files, as a
+// backend restart would.
+func (h *harness) restart() {
+	h.monitor.Stop()
+	h.boot()
+}
+
+func (h *harness) deliver(_ context.Context, settings config.NotifyConfig, _ string,
+	variables map[string]string) []notify.Result {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	h.deliveries = append(h.deliveries, variables)
+	if !settings.ScriptEnabled && !settings.DesktopEnabled {
+		return nil
+	}
+	return []notify.Result{{Channel: "script"}}
 }
 
 func (h *harness) poll() {
@@ -612,6 +675,39 @@ func TestSetPollInterval(t *testing.T) {
 	}
 }
 
+// A config file the backend couldn't read is the user's to fix: settings
+// changes are refused rather than saved over it, which would wipe it.
+func TestBrokenConfigIsNeverSavedOver(t *testing.T) {
+	client := newFakeGitHub(repoWith("acme/api", testfixtures.PR(1)), repoWith("acme/web"))
+	h := start(t, client, []string{"acme/api"}, nil)
+	broken := "repos = [\"acme/api\"\n"
+	if err := os.WriteFile(h.configPath, []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.restart()
+	attempts := map[string]func() error{
+		"add repo": func() error {
+			_, err := h.monitor.AddRepo(context.Background(), "acme/web")
+			return err
+		},
+		"remove repo":   func() error { return h.monitor.RemoveRepo("acme/api") },
+		"notifications": func() error { return h.monitor.SaveNotifications("acme/api", config.NewNotifyConfig()) },
+		"poll interval": func() error { return h.monitor.SetPollInterval(300) },
+	}
+	for name, attempt := range attempts {
+		err := attempt()
+		if err == nil || !strings.Contains(err.Error(), h.configPath) {
+			t.Errorf("%s: error = %v, want one naming the config file", name, err)
+		}
+	}
+	if len(h.monitor.Config().Repos) != 0 || h.monitor.Config().PollInterval == 300 {
+		t.Errorf("refused changes should not apply in memory either: %+v", h.monitor.Config())
+	}
+	if text, _ := os.ReadFile(h.configPath); string(text) != broken {
+		t.Errorf("config file = %q, want it untouched", text)
+	}
+}
+
 func TestSaveNotificationsAndTest(t *testing.T) {
 	client := newFakeGitHub(repoWith("acme/api", testfixtures.PR(1)))
 	h := start(t, client, []string{"acme/api"}, nil)
@@ -751,5 +847,41 @@ func TestForceMergeRespectsDependencies(t *testing.T) {
 	}
 	if len(client.callsMatching("merge ")) != 0 {
 		t.Error("a PR waiting on others must not be merged")
+	}
+}
+
+func TestPerformPinnedPassesExpectedHead(t *testing.T) {
+	squash := models.MergeSquash
+	for _, kind := range []string{"merge", "force_merge"} {
+		t.Run(kind, func(t *testing.T) {
+			client := newFakeGitHub(repoWith("acme/api",
+				testfixtures.PR(1, func(pr *models.PullRequest) { pr.CanBypass = true })))
+			h := start(t, client, []string{"acme/api"}, nil)
+			if err := h.monitor.PerformPinned(context.Background(), "acme/api", 1,
+				models.Action{Kind: kind, Method: &squash}, "abc"); err != nil {
+				t.Fatal(err)
+			}
+			h.monitor.WaitIdle()
+			client.mutex.Lock()
+			defer client.mutex.Unlock()
+			if len(client.mergeHeads) != 1 || client.mergeHeads[0] != "abc" {
+				t.Errorf("expected heads = %v, want [abc]", client.mergeHeads)
+			}
+		})
+	}
+}
+
+func TestPerformReturnsGitHubFailure(t *testing.T) {
+	client := newFakeGitHub(repoWith("acme/api", testfixtures.PR(1)))
+	client.mergeErr = &github.Error{Message: "not allowed"}
+	h := start(t, client, []string{"acme/api"}, nil)
+	squash := models.MergeSquash
+	err := h.monitor.PerformPinned(context.Background(), "acme/api", 1,
+		models.Action{Kind: "merge", Method: &squash}, "abc")
+	if err == nil || err.Error() != "not allowed" {
+		t.Fatalf("err = %v, want GitHub's failure", err)
+	}
+	if h.hasToast("Merge failed for acme/api#1: not allowed") {
+		t.Errorf("perform should not toast the failure: %v", h.toasts())
 	}
 }

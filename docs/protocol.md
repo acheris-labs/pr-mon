@@ -122,6 +122,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `version` | string | pr-mon package version. |
 | `pid` | int | Backend process id. |
 | `notifier` | string or null | Desktop notifier command found, if any. |
+| `two_way` | string or null | The two-way handler's name while it is running (e.g. `"Telegram"`); null when none is configured or it isn't running. |
 | `merging` | bool | A merge is in flight; don't restart the backend now. |
 
 ### Object: `Snapshot`
@@ -147,6 +148,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `last_update` | timestamp or null | Last successful poll. |
 | `rate_limited_until` | timestamp or null | Polling paused until then. |
 | `warnings` | [string] | Problems to show the user (e.g. an unreadable config). |
+| `two_way` | string or null | The two-way handler's name while it is running (e.g. `"Telegram"`); null when none is configured or it isn't running. |
 
 ### Object: `Config`
 
@@ -168,6 +170,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `script_enabled` | bool | |
 | `script` | string | Command run with the message on stdin. |
 | `desktop_enabled` | bool | |
+| `two_way_enabled` | bool | Send to the configured two-way channel (see Hello.two_way). |
 
 ### Object: `NotificationForm`
 

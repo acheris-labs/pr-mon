@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +25,7 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/readiness"
 	"github.com/acheris-labs/pr-mon/internal/state"
 	"github.com/acheris-labs/pr-mon/internal/tracker"
+	"github.com/acheris-labs/pr-mon/internal/twoway"
 )
 
 const (
@@ -47,6 +50,8 @@ type Status struct {
 	LastUpdate       *string  `json:"last_update"`        // ISO-8601 UTC
 	RateLimitedUntil *string  `json:"rate_limited_until"` // ISO-8601 UTC
 	Warnings         []string `json:"warnings"`
+	// The running two-way channel's name, e.g. "Telegram".
+	TwoWay *string `json:"two_way"`
 }
 
 // Event is something that changed. Kinds: repos, repo, seen, collapsed, config,
@@ -95,6 +100,9 @@ type Monitor struct {
 	statePath  string
 	deliver    Deliverer
 	log        *slog.Logger
+	// buildTwoWay makes the two-way channel; twoWay is it once running.
+	buildTwoWay func(context.Context, config.TwoWayConfig,
+		func(twoway.Availability)) (twoway.Channel, error)
 
 	mutex  sync.Mutex
 	config config.Config
@@ -122,6 +130,18 @@ type Monitor struct {
 	holding    map[prKey]bool
 	holdFailed map[prKey]bool
 	listeners  []Listener
+	twoWay     twoway.Channel
+	// How many times the channel has reported ready, so a retirement that
+	// failed meanwhile knows to retry.
+	readyCount int
+	// Messages a tap is being acted on; further taps on them are ignored.
+	tapping map[string]bool
+	// Closed when the receive loop has ended; nil if it never started.
+	receiving chan struct{}
+	// The first pause after a failed receive, and how soon after asking
+	// "Force merge #N?" a Confirm is taken as meant.
+	receiveBackoff time.Duration
+	confirmGuard   time.Duration
 
 	busy     sync.WaitGroup
 	ctx      context.Context
@@ -138,6 +158,12 @@ type Options struct {
 	Version  string
 	Deliver  Deliverer
 	Logger   *slog.Logger
+	// TwoWay builds the channel the [two_way] table asks for; nil means
+	// run the handler program it names. The channel lives until ctx ends or it is closed, and
+	// calls onChange each time it becomes ready or stops being ready, possibly
+	// before the builder returns.
+	TwoWay func(ctx context.Context, table config.TwoWayConfig,
+		onChange func(twoway.Availability)) (twoway.Channel, error)
 }
 
 func New(client GitHub, configPath, statePath string, options Options) *Monitor {
@@ -151,26 +177,29 @@ func New(client GitHub, configPath, statePath string, options Options) *Monitor 
 	}
 	pid := os.Getpid()
 	monitor := &Monitor{
-		client:     client,
-		configPath: configPath,
-		statePath:  statePath,
-		deliver:    deliver,
-		log:        logger,
-		config:     config.New(),
-		state:      state.New(),
-		repos:      map[string]models.Repo{},
-		fetched:    map[string]models.Repo{},
-		errs:       map[string]string{},
-		waitedOn:   map[string]models.PRRef{},
-		watches:    map[string]*watch{},
-		focus:      map[string]Focus{},
-		loaded:     map[string]bool{},
-		merging:    map[prKey]bool{},
-		holding:    map[prKey]bool{},
-		holdFailed: map[prKey]bool{},
-		pollWake:   make(chan struct{}, 1),
-		stopped:    make(chan struct{}),
-		Shutdown:   make(chan struct{}),
+		client:         client,
+		configPath:     configPath,
+		statePath:      statePath,
+		deliver:        deliver,
+		log:            logger,
+		config:         config.New(),
+		state:          state.New(),
+		repos:          map[string]models.Repo{},
+		fetched:        map[string]models.Repo{},
+		errs:           map[string]string{},
+		waitedOn:       map[string]models.PRRef{},
+		watches:        map[string]*watch{},
+		focus:          map[string]Focus{},
+		loaded:         map[string]bool{},
+		merging:        map[prKey]bool{},
+		holding:        map[prKey]bool{},
+		holdFailed:     map[prKey]bool{},
+		tapping:        map[string]bool{},
+		receiveBackoff: receiveBackoff,
+		confirmGuard:   confirmGuard,
+		pollWake:       make(chan struct{}, 1),
+		stopped:        make(chan struct{}),
+		Shutdown:       make(chan struct{}),
 		status: Status{
 			Connected: true,
 			PID:       &pid,
@@ -181,6 +210,10 @@ func New(client GitHub, configPath, statePath string, options Options) *Monitor 
 	if options.Notifier != "" {
 		monitor.status.Notifier = models.Ptr(options.Notifier)
 	}
+	monitor.buildTwoWay = options.TwoWay
+	if monitor.buildTwoWay == nil {
+		monitor.buildTwoWay = defaultTwoWay(options.Version, logger)
+	}
 	monitor.track = tracker.New(monitor.state.PRs)
 	return monitor
 }
@@ -190,28 +223,68 @@ func (m *Monitor) Start(ctx context.Context) {
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	loadedConfig, configWarning := config.Load(m.configPath)
 	loadedState, stateWarning := state.Load(m.statePath)
+	// Before the channel is built: a builder may report it ready at once,
+	// and that retries the retirements state.json has waiting.
 	m.mutex.Lock()
 	m.config = loadedConfig
 	m.state = loadedState
 	m.track = tracker.New(m.state.PRs)
-	for _, warning := range []string{configWarning, stateWarning} {
+	m.warnLocked(configWarning, stateWarning)
+	m.mutex.Unlock()
+	var channel twoway.Channel
+	twoWayWarning := ""
+	if loadedConfig.TwoWay != nil {
+		var why string
+		if channel, why = m.openTwoWay(*loadedConfig.TwoWay); why != "" {
+			twoWayWarning = twoWayOff + why
+		}
+	}
+	m.mutex.Lock()
+	m.twoWay = channel
+	m.warnLocked(twoWayWarning)
+	if m.status.TwoWay != nil {
+		// Ready before twoWay was set, so availability couldn't retry these.
+		m.retireWaitingLocked()
+	}
+	m.mutex.Unlock()
+	m.spawn(func() { m.PollOnce(m.ctx) })
+	go m.pollLoop()
+	if channel != nil {
+		m.receiving = make(chan struct{})
+		go m.receiveLoop()
+	}
+}
+
+func (m *Monitor) warnLocked(warnings ...string) {
+	for _, warning := range warnings {
 		if warning != "" {
 			m.status.Warnings = append(m.status.Warnings, warning)
 			m.log.Warn(warning)
 		}
 	}
-	m.mutex.Unlock()
-	m.spawn(func() { m.PollOnce(m.ctx) })
-	go m.pollLoop()
 }
 
-// Stop ends polling and saves state.
+// Stop ends polling, closes the two-way channel and saves state.
 func (m *Monitor) Stop() {
+	// Under the lock, so availability, which checks m.ctx under it, starts
+	// nothing once busy is being waited on.
+	m.mutex.Lock()
 	if m.cancel != nil {
 		m.cancel()
 	}
+	channel := m.twoWay
+	m.mutex.Unlock()
 	close(m.stopped)
+	if m.receiving != nil {
+		<-m.receiving // so it starts no tap handling once busy is being waited on
+	}
 	m.busy.Wait()
+	// Not under the lock: the channel may call availability while closing.
+	if closer, ok := channel.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			m.log.Warn("closing the two-way channel failed", "error", err)
+		}
+	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.saveStateLocked()
@@ -477,6 +550,7 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 	m.saveStateLocked()
 	m.mutex.Unlock()
 
+	posts := []notify.Notification{}
 	if configured && !firstLoad {
 		for _, notification := range notify.Select(repo, changes, settings) {
 			if muted[notification.PR.Number] {
@@ -484,8 +558,12 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 			}
 			variables := notify.PRVariables(notification.Repo, notification.PR, notification.State, "")
 			m.send(settings, variables, false)
+			if sendsTwoWay(settings, notification.State) {
+				posts = append(posts, notification)
+			}
 		}
 	}
+	m.syncMessages(repo, posts)
 	if opened {
 		m.emit(Event{Kind: "collapsed"})
 	}
@@ -639,15 +717,19 @@ func (m *Monitor) notifyResult(name string, pr models.PullRequest, state, reason
 	m.mutex.Lock()
 	settings, configured := m.config.Notifications[name]
 	muted := m.mutedLocked(name)[pr.Number]
+	repo, found := m.repos[name]
+	channel := m.twoWay
 	m.mutex.Unlock()
-	if !configured || muted {
+	if !configured || muted || !slices.Contains(settings.Events, state) {
 		return
 	}
-	for _, event := range settings.Events {
-		if event == state {
-			m.send(settings, notify.PRVariables(name, pr, state, reason), false)
-			return
+	m.send(settings, notify.PRVariables(name, pr, state, reason), false)
+	if channel != nil && sendsTwoWay(settings, state) {
+		if !found {
+			repo = models.Repo{Name: name}
 		}
+		message, record := prMessage(repo, pr, state, reason)
+		m.spawn(func() { m.post(channel, message, record) })
 	}
 }
 
@@ -659,6 +741,7 @@ func (m *Monitor) send(settings config.NotifyConfig, variables map[string]string
 	if m.status.Notifier != nil {
 		notifier = *m.status.Notifier
 	}
+	twoWay := settings.TwoWayEnabled && m.twoWay != nil
 	m.mutex.Unlock()
 	m.spawn(func() {
 		results := m.deliver(m.ctx, settings, notifier, variables)
@@ -672,8 +755,8 @@ func (m *Monitor) send(settings config.NotifyConfig, variables map[string]string
 				m.toast(fmt.Sprintf("Test %s notification sent", result.Channel))
 			}
 		}
-		if isTest && len(results) == 0 {
-			m.toast("Nothing to send: enable Script or Desktop notifications", "warning")
+		if isTest && len(results) == 0 && !twoWay {
+			m.toast("Nothing to send: enable Script, Desktop or Two-way notifications", "warning")
 		}
 	})
 }

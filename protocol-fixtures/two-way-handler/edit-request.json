@@ -1,0 +1,1 @@
+{"id":3,"op":"edit","args":{"message_id":"1082","message":{"status":"READY","title":"acme/api #12 · Fix login redirect","lines":["octocat · fix-login → main"],"buttons":[[{"label":"Squash & merge","key":"xx2ev6d7"}],[{"label":"Open","url":"https://github.com/acme/api/pull/12"},{"label":"Dismiss","key":"kofmkufw"}]]}}}

@@ -81,6 +81,7 @@ func (s *Server) dispatch(connection net.Conn, request protocol.Request) (any, e
 			Version:  status.Version,
 			PID:      status.PID,
 			Notifier: status.Notifier,
+			TwoWay:   status.TwoWay,
 			Merging:  s.monitor.Merging(),
 		}, nil
 

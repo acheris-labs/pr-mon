@@ -19,6 +19,7 @@ import (
 	"github.com/acheris-labs/pr-mon/internal/readiness"
 	"github.com/acheris-labs/pr-mon/internal/service"
 	"github.com/acheris-labs/pr-mon/internal/testfixtures"
+	"github.com/acheris-labs/pr-mon/internal/twoway/handler"
 )
 
 const (
@@ -132,6 +133,7 @@ func state() protocol.Snapshot {
 	settings := config.NewNotifyConfig()
 	settings.ScriptEnabled = true
 	settings.Script = "~/bin/im"
+	settings.TwoWayEnabled = true
 
 	pid := 4242
 	return protocol.Snapshot{
@@ -159,6 +161,7 @@ func state() protocol.Snapshot {
 			Notifier:   models.Ptr("/opt/homebrew/bin/terminal-notifier"),
 			LastUpdate: models.Ptr(lastUpdate),
 			Warnings:   []string{"Ignoring unreadable config: example"},
+			TwoWay:     models.Ptr("Telegram"),
 		},
 	}
 }
@@ -188,6 +191,7 @@ func files() map[string]any {
 			Version:  snapshot.Status.Version,
 			PID:      &pid,
 			Notifier: snapshot.Status.Notifier,
+			TwoWay:   snapshot.Status.TwoWay,
 		}},
 		"snapshot-response.json": protocol.Response{ID: 2, OK: true, Result: snapshot},
 		"error-response.json": protocol.Response{
@@ -309,6 +313,31 @@ func main() {
 		}
 	}
 	fmt.Printf("wrote %d fixtures to %s\n", len(written), directory)
+	writeHandlerFixtures(filepath.Join(directory, "two-way-handler"))
+}
+
+// writeHandlerFixtures writes the two-way handler protocol's sample lines, one
+// JSON line per file, and removes files that are no longer generated.
+func writeHandlerFixtures(directory string) {
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		fail(err)
+	}
+	lines := handler.Fixtures()
+	for name, line := range lines {
+		if err := os.WriteFile(filepath.Join(directory, name), append(line, '\n'), 0o644); err != nil {
+			fail(err)
+		}
+	}
+	stale, err := filepath.Glob(filepath.Join(directory, "*.json"))
+	if err != nil {
+		fail(err)
+	}
+	for _, path := range stale {
+		if _, ok := lines[filepath.Base(path)]; !ok {
+			os.Remove(path)
+		}
+	}
+	fmt.Printf("wrote %d fixtures to %s\n", len(lines), directory)
 }
 
 func fail(err error) {

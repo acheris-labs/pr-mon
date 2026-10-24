@@ -191,6 +191,18 @@ func (n *notificationsModal) view(model *Model) string {
 			lines = append(lines, dim.Render(
 				"No notifier found (install terminal-notifier or notify-send)"))
 		}
+	case tabTwoWay:
+		enabled := n.settings.TwoWayEnabled && n.twoWay != nil
+		channel := "a chat"
+		if n.twoWay != nil {
+			channel = *n.twoWay
+		}
+		lines = append(lines, n.checkbox(enabled, "Send to "+channel+" with buttons", false))
+		if n.twoWay != nil {
+			lines = append(lines, dim.Render("Using "+*n.twoWay))
+		} else {
+			lines = append(lines, dim.Render("No two-way channel set up ([two_way] in config.toml)"))
+		}
 	}
 	hint := "ctrl+s: save   ctrl+t: send test   ←/→: tabs   esc: cancel"
 	if n.tab != tabMessage {

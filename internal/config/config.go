@@ -47,6 +47,33 @@ type NotifyConfig struct {
 	ScriptEnabled  bool     `json:"script_enabled" toml:"script_enabled"`
 	Script         string   `json:"script" toml:"script"`
 	DesktopEnabled bool     `json:"desktop_enabled" toml:"desktop_enabled"`
+	TwoWayEnabled  bool     `json:"two_way_enabled" toml:"two_way_enabled"`
+}
+
+// TwoWayConfig is the backend-only [two_way] table: the handler program that
+// sends two-way messages and relays taps.
+type TwoWayConfig struct {
+	Command string `toml:"command"`
+	// Why the table as written can't be used (a value of the wrong type);
+	// such a table is kept, so the rest of the config still loads.
+	invalid string
+	// The table has the keys of the old built-in Telegram setup and no command.
+	legacy bool
+}
+
+// Problem is "" when the table is usable, otherwise a sentence saying why not.
+// Whether the command splits into words is the service's check (config can't
+// import notify).
+func (t TwoWayConfig) Problem() string {
+	switch {
+	case t.invalid != "":
+		return t.invalid
+	case t.legacy:
+		return "[two_way] now takes a handler command; the AWS settings belong to the handler"
+	case strings.TrimSpace(t.Command) == "":
+		return "[two_way] command is missing"
+	}
+	return ""
 }
 
 func NewNotifyConfig() NotifyConfig {
@@ -57,7 +84,7 @@ func NewNotifyConfig() NotifyConfig {
 func (n NotifyConfig) Equal(other NotifyConfig) bool {
 	if n.Message != other.Message || n.IncludeDrafts != other.IncludeDrafts ||
 		n.ScriptEnabled != other.ScriptEnabled || n.Script != other.Script ||
-		n.DesktopEnabled != other.DesktopEnabled || len(n.Events) != len(other.Events) {
+		n.DesktopEnabled != other.DesktopEnabled || n.TwoWayEnabled != other.TwoWayEnabled || len(n.Events) != len(other.Events) {
 		return false
 	}
 	for i := range n.Events {
@@ -77,6 +104,11 @@ type Config struct {
 	ActiveInterval int `json:"active_interval"`
 	// A repo without an entry never notifies.
 	Notifications map[string]NotifyConfig `json:"notifications"`
+	// Backend-only; never sent to clients.
+	TwoWay *TwoWayConfig `json:"-"`
+	// Why the file on disk was ignored, if it was. Saving would then replace
+	// the user's file with defaults, so Save refuses.
+	Ignored string `json:"-"`
 }
 
 func New() Config {
@@ -101,6 +133,7 @@ type raw struct {
 	FocusInterval  *int                      `toml:"focus_interval"`
 	ActiveInterval *int                      `toml:"active_interval"`
 	Notifications  map[string]toml.Primitive `toml:"notifications"`
+	TwoWay         *toml.Primitive           `toml:"two_way"`
 }
 
 // Load returns the config and a warning if the file was unusable.
@@ -110,15 +143,15 @@ func Load(path string) (Config, string) {
 		return New(), ""
 	}
 	if err != nil {
-		return New(), fmt.Sprintf("Ignoring unreadable config %s: %v", path, err)
+		return ignore(fmt.Sprintf("Ignoring unreadable config %s: %v", path, err))
 	}
 	var parsed raw
 	meta, err := toml.Decode(string(text), &parsed)
 	if err != nil {
-		return New(), fmt.Sprintf("Ignoring unreadable config %s: %v", path, err)
+		return ignore(fmt.Sprintf("Ignoring unreadable config %s: %v", path, err))
 	}
 	if parsed.PollInterval != nil && *parsed.PollInterval <= 0 {
-		return New(), fmt.Sprintf("Ignoring invalid config %s: bad 'repos' or 'poll_interval'", path)
+		return ignore(fmt.Sprintf("Ignoring invalid config %s: bad 'repos' or 'poll_interval'", path))
 	}
 	config := New()
 	if parsed.Repos != nil {
@@ -132,6 +165,9 @@ func Load(path string) (Config, string) {
 	}
 	if parsed.ActiveInterval != nil && *parsed.ActiveInterval > 0 {
 		config.ActiveInterval = *parsed.ActiveInterval
+	}
+	if parsed.TwoWay != nil {
+		config.TwoWay = parseTwoWay(meta, *parsed.TwoWay)
 	}
 	problems := []string{}
 	for repo, table := range parsed.Notifications {
@@ -149,6 +185,13 @@ func Load(path string) (Config, string) {
 	return config, ""
 }
 
+// ignore is the defaults, marked so they are never saved over the file.
+func ignore(warning string) (Config, string) {
+	config := New()
+	config.Ignored = warning
+	return config, warning
+}
+
 // parseNotify builds settings from a TOML table; not ok when a value has the
 // wrong type or an event isn't one we know.
 func parseNotify(meta toml.MetaData, table toml.Primitive) (NotifyConfig, bool) {
@@ -162,6 +205,29 @@ func parseNotify(meta toml.MetaData, table toml.Primitive) (NotifyConfig, bool) 
 		}
 	}
 	return settings, true
+}
+
+// parseTwoWay builds the [two_way] table on its own, like each repo's
+// notifications, so a wrongly typed value spoils only the table.
+func parseTwoWay(meta toml.MetaData, table toml.Primitive) *TwoWayConfig {
+	values := map[string]any{}
+	if err := meta.PrimitiveDecode(table, &values); err != nil {
+		return &TwoWayConfig{invalid: "[two_way] must be a table"}
+	}
+	parsed := &TwoWayConfig{}
+	switch command := values["command"].(type) {
+	case nil:
+		for _, key := range []string{"kind", "region", "queue_url", "sender_function", "route", "chat_id"} {
+			if _, found := values[key]; found {
+				parsed.legacy = true
+			}
+		}
+	case string:
+		parsed.Command = command
+	default:
+		parsed.invalid = "[two_way] command must be a string"
+	}
+	return parsed
 }
 
 func KnownEvent(event string) bool {
@@ -185,6 +251,9 @@ func tomlValue(value any) string {
 }
 
 func Save(path string, config Config) error {
+	if config.Ignored != "" {
+		return errors.New(config.Ignored + "; not saving over it")
+	}
 	lines := []string{
 		fmt.Sprintf("poll_interval = %d", config.PollInterval),
 		fmt.Sprintf("focus_interval = %d", config.FocusInterval),
@@ -195,6 +264,9 @@ func Save(path string, config Config) error {
 		lines = append(lines, fmt.Sprintf("    %s,", tomlValue(repo)))
 	}
 	lines = append(lines, "]")
+	if tw := config.TwoWay; tw != nil {
+		lines = append(lines, "", "[two_way]", fmt.Sprintf("command = %s", tomlValue(tw.Command)))
+	}
 	for _, repo := range config.Repos {
 		settings, found := config.Notifications[repo]
 		if !found {
@@ -208,6 +280,7 @@ func Save(path string, config Config) error {
 			fmt.Sprintf("script_enabled = %s", tomlValue(settings.ScriptEnabled)),
 			fmt.Sprintf("script = %s", tomlValue(settings.Script)),
 			fmt.Sprintf("desktop_enabled = %s", tomlValue(settings.DesktopEnabled)),
+			fmt.Sprintf("two_way_enabled = %s", tomlValue(settings.TwoWayEnabled)),
 		)
 	}
 	return files.WriteAtomic(path, strings.Join(lines, "\n")+"\n")

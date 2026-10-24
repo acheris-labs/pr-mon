@@ -222,7 +222,8 @@ func (m *Model) openNotifications(name string) (modal, tea.Cmd) {
 	if !found {
 		settings = form.Defaults
 	}
-	dialog := newNotifications(name, settings, form, m.backend.Status().Notifier)
+	status := m.backend.Status()
+	dialog := newNotifications(name, settings, form, status.Notifier, status.TwoWay)
 	return dialog, dialog.preview(m)
 }
 

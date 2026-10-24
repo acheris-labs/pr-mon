@@ -68,7 +68,14 @@ public struct Hello: Codable, Sendable, Equatable {
     public var version: String
     public var pid: Int?
     public var notifier: String?
+    /// The running two-way channel's name ("Telegram"), or nil when there is none.
+    public var twoWay: String?
     public var merging: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case `protocol`, version, pid, notifier, merging
+        case twoWay = "two_way"
+    }
 }
 
 public struct BackendStatus: Codable, Sendable, Equatable {
@@ -79,11 +86,14 @@ public struct BackendStatus: Codable, Sendable, Equatable {
     public var lastUpdate: String?
     public var rateLimitedUntil: String?
     public var warnings: [String]
+    /// The running two-way channel's name ("Telegram"), or nil when there is none.
+    public var twoWay: String?
 
     enum CodingKeys: String, CodingKey {
         case connected, pid, version, notifier, warnings
         case lastUpdate = "last_update"
         case rateLimitedUntil = "rate_limited_until"
+        case twoWay = "two_way"
     }
 }
 
@@ -94,10 +104,12 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
     public var scriptEnabled: Bool
     public var script: String
     public var desktopEnabled: Bool
+    public var twoWayEnabled: Bool
 
     public init(
         message: String, events: [String], includeDrafts: Bool = false,
-        scriptEnabled: Bool = false, script: String = "", desktopEnabled: Bool = false
+        scriptEnabled: Bool = false, script: String = "", desktopEnabled: Bool = false,
+        twoWayEnabled: Bool = false
     ) {
         self.message = message
         self.events = events
@@ -105,6 +117,19 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
         self.scriptEnabled = scriptEnabled
         self.script = script
         self.desktopEnabled = desktopEnabled
+        self.twoWayEnabled = twoWayEnabled
+    }
+
+    /// A backend from before two-way notifications sends no two_way_enabled: off.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        message = try container.decode(String.self, forKey: .message)
+        events = try container.decode([String].self, forKey: .events)
+        includeDrafts = try container.decode(Bool.self, forKey: .includeDrafts)
+        scriptEnabled = try container.decode(Bool.self, forKey: .scriptEnabled)
+        script = try container.decode(String.self, forKey: .script)
+        desktopEnabled = try container.decode(Bool.self, forKey: .desktopEnabled)
+        twoWayEnabled = try container.decodeIfPresent(Bool.self, forKey: .twoWayEnabled) ?? false
     }
 
     enum CodingKeys: String, CodingKey {
@@ -112,6 +137,7 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
         case includeDrafts = "include_drafts"
         case scriptEnabled = "script_enabled"
         case desktopEnabled = "desktop_enabled"
+        case twoWayEnabled = "two_way_enabled"
     }
 }
 

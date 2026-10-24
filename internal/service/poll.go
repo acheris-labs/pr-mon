@@ -346,17 +346,18 @@ func fresh(stamp *string, now time.Time) bool {
 }
 
 // refreshPRs replaces named PRs in a loaded repo, leaving the rest as they are.
-func (m *Monitor) refreshPRs(ctx context.Context, name string, numbers []int) {
+// A failed fetch is recorded against the repo and returned.
+func (m *Monitor) refreshPRs(ctx context.Context, name string, numbers []int) error {
 	fetched, err := m.client.FetchPRs(ctx, name, numbers)
 	if err != nil {
 		m.handleFetchError(name, err)
-		return
+		return err
 	}
 	m.mutex.Lock()
 	repo, loaded := m.fetched[name]
 	if !loaded {
 		m.mutex.Unlock()
-		return
+		return nil
 	}
 	state := m.watchLocked(name)
 	updated := map[int]models.PullRequest{}
@@ -382,16 +383,17 @@ func (m *Monitor) refreshPRs(ctx context.Context, name string, numbers []int) {
 	}
 	repo.PRs = prs
 	m.mutex.Unlock()
-	if !changed {
-		return
+	if changed {
+		m.apply(name, repo)
 	}
-	m.apply(name, repo)
+	return nil
 }
 
 // samePR reports whether a PR still looks exactly as it did, so an unchanged
 // one raises no event.
 func samePR(before, after models.PullRequest) bool {
-	if before.Status != after.Status || before.StrictlyReady != after.StrictlyReady ||
+	if before.Status != after.Status || headOf(before) != headOf(after) ||
+		before.StrictlyReady != after.StrictlyReady ||
 		before.MergeState != after.MergeState || before.Mergeable != after.Mergeable ||
 		len(before.Checks) != len(after.Checks) {
 		return false
