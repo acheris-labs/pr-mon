@@ -61,6 +61,15 @@ jobs:
           lipo -info "$BINARY"
           "$BINARY" --version
 
+      - name: The bundled Telegram handler runs
+        run: |
+          set -euo pipefail
+          HANDLER=macos/build/Build/Products/Release/PrMon.app/Contents/Resources/bin/pr-mon-telegram
+          lipo -info "$HANDLER"
+          # Without --config it explains itself and exits 2.
+          status=0; "$HANDLER" 2>/dev/null || status=$?
+          test "$status" -eq 2
+
       - name: Verify the ad-hoc signature
         run: codesign -dv macos/build/Build/Products/Release/PrMon.app 2>&1
 

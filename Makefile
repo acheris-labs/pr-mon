@@ -70,30 +70,35 @@ swift-test:
 xcode:
 	cd macos/PrMon && xcodegen generate
 
-# A universal CLI, so one app bundle serves both Apple silicon and Intel.
+# A universal CLI, so one app bundle serves both Apple silicon and Intel. The
+# Telegram two-way handler (notifiers/telegram) is Apple silicon only.
 universal:
 	GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o build/pr-mon-arm64 ./cmd/pr-mon
 	GOOS=darwin GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o build/pr-mon-amd64 ./cmd/pr-mon
 	lipo -create -output build/pr-mon-universal build/pr-mon-arm64 build/pr-mon-amd64
+	GOOS=darwin GOARCH=arm64 go build -o build/pr-mon-telegram ./notifiers/telegram/cmd/pr-mon-telegram
 
-# The app carries the CLI: one install gives you the window, the dashboard and
-# the backend, and the cask symlinks the binary onto PATH.
+# The app carries the CLI and the Telegram handler: one install gives you the
+# window, the dashboard and the backend, and the cask symlinks both onto PATH.
 app: universal xcode
 	xcodebuild -project macos/PrMon/PrMon.xcodeproj -scheme PrMon -configuration Release \
 		-destination generic/platform=macOS -derivedDataPath $(APP_BUILD) -quiet \
 		MARKETING_VERSION="$(VERSION)" CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" build
 	mkdir -p $(CONTENTS)/Resources/bin
 	cp build/pr-mon-universal $(CONTENTS)/Resources/bin/pr-mon
+	cp build/pr-mon-telegram $(CONTENTS)/Resources/bin/pr-mon-telegram
 	# Adding a file invalidates Xcode's signature; re-sign ad-hoc so it still runs.
 	codesign --force --sign - $(CONTENTS)/Resources/bin/pr-mon
+	codesign --force --sign - $(CONTENTS)/Resources/bin/pr-mon-telegram
 	codesign --force --sign - $(APP)
 	@echo "built $(APP)"
 
-# Sign inside-out: the nested binary first, then the bundle seals it. Never
-# --deep, which would re-sign the inner binary without these options.
+# Sign inside-out: the nested binaries first, then the bundle seals them. Never
+# --deep, which would re-sign the inner binaries without these options.
 sign: app
 	@test "$(SIGN_ID)" != "-" || { echo "set SIGN_ID to a Developer ID"; exit 1; }
 	codesign --force $(HARDENED) --sign "$(SIGN_ID)" $(CONTENTS)/Resources/bin/pr-mon
+	codesign --force $(HARDENED) --sign "$(SIGN_ID)" $(CONTENTS)/Resources/bin/pr-mon-telegram
 	codesign --force $(HARDENED) --sign "$(SIGN_ID)" $(APP)
 	codesign --verify --strict --deep $(APP)
 
@@ -137,6 +142,7 @@ release: dmg
 verify:
 	codesign --verify --strict --verbose=2 $(APP)
 	codesign -dv --verbose=4 $(CONTENTS)/Resources/bin/pr-mon 2>&1 | head -5
+	codesign -dv --verbose=4 $(CONTENTS)/Resources/bin/pr-mon-telegram 2>&1 | head -5
 	spctl -a -vv $(APP)
 	$(call staple,validate,$(APP))
 

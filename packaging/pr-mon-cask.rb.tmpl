@@ -18,6 +18,8 @@ cask "pr-mon" do
 
   app "PrMon.app"
   binary "#{appdir}/PrMon.app/Contents/Resources/bin/pr-mon"
+  # The Telegram two-way handler; pr-mon runs it when [two_way] command names it.
+  binary "#{appdir}/PrMon.app/Contents/Resources/bin/pr-mon-telegram"
 
   # The backend outlives the app, so stop it before the bundle goes; otherwise a
   # daemon keeps running from a deleted binary.

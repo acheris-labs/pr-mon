@@ -183,11 +183,10 @@ in JSON lines on stdin/stdout. The handler does the Telegram work through
 the sender and the `pr-mon` queue, so pr-mon knows nothing about Telegram or
 AWS.
 
-Build and install it to `~/.local/bin/pr-mon-telegram`:
-
-```bash
-make install
-```
+pr-mon's Homebrew cask installs it with the app, at
+`/opt/homebrew/bin/pr-mon-telegram` (inside the bundle at
+`PrMon.app/Contents/Resources/bin/`), and upgrades it with pr-mon. From source,
+`make install` here builds it to `~/.local/bin/pr-mon-telegram`.
 
 Its settings live in `~/.config/pr-mon-telegram/config.toml`, which must be
 `chmod 600` (the handler refuses to start otherwise):
@@ -216,7 +215,7 @@ launchd gives pr-mon no shell environment, so `~` and `$PATH` don't work.
 
 ```toml
 [two_way]
-command = "/Users/<you>/.local/bin/pr-mon-telegram --config /Users/<you>/.config/pr-mon-telegram/config.toml"
+command = "/opt/homebrew/bin/pr-mon-telegram --config /Users/<you>/.config/pr-mon-telegram/config.toml"
 ```
 
 ## Tests

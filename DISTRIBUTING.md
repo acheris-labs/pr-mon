@@ -1,8 +1,9 @@
 # Distributing pr-mon
 
 One artifact ships everything: `PrMon.app` carries the `pr-mon` binary (the
-dashboard, the backend and the CLI) in `Contents/Resources/bin/`, and the
-Homebrew cask symlinks that binary onto PATH.
+dashboard, the backend and the CLI) and `pr-mon-telegram` (the Telegram
+two-way handler, `notifiers/telegram/`) in `Contents/Resources/bin/`, and the
+Homebrew cask symlinks both onto PATH.
 
 ```sh
 brew install --cask acheris-labs/tools/pr-mon
@@ -26,7 +27,7 @@ That is the whole process. The `release` workflow then:
 
 1. Runs the tests (Go and Swift).
 2. Imports the Developer ID certificate into a temporary keychain.
-3. Builds the universal binary, embeds it in the app, signs inside-out,
+3. Builds the universal CLI and the handler, embeds them in the app, signs inside-out,
    notarizes, staples, and packages the zip and DMG.
 4. Creates the GitHub release, with notes from this version's `CHANGELOG.md`
    section when there is one.
