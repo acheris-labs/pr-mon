@@ -42,11 +42,11 @@ test:
 	go test -race ./...
 
 lint:
-	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; echo "run make fmt"; exit 1; }
+	@test -z "$$(gofmt -l cmd internal notifiers)" || { gofmt -l cmd internal notifiers; echo "run make fmt"; exit 1; }
 	go vet ./...
 
 fmt:
-	gofmt -w cmd internal
+	gofmt -w cmd internal notifiers
 
 fixtures:
 	go run ./cmd/gen-fixtures

@@ -16,6 +16,9 @@ sends and send commands back.
   (`cmd/gen-fixtures`). The Go tests and the Swift client's tests both read
   them, so the two implementations are checked against the same bytes.
 - The Mac app in `macos/` is a separate client over the same socket.
+- `notifiers/telegram/` is a two-way handler (`docs/two-way-handler.md`) for
+  Telegram: a Go command in this module, plus the Python Lambdas and
+  Terraform it runs against. Its Python tests run with `make test` there.
 
 ## Versioning
 
