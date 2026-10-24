@@ -1,0 +1,10 @@
+# State holds the readers' secret access keys in cleartext.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfplan
+__pycache__/
+.venv/
+/bin/

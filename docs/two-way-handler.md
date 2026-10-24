@@ -5,7 +5,8 @@ Version **1**.
 pr-mon posts a message with buttons to a chat service and acts on the button
 taps that come back. It doesn't know the service. A **handler** is a program
 that does: pr-mon runs it, sends it generic messages, and gets replies and taps
-back. You can write one in any language from this document alone.
+back. You can write one in any language from this document alone;
+`notifiers/telegram/` is a working one for Telegram.
 
 Sample lines for every request, reply and event are in
 `protocol-fixtures/two-way-handler/`. They are written by `make fixtures` from

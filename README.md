@@ -278,6 +278,7 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
   A two-way handler is a separate program pr-mon runs and talks to over
   stdin/stdout, so notifications can carry buttons (merge, re-run, dismiss) in
   chat apps. See [docs/two-way-handler.md](docs/two-way-handler.md).
+  [notifiers/telegram](notifiers/telegram) is one for Telegram.
 
 - State (seen PRs, collapsed groups, armed merges, dependencies): `~/.local/state/pr-mon/state.json` (respects `XDG_STATE_HOME`)
 - Backend files, next to the state: `daemon.log` (rotated at 1 MB), `daemon.lock`

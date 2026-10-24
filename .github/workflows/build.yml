@@ -54,12 +54,21 @@ jobs:
       - name: Build the app (ad-hoc, Release)
         run: make app
 
-      - name: The bundled CLI runs and is universal
+      - name: The bundled CLI runs and is Apple silicon
         run: |
           set -euo pipefail
           BINARY=macos/build/Build/Products/Release/PrMon.app/Contents/Resources/bin/pr-mon
-          lipo -info "$BINARY"
+          test "$(lipo -archs "$BINARY")" = arm64
           "$BINARY" --version
+
+      - name: The bundled Telegram handler runs
+        run: |
+          set -euo pipefail
+          HANDLER=macos/build/Build/Products/Release/PrMon.app/Contents/Resources/bin/pr-mon-telegram
+          test "$(lipo -archs "$HANDLER")" = arm64
+          # Without --config it explains itself and exits 2.
+          status=0; "$HANDLER" 2>/dev/null || status=$?
+          test "$status" -eq 2
 
       - name: Verify the ad-hoc signature
         run: codesign -dv macos/build/Build/Products/Release/PrMon.app 2>&1

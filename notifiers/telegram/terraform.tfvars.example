@@ -1,0 +1,14 @@
+# Profile used to APPLY this config. Consumers use the per-route reader users
+# created here, not this profile.
+aws_profile = "default"
+aws_region  = "us-east-1"
+
+# Your Telegram user id. Taps from anyone else are dropped.
+allowed_user_ids = [123456789]
+
+# Where messages go when the handler's config names no chat_id. For your
+# private chat with the bot, it's your user id again (a string).
+default_chat_id = "123456789"
+
+# One queue per app that sends buttons. Button data "pr-mon:..." -> pr-mon queue.
+routes = ["pr-mon"]
