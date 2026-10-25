@@ -4,6 +4,16 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.2]
+
+### Fixed
+
+- A PR whose check ran twice no longer shows as failing when its newest run
+  passed. GitHub reports such a PR as failing whenever it is asked for the
+  checks too, as pr-mon does, so pr-mon now works out whether the checks pass
+  from each one's newest run. It still goes by GitHub when a PR has more
+  checks than it fetches.
+
 ## [0.5.1]
 
 ### Fixed
