@@ -4,6 +4,19 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.0]
+
+### Added
+
+- Notify only about the PRs you care about: each repo's notification
+  settings choose whose PRs notify, from yours, bots', watched people's and
+  everyone's (`notify_for` in config.toml; the Authors tab in the dashboard,
+  "Notify about" in the app). Yours are `my_logins`, or the `gh` login when
+  that is empty; bots are GitHub apps plus `bot_logins`; watched people are
+  `watched_logins`. Repos already set up keep notifying for everyone until
+  changed; new ones start at yours, bots' and watched people's. Merges you
+  start from pr-mon always report back.
+
 ## [0.4.1]
 
 ### Added
