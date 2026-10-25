@@ -555,14 +555,15 @@ func TestNotificationsNotifyFor(t *testing.T) {
 	resize(model, 80, 24)
 	press(t, model, "S", "n", "right", "right") // Authors tab
 	view := model.View()
-	for _, want := range []string{"Notify about:", "[x] My PRs", "[x] Bot PRs", "[ ] Everyone's PRs"} {
+	for _, want := range []string{"Notify about:", "[x] My PRs", "[x] Bot PRs",
+		"[x] Watched people's PRs", "[ ] Everyone's PRs"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("view lacks %q:\n%s", want, view)
 		}
 	}
 	assertFits(t, view, 80, 24)
 	press(t, model, "up", "space") // the last row: Everyone's PRs
-	press(t, model, "up", "space") // Bot PRs, off
+	press(t, model, "up", "space") // Watched people's PRs, off
 	press(t, model, "ctrl+s")
 	saved := ""
 	for _, call := range backend.recorded() {
@@ -570,8 +571,8 @@ func TestNotificationsNotifyFor(t *testing.T) {
 			saved = call
 		}
 	}
-	if !strings.HasSuffix(saved, " for:mine,everyone") {
-		t.Errorf("saved = %q, want mine and everyone in the form's order", saved)
+	if !strings.HasSuffix(saved, " for:mine,bots,everyone") {
+		t.Errorf("saved = %q, want mine, bots and everyone in the form's order", saved)
 	}
 }
 

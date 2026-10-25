@@ -581,12 +581,16 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 	m.emit(Event{Kind: "repo", Name: name})
 }
 
-// people is whose PRs are the user's and which authors are bots, for
-// notify_for. The user is my_logins, or else the token's user, asked of
+// people is whose PRs are the user's, which authors are bots, and whom the
+// user watches, for notify_for. The user is my_logins, or else the token's user, asked of
 // GitHub once; if that fails, every PR notifies until it is known.
 func (m *Monitor) people(ctx context.Context) notify.People {
 	m.mutex.Lock()
-	people := notify.People{Mine: slices.Clone(m.config.MyLogins), Bots: slices.Clone(m.config.BotLogins)}
+	people := notify.People{
+		Mine:    slices.Clone(m.config.MyLogins),
+		Bots:    slices.Clone(m.config.BotLogins),
+		Watched: slices.Clone(m.config.WatchedLogins),
+	}
 	viewer := m.viewer
 	m.mutex.Unlock()
 	if len(people.Mine) > 0 {

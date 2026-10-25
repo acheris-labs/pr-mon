@@ -44,15 +44,16 @@ var DefaultEvents = []string{"READY", "FAILING", "CONFLICT", "MERGED", "MERGE_FA
 const (
 	NotifyMine     = "mine"
 	NotifyBots     = "bots"
+	NotifyWatched  = "watched"
 	NotifyEveryone = "everyone"
 )
 
 // NotifyForNames are the NotifyFor values, in display order.
-var NotifyForNames = []string{NotifyMine, NotifyBots, NotifyEveryone}
+var NotifyForNames = []string{NotifyMine, NotifyBots, NotifyWatched, NotifyEveryone}
 
 // DefaultNotifyFor is for a newly configured repo. A repo whose settings
 // predate NotifyFor notifies for everyone, as it always did.
-var DefaultNotifyFor = []string{NotifyMine, NotifyBots}
+var DefaultNotifyFor = []string{NotifyMine, NotifyBots, NotifyWatched}
 
 // NotifyConfig is one repo's notification settings.
 type NotifyConfig struct {
@@ -135,9 +136,11 @@ type Config struct {
 	// A repo without an entry never notifies.
 	Notifications map[string]NotifyConfig `json:"notifications"`
 	// Backend-only: the user's GitHub logins (empty: whoever gh is logged in
-	// as), and accounts to treat as bots besides the ones GitHub marks.
-	MyLogins  []string `json:"-"`
-	BotLogins []string `json:"-"`
+	// as), accounts to treat as bots besides the ones GitHub marks, and
+	// people whose PRs the user wants to hear about.
+	MyLogins      []string `json:"-"`
+	BotLogins     []string `json:"-"`
+	WatchedLogins []string `json:"-"`
 	// Backend-only; never sent to clients.
 	TwoWay *TwoWayConfig `json:"-"`
 	// Why the file on disk was ignored, if it was. Saving would then replace
@@ -170,6 +173,7 @@ type raw struct {
 	TwoWay         *toml.Primitive           `toml:"two_way"`
 	MyLogins       []string                  `toml:"my_logins"`
 	BotLogins      []string                  `toml:"bot_logins"`
+	WatchedLogins  []string                  `toml:"watched_logins"`
 }
 
 // Load returns the config and a warning if the file was unusable.
@@ -207,6 +211,7 @@ func Load(path string) (Config, string) {
 	}
 	config.MyLogins = parsed.MyLogins
 	config.BotLogins = parsed.BotLogins
+	config.WatchedLogins = parsed.WatchedLogins
 	problems := []string{}
 	for repo, table := range parsed.Notifications {
 		settings, ok := parseNotify(meta, table)
@@ -330,6 +335,9 @@ func Save(path string, config Config) error {
 	}
 	if len(config.BotLogins) > 0 {
 		lines = append(lines, fmt.Sprintf("bot_logins = %s", tomlValue(config.BotLogins)))
+	}
+	if len(config.WatchedLogins) > 0 {
+		lines = append(lines, fmt.Sprintf("watched_logins = %s", tomlValue(config.WatchedLogins)))
 	}
 	if tw := config.TwoWay; tw != nil {
 		lines = append(lines, "", "[two_way]", fmt.Sprintf("command = %s", tomlValue(tw.Command)))

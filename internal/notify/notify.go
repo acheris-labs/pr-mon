@@ -56,6 +56,7 @@ var EventLabels = map[string]string{
 var NotifyForLabels = map[string]string{
 	config.NotifyMine:     "My PRs",
 	config.NotifyBots:     "Bot PRs",
+	config.NotifyWatched:  "Watched people's PRs",
 	config.NotifyEveryone: "Everyone's PRs",
 }
 
@@ -80,11 +81,12 @@ type Notification struct {
 	State string // a Status value, or "NEW"
 }
 
-// People says whose PRs are the user's own and which authors are bots, for
-// NotifyConfig.NotifyFor.
+// People says whose PRs are the user's own, which authors are bots, and whom
+// the user watches, for NotifyConfig.NotifyFor.
 type People struct {
-	Mine []string
-	Bots []string
+	Mine    []string
+	Bots    []string
+	Watched []string
 	// Who the user is couldn't be found out: every PR notifies, so nothing of
 	// theirs is missed.
 	Unknown bool
@@ -96,6 +98,9 @@ func Wants(settings config.NotifyConfig, people People, pr models.PullRequest) b
 		return true
 	}
 	if slices.Contains(settings.NotifyFor, config.NotifyMine) && hasLogin(people.Mine, pr.Author) {
+		return true
+	}
+	if slices.Contains(settings.NotifyFor, config.NotifyWatched) && hasLogin(people.Watched, pr.Author) {
 		return true
 	}
 	return slices.Contains(settings.NotifyFor, config.NotifyBots) &&

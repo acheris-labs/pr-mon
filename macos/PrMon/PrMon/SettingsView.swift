@@ -570,7 +570,7 @@ private struct NotificationSettings: View {
                     } header: {
                         Text("Notify about")
                     } footer: {
-                        Text("Yours are my_logins in config.toml, or else the gh login. Bots are GitHub apps and bot_logins. None ticked means everyone's.")
+                        Text("Yours are my_logins in config.toml, or else the gh login. Bots are GitHub apps and bot_logins; watched people are watched_logins. None ticked means everyone's.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

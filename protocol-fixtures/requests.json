@@ -175,7 +175,8 @@
         "two_way_enabled": false,
         "notify_for": [
           "mine",
-          "bots"
+          "bots",
+          "watched"
         ]
       }
     },
@@ -201,7 +202,8 @@
         "two_way_enabled": false,
         "notify_for": [
           "mine",
-          "bots"
+          "bots",
+          "watched"
         ]
       }
     },

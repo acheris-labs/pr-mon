@@ -27,7 +27,8 @@
           "two_way_enabled": true,
           "notify_for": [
             "mine",
-            "bots"
+            "bots",
+            "watched"
           ]
         }
       }

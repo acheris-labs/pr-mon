@@ -187,7 +187,8 @@ func (n *notificationsModal) view(model *Model) string {
 				option.Label, index == n.authorCursor))
 		}
 		lines = append(lines, dim.Render("Yours are my_logins in config.toml, or else the gh login."),
-			dim.Render("Bots are GitHub apps and bot_logins. None ticked means everyone's."))
+			dim.Render("Bots are GitHub apps and bot_logins; watched are watched_logins."),
+			dim.Render("None ticked means everyone's."))
 	case tabScript:
 		lines = append(lines, n.checkbox(n.settings.ScriptEnabled, "Run script", false),
 			fitInput(&n.script, model), dim.Render(n.form.ScriptHelp))

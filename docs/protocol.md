@@ -171,7 +171,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `script` | string | Command run with the message on stdin. |
 | `desktop_enabled` | bool | |
 | `two_way_enabled` | bool | Send to the configured two-way channel (see Hello.two_way). |
-| `notify_for` | [string] | Whose PRs notify: any of `mine` (the user's logins), `bots` (GitHub apps and `bot_logins` in config.toml), `everyone`. Empty means `everyone`. Settings sent without it keep notifying for `everyone`. |
+| `notify_for` | [string] | Whose PRs notify: any of `mine` (the user's logins), `bots` (GitHub apps and `bot_logins` in config.toml), `watched` (`watched_logins` in config.toml), `everyone`. Empty means `everyone`. Settings sent without it keep notifying for `everyone`. |
 
 ### Object: `NotificationForm`
 

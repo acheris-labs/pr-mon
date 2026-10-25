@@ -171,7 +171,7 @@ enum Fixtures {
             message: "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}",
             events: ["READY", "FAILING", "CONFLICT", "MERGED", "MERGE_FAILED"],
             script: script,
-            notifyFor: ["mine", "bots"]
+            notifyFor: ["mine", "bots", "watched"]
         )
     }
 
@@ -195,7 +195,7 @@ enum Fixtures {
         ).result
         #expect(form.events.first == EventOption(name: "READY", label: "Ready (mergeable)"))
         #expect(form.events.count == 9)
-        #expect(form.notifyFor.map(\.name) == ["mine", "bots", "everyone"])
+        #expect(form.notifyFor.map(\.name) == ["mine", "bots", "watched", "everyone"])
         #expect(form.variables.contains("PR_REASON"))
         #expect(form.scriptHelp.contains("stdin"))
         #expect(form.defaults == defaults())

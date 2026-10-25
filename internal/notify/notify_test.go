@@ -129,8 +129,10 @@ func TestSelect(t *testing.T) {
 }
 
 func TestWants(t *testing.T) {
-	people := notify.People{Mine: []string{"Octocat"}, Bots: []string{"release-robot[bot]"}}
+	people := notify.People{Mine: []string{"Octocat"}, Bots: []string{"release-robot[bot]"},
+		Watched: []string{"carol"}}
 	mineAndBots := config.NotifyConfig{NotifyFor: []string{"mine", "bots"}}
+	watched := config.NotifyConfig{NotifyFor: []string{"watched"}}
 	cases := []struct {
 		name     string
 		settings config.NotifyConfig
@@ -143,6 +145,9 @@ func TestWants(t *testing.T) {
 		{"someone else", mineAndBots, people, "bob", false, false},
 		{"an app", mineAndBots, people, "dependabot", true, true},
 		{"a listed bot, without [bot]", mineAndBots, people, "release-robot", false, true},
+		{"watched, not chosen", mineAndBots, people, "carol", false, false},
+		{"watched, chosen", watched, people, "Carol", false, true},
+		{"watched only: not mine", watched, people, "octocat", false, false},
 		{"bots not chosen", config.NotifyConfig{NotifyFor: []string{"mine"}}, people, "dependabot", true, false},
 		{"everyone", config.NotifyConfig{NotifyFor: []string{"everyone"}}, people, "bob", false, true},
 		{"nothing chosen", config.NotifyConfig{}, people, "bob", false, true},

@@ -561,6 +561,7 @@ func TestNotifyFor(t *testing.T) {
 			testfixtures.PR(2, append(mutate, by("bob", false))...),
 			testfixtures.PR(3, append(mutate, by("dependabot", true))...),
 			testfixtures.PR(4, append(mutate, by("release-robot", false))...),
+			testfixtures.PR(5, append(mutate, by("carol", false))...),
 		}
 	}
 	cases := []struct {
@@ -571,13 +572,14 @@ func TestNotifyFor(t *testing.T) {
 		want      []string
 		askViewer bool
 	}{
-		{"everyone", []string{"everyone"}, nil, "alice", []string{"1", "2", "3", "4"}, false},
-		{"empty means everyone", []string{}, nil, "alice", []string{"1", "2", "3", "4"}, false},
+		{"everyone", []string{"everyone"}, nil, "alice", []string{"1", "2", "3", "4", "5"}, false},
+		{"empty means everyone", []string{}, nil, "alice", []string{"1", "2", "3", "4", "5"}, false},
 		{"mine is the token's user", []string{"mine"}, nil, "alice", []string{"1"}, true},
 		{"mine and bots", []string{"mine", "bots"}, nil, "alice", []string{"1", "3", "4"}, true},
 		{"bots only", []string{"bots"}, nil, "alice", []string{"3", "4"}, true},
+		{"the defaults", config.DefaultNotifyFor, nil, "alice", []string{"1", "3", "4", "5"}, true},
 		{"my_logins win over the token", []string{"mine"}, []string{"Bob"}, "alice", []string{"2"}, false},
-		{"unknown user notifies for everyone", []string{"mine"}, nil, "", []string{"1", "2", "3", "4"}, true},
+		{"unknown user notifies for everyone", []string{"mine"}, nil, "", []string{"1", "2", "3", "4", "5"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -591,6 +593,7 @@ func TestNotifyFor(t *testing.T) {
 				map[string]config.NotifyConfig{"acme/api": settings}, func(saved *config.Config) {
 					saved.MyLogins = tc.myLogins
 					saved.BotLogins = []string{"release-robot[bot]"}
+					saved.WatchedLogins = []string{"carol"}
 				})
 			client.setRepo(repoWith("acme/api", prs()...))
 			h.poll()

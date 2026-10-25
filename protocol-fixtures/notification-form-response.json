@@ -50,6 +50,10 @@
         "label": "Bot PRs"
       },
       {
+        "name": "watched",
+        "label": "Watched people's PRs"
+      },
+      {
         "name": "everyone",
         "label": "Everyone's PRs"
       }
@@ -82,7 +86,8 @@
       "two_way_enabled": false,
       "notify_for": [
         "mine",
-        "bots"
+        "bots",
+        "watched"
       ]
     }
   }

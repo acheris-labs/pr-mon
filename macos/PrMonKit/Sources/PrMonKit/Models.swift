@@ -105,7 +105,7 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
     public var script: String
     public var desktopEnabled: Bool
     public var twoWayEnabled: Bool
-    /// Whose PRs notify: any of "mine", "bots", "everyone"; empty means everyone's.
+    /// Whose PRs notify: any of "mine", "bots", "watched", "everyone"; empty means everyone's.
     public var notifyFor: [String]
 
     public init(

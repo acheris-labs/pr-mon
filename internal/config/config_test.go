@@ -131,8 +131,8 @@ func TestNotifyDefaults(t *testing.T) {
 		settings.Script != "" {
 		t.Errorf("settings = %+v, want channels off", settings)
 	}
-	if !reflect.DeepEqual(settings.NotifyFor, []string{"mine", "bots"}) {
-		t.Errorf("notify_for = %v, want [mine bots]", settings.NotifyFor)
+	if !reflect.DeepEqual(settings.NotifyFor, []string{"mine", "bots", "watched"}) {
+		t.Errorf("notify_for = %v, want [mine bots watched]", settings.NotifyFor)
 	}
 }
 
@@ -225,6 +225,7 @@ func TestLoginsRoundTripAndStayOffTheWire(t *testing.T) {
 	saved.Repos = []string{"acme/api"}
 	saved.MyLogins = []string{"octocat", "work-cat"}
 	saved.BotLogins = []string{"release-robot"}
+	saved.WatchedLogins = []string{"teammate"}
 	if err := config.Save(path, saved); err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +240,8 @@ func TestLoginsRoundTripAndStayOffTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), "octocat") || strings.Contains(string(encoded), "release-robot") {
+	if strings.Contains(string(encoded), "octocat") || strings.Contains(string(encoded), "release-robot") ||
+		strings.Contains(string(encoded), "teammate") {
 		t.Errorf("logins sent to clients: %s", encoded)
 	}
 }
