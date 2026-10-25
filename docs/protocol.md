@@ -171,12 +171,14 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `script` | string | Command run with the message on stdin. |
 | `desktop_enabled` | bool | |
 | `two_way_enabled` | bool | Send to the configured two-way channel (see Hello.two_way). |
+| `notify_for` | [string] | Whose PRs notify: any of `mine` (the user's logins), `bots` (GitHub apps and `bot_logins` in config.toml), `watched` (`watched_logins` in config.toml), `everyone`. Empty means `everyone`. Settings sent without it keep notifying for `everyone`. |
 
 ### Object: `NotificationForm`
 
 | Field | Type | Meaning |
 |:------|:-----|:--------|
 | `events` | [`EventOption`] | Events to offer, in display order. |
+| `notify_for` | [`EventOption`] | `NotifyConfig.notify_for` values to offer, in display order. |
 | `variables` | [string] | Placeholder names usable as `{{NAME}}`. |
 | `script_help` | string | Help text for the script command. |
 | `defaults` | `NotifyConfig` | Settings to start from for a repo that has none. |
@@ -185,7 +187,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 
 | Field | Type | Meaning |
 |:------|:-----|:--------|
-| `name` | string | Value for `NotifyConfig.events`. |
+| `name` | string | Value for `NotifyConfig.events` (or `notify_for`). |
 | `label` | string | Text to show. |
 
 ### Object: `NotificationPreview`

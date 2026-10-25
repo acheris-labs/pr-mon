@@ -105,11 +105,13 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
     public var script: String
     public var desktopEnabled: Bool
     public var twoWayEnabled: Bool
+    /// Whose PRs notify: any of "mine", "bots", "watched", "everyone"; empty means everyone's.
+    public var notifyFor: [String]
 
     public init(
         message: String, events: [String], includeDrafts: Bool = false,
         scriptEnabled: Bool = false, script: String = "", desktopEnabled: Bool = false,
-        twoWayEnabled: Bool = false
+        twoWayEnabled: Bool = false, notifyFor: [String] = ["everyone"]
     ) {
         self.message = message
         self.events = events
@@ -118,9 +120,11 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
         self.script = script
         self.desktopEnabled = desktopEnabled
         self.twoWayEnabled = twoWayEnabled
+        self.notifyFor = notifyFor
     }
 
     /// A backend from before two-way notifications sends no two_way_enabled: off.
+    /// One from before notify_for sends none: it notifies for everyone.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         message = try container.decode(String.self, forKey: .message)
@@ -130,6 +134,7 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
         script = try container.decode(String.self, forKey: .script)
         desktopEnabled = try container.decode(Bool.self, forKey: .desktopEnabled)
         twoWayEnabled = try container.decodeIfPresent(Bool.self, forKey: .twoWayEnabled) ?? false
+        notifyFor = try container.decodeIfPresent([String].self, forKey: .notifyFor) ?? ["everyone"]
     }
 
     enum CodingKeys: String, CodingKey {
@@ -138,6 +143,7 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
         case scriptEnabled = "script_enabled"
         case desktopEnabled = "desktop_enabled"
         case twoWayEnabled = "two_way_enabled"
+        case notifyFor = "notify_for"
     }
 }
 
@@ -395,13 +401,25 @@ public struct EventOption: Codable, Sendable, Equatable, Identifiable {
 /// What a notification settings editor offers (from the backend).
 public struct NotificationForm: Codable, Sendable, Equatable {
     public var events: [EventOption]
+    /// Whose PRs may notify; empty from a backend that predates notify_for.
+    public var notifyFor: [EventOption]
     public var variables: [String]
     public var scriptHelp: String
     /// Settings to start from for a repo that has none.
     public var defaults: NotifyConfig
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        events = try container.decode([EventOption].self, forKey: .events)
+        notifyFor = try container.decodeIfPresent([EventOption].self, forKey: .notifyFor) ?? []
+        variables = try container.decode([String].self, forKey: .variables)
+        scriptHelp = try container.decode(String.self, forKey: .scriptHelp)
+        defaults = try container.decode(NotifyConfig.self, forKey: .defaults)
+    }
+
     enum CodingKeys: String, CodingKey {
         case events, variables, defaults
+        case notifyFor = "notify_for"
         case scriptHelp = "script_help"
     }
 }

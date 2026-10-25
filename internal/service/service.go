@@ -77,6 +77,8 @@ type GitHub interface {
 	RerunFailedJobs(ctx context.Context, repo string, runs []int) error
 	ConvertToDraft(ctx context.Context, prID string) error
 	LookupPRs(ctx context.Context, repo string, numbers []int) ([]models.PRRef, error)
+	// The token's user: whose PRs are "mine" when my_logins is empty.
+	Viewer(ctx context.Context) (string, error)
 	// The cheap side: conditional requests and fetches of named PRs only.
 	ListOpenPRs(ctx context.Context, repo, etag string) (github.OpenPRs, error)
 	BaseMoved(ctx context.Context, repo, etag string) (bool, string, error)
@@ -106,6 +108,8 @@ type Monitor struct {
 
 	mutex  sync.Mutex
 	config config.Config
+	// The token's user, once GitHub has said; "" until then.
+	viewer string
 	state  state.AppState
 	track  *tracker.Tracker
 	repos  map[string]models.Repo
@@ -552,7 +556,11 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 
 	posts := []notify.Notification{}
 	if configured && !firstLoad {
-		for _, notification := range notify.Select(repo, changes, settings) {
+		people := notify.People{}
+		if !settings.ForEveryone() {
+			people = m.people(m.ctx)
+		}
+		for _, notification := range notify.Select(repo, changes, settings, people) {
 			if muted[notification.PR.Number] {
 				continue
 			}
@@ -571,6 +579,37 @@ func (m *Monitor) apply(name string, repo models.Repo) {
 	m.checkArmed(name, repo)
 	m.checkAutoRetry(name, repo)
 	m.emit(Event{Kind: "repo", Name: name})
+}
+
+// people is whose PRs are the user's, which authors are bots, and whom the
+// user watches, for notify_for. The user is my_logins, or else the token's user, asked of
+// GitHub once; if that fails, every PR notifies until it is known.
+func (m *Monitor) people(ctx context.Context) notify.People {
+	m.mutex.Lock()
+	people := notify.People{
+		Mine:    slices.Clone(m.config.MyLogins),
+		Bots:    slices.Clone(m.config.BotLogins),
+		Watched: slices.Clone(m.config.WatchedLogins),
+	}
+	viewer := m.viewer
+	m.mutex.Unlock()
+	if len(people.Mine) > 0 {
+		return people
+	}
+	if viewer == "" {
+		login, err := m.client.Viewer(ctx)
+		if err != nil {
+			m.log.Warn("can't tell which PRs are yours; notifying about all of them", "err", err)
+			people.Unknown = true
+			return people
+		}
+		m.mutex.Lock()
+		m.viewer = login
+		m.mutex.Unlock()
+		viewer = login
+	}
+	people.Mine = []string{viewer}
+	return people
 }
 
 // ----- pr-mon auto-merge -----

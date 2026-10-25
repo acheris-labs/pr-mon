@@ -207,17 +207,15 @@ func ParseAction(raw json.RawMessage) (models.Action, error) {
 	return models.Action{}, fmt.Errorf("invalid action: unknown kind %q", action.Kind)
 }
 
-// ParseSettings reads notification settings from a client.
+// ParseSettings reads notification settings from a client. A client from
+// before notify_for sends none, and keeps notifying for everyone.
 func ParseSettings(raw json.RawMessage) (config.NotifyConfig, error) {
-	settings := config.NewNotifyConfig()
+	settings := config.LegacyNotifyConfig()
 	if err := json.Unmarshal(raw, &settings); err != nil {
 		return config.NotifyConfig{}, fmt.Errorf("invalid notification settings: %v", err)
 	}
-	for _, event := range settings.Events {
-		if !config.KnownEvent(event) {
-			return config.NotifyConfig{},
-				fmt.Errorf("invalid notification settings: unknown event %q", event)
-		}
+	if problem := config.UnknownSetting(settings); problem != "" {
+		return config.NotifyConfig{}, fmt.Errorf("invalid notification settings: %s", problem)
 	}
 	return settings, nil
 }

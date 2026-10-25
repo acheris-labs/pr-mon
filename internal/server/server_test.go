@@ -95,6 +95,8 @@ func (f *fakeGitHub) FetchPRs(_ context.Context, _ string, numbers []int) ([]mod
 	return found, nil
 }
 
+func (f *fakeGitHub) Viewer(context.Context) (string, error) { return "alice", nil }
+
 // LookupPRs reports every PR as open.
 func (f *fakeGitHub) LookupPRs(_ context.Context, repo string, numbers []int) ([]models.PRRef, error) {
 	refs := []models.PRRef{}

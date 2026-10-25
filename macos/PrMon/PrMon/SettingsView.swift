@@ -562,6 +562,20 @@ private struct NotificationSettings: View {
                     Text("When a PR becomes")
                 }
 
+                if !form.notifyFor.isEmpty {
+                    Section {
+                        ForEach(form.notifyFor) { option in
+                            Toggle(option.label, isOn: notifyForBinding(option.name, settings: settings, form: form))
+                        }
+                    } header: {
+                        Text("Notify about")
+                    } footer: {
+                        Text("Yours are my_logins in config.toml, or else the gh login. Bots are GitHub apps and bot_logins; watched people are watched_logins. None ticked means everyone's.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section {
                     TextField("Template", text: settings.message, axis: .vertical)
                         .lineLimit(1...3)
@@ -629,6 +643,20 @@ private struct NotificationSettings: View {
                 var chosen = Set(settings.wrappedValue.events)
                 if on { chosen.insert(name) } else { chosen.remove(name) }
                 settings.wrappedValue.events = form.events.map(\.name).filter(chosen.contains)
+            }
+        )
+    }
+
+    /// Notify-for values keep the backend's order.
+    private func notifyForBinding(
+        _ name: String, settings: Binding<NotifyConfig>, form: NotificationForm
+    ) -> Binding<Bool> {
+        Binding(
+            get: { settings.wrappedValue.notifyFor.contains(name) },
+            set: { on in
+                var chosen = Set(settings.wrappedValue.notifyFor)
+                if on { chosen.insert(name) } else { chosen.remove(name) }
+                settings.wrappedValue.notifyFor = form.notifyFor.map(\.name).filter(chosen.contains)
             }
         )
     }

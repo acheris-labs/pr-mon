@@ -262,6 +262,9 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
   repos = [
       "owner/repo",
   ]
+  my_logins = ["octocat"]   # optional: your GitHub logins; default is whoever gh is logged in as
+  bot_logins = []           # optional: accounts to count as bots besides GitHub apps
+  watched_logins = []       # optional: people whose PRs you want to hear about
 
   [notifications."owner/repo"]
   message = "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}"
@@ -270,7 +273,14 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
   script_enabled = true
   script = "im --deliver tgram"
   desktop_enabled = false
+  notify_for = ["mine", "bots", "watched"]   # whose PRs notify: "mine", "bots", "watched", "everyone"
+  ```
 
+  A repo set up before `notify_for` existed notifies for everyone until you
+  change it; a newly added one starts at `["mine", "bots", "watched"]`. Merges you start
+  from pr-mon always report back, whoever wrote the PR.
+
+  ```toml
   [two_way]
   command = "/path/to/handler"   # optional: a program that sends and receives two-way messages
   ```

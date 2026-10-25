@@ -170,8 +170,23 @@ enum Fixtures {
         NotifyConfig(
             message: "{{PR_REPO}}#{{PR_NUM}} is {{PR_STATE}}: {{PR_TITLE}} {{PR_URL}}",
             events: ["READY", "FAILING", "CONFLICT", "MERGED", "MERGE_FAILED"],
-            script: script
+            script: script,
+            notifyFor: ["mine", "bots", "watched"]
         )
+    }
+
+    @Test func settingsFromAnOlderBackendNotifyForEveryone() throws {
+        let settings = try JSONDecoder().decode(NotifyConfig.self, from: Data("""
+            {"message": "m", "events": [], "include_drafts": false, "script_enabled": false,
+             "script": "", "desktop_enabled": false}
+            """.utf8))
+        #expect(settings.notifyFor == ["everyone"])
+        let form = try JSONDecoder().decode(NotificationForm.self, from: Data("""
+            {"events": [], "variables": [], "script_help": "",
+             "defaults": {"message": "m", "events": [], "include_drafts": false,
+                          "script_enabled": false, "script": "", "desktop_enabled": false}}
+            """.utf8))
+        #expect(form.notifyFor.isEmpty)
     }
 
     @Test func notificationFormAndPreview() throws {
@@ -180,6 +195,7 @@ enum Fixtures {
         ).result
         #expect(form.events.first == EventOption(name: "READY", label: "Ready (mergeable)"))
         #expect(form.events.count == 9)
+        #expect(form.notifyFor.map(\.name) == ["mine", "bots", "watched", "everyone"])
         #expect(form.variables.contains("PR_REASON"))
         #expect(form.scriptHelp.contains("stdin"))
         #expect(form.defaults == defaults())

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -39,6 +40,21 @@ var EventNames = []string{
 // DefaultEvents are on for a newly configured repo.
 var DefaultEvents = []string{"READY", "FAILING", "CONFLICT", "MERGED", "MERGE_FAILED"}
 
+// Whose PRs a repo notifies about (NotifyConfig.NotifyFor).
+const (
+	NotifyMine     = "mine"
+	NotifyBots     = "bots"
+	NotifyWatched  = "watched"
+	NotifyEveryone = "everyone"
+)
+
+// NotifyForNames are the NotifyFor values, in display order.
+var NotifyForNames = []string{NotifyMine, NotifyBots, NotifyWatched, NotifyEveryone}
+
+// DefaultNotifyFor is for a newly configured repo. A repo whose settings
+// predate NotifyFor notifies for everyone, as it always did.
+var DefaultNotifyFor = []string{NotifyMine, NotifyBots, NotifyWatched}
+
 // NotifyConfig is one repo's notification settings.
 type NotifyConfig struct {
 	Message        string   `json:"message" toml:"message"`
@@ -48,6 +64,22 @@ type NotifyConfig struct {
 	Script         string   `json:"script" toml:"script"`
 	DesktopEnabled bool     `json:"desktop_enabled" toml:"desktop_enabled"`
 	TwoWayEnabled  bool     `json:"two_way_enabled" toml:"two_way_enabled"`
+	// Whose PRs notify: any of NotifyForNames. Empty means everyone's.
+	NotifyFor []string `json:"notify_for" toml:"notify_for"`
+}
+
+// ForEveryone reports whether every PR notifies, whoever wrote it.
+func (n NotifyConfig) ForEveryone() bool {
+	return len(n.NotifyFor) == 0 || slices.Contains(n.NotifyFor, NotifyEveryone)
+}
+
+// LegacyNotifyConfig is the starting point for settings written before
+// NotifyFor existed (in the file, or from an older client): those notified
+// for everyone.
+func LegacyNotifyConfig() NotifyConfig {
+	settings := NewNotifyConfig()
+	settings.NotifyFor = []string{NotifyEveryone}
+	return settings
 }
 
 // TwoWayConfig is the backend-only [two_way] table: the handler program that
@@ -77,22 +109,21 @@ func (t TwoWayConfig) Problem() string {
 }
 
 func NewNotifyConfig() NotifyConfig {
-	return NotifyConfig{Message: DefaultMessage, Events: append([]string{}, DefaultEvents...)}
+	return NotifyConfig{
+		Message:   DefaultMessage,
+		Events:    append([]string{}, DefaultEvents...),
+		NotifyFor: append([]string{}, DefaultNotifyFor...),
+	}
 }
 
 // Equal reports whether two settings would be saved identically.
 func (n NotifyConfig) Equal(other NotifyConfig) bool {
 	if n.Message != other.Message || n.IncludeDrafts != other.IncludeDrafts ||
 		n.ScriptEnabled != other.ScriptEnabled || n.Script != other.Script ||
-		n.DesktopEnabled != other.DesktopEnabled || n.TwoWayEnabled != other.TwoWayEnabled || len(n.Events) != len(other.Events) {
+		n.DesktopEnabled != other.DesktopEnabled || n.TwoWayEnabled != other.TwoWayEnabled {
 		return false
 	}
-	for i := range n.Events {
-		if n.Events[i] != other.Events[i] {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(n.Events, other.Events) && slices.Equal(n.NotifyFor, other.NotifyFor)
 }
 
 type Config struct {
@@ -104,6 +135,12 @@ type Config struct {
 	ActiveInterval int `json:"active_interval"`
 	// A repo without an entry never notifies.
 	Notifications map[string]NotifyConfig `json:"notifications"`
+	// Backend-only: the user's GitHub logins (empty: whoever gh is logged in
+	// as), accounts to treat as bots besides the ones GitHub marks, and
+	// people whose PRs the user wants to hear about.
+	MyLogins      []string `json:"-"`
+	BotLogins     []string `json:"-"`
+	WatchedLogins []string `json:"-"`
 	// Backend-only; never sent to clients.
 	TwoWay *TwoWayConfig `json:"-"`
 	// Why the file on disk was ignored, if it was. Saving would then replace
@@ -134,6 +171,9 @@ type raw struct {
 	ActiveInterval *int                      `toml:"active_interval"`
 	Notifications  map[string]toml.Primitive `toml:"notifications"`
 	TwoWay         *toml.Primitive           `toml:"two_way"`
+	MyLogins       []string                  `toml:"my_logins"`
+	BotLogins      []string                  `toml:"bot_logins"`
+	WatchedLogins  []string                  `toml:"watched_logins"`
 }
 
 // Load returns the config and a warning if the file was unusable.
@@ -169,6 +209,9 @@ func Load(path string) (Config, string) {
 	if parsed.TwoWay != nil {
 		config.TwoWay = parseTwoWay(meta, *parsed.TwoWay)
 	}
+	config.MyLogins = parsed.MyLogins
+	config.BotLogins = parsed.BotLogins
+	config.WatchedLogins = parsed.WatchedLogins
 	problems := []string{}
 	for repo, table := range parsed.Notifications {
 		settings, ok := parseNotify(meta, table)
@@ -193,18 +236,32 @@ func ignore(warning string) (Config, string) {
 }
 
 // parseNotify builds settings from a TOML table; not ok when a value has the
-// wrong type or an event isn't one we know.
+// wrong type or an event or notify_for value isn't one we know.
 func parseNotify(meta toml.MetaData, table toml.Primitive) (NotifyConfig, bool) {
-	settings := NewNotifyConfig()
+	settings := LegacyNotifyConfig()
 	if err := meta.PrimitiveDecode(table, &settings); err != nil {
 		return NotifyConfig{}, false
 	}
-	for _, event := range settings.Events {
-		if !KnownEvent(event) {
-			return NotifyConfig{}, false
-		}
+	if UnknownSetting(settings) != "" {
+		return NotifyConfig{}, false
 	}
 	return settings, true
+}
+
+// UnknownSetting is the first event or notify_for value that isn't one we
+// know, or "" when there is none.
+func UnknownSetting(settings NotifyConfig) string {
+	for _, event := range settings.Events {
+		if !KnownEvent(event) {
+			return fmt.Sprintf("unknown event %q", event)
+		}
+	}
+	for _, name := range settings.NotifyFor {
+		if !slices.Contains(NotifyForNames, name) {
+			return fmt.Sprintf("unknown notify_for %q", name)
+		}
+	}
+	return ""
 }
 
 // parseTwoWay builds the [two_way] table on its own, like each repo's
@@ -250,6 +307,15 @@ func tomlValue(value any) string {
 	return strings.ReplaceAll(string(encoded), del, delEscape)
 }
 
+// notifyFor is the value to save: an empty list means everyone, and is
+// written as such so it isn't read back as a legacy repo.
+func notifyFor(settings NotifyConfig) []string {
+	if len(settings.NotifyFor) == 0 {
+		return []string{NotifyEveryone}
+	}
+	return settings.NotifyFor
+}
+
 func Save(path string, config Config) error {
 	if config.Ignored != "" {
 		return errors.New(config.Ignored + "; not saving over it")
@@ -264,6 +330,15 @@ func Save(path string, config Config) error {
 		lines = append(lines, fmt.Sprintf("    %s,", tomlValue(repo)))
 	}
 	lines = append(lines, "]")
+	if len(config.MyLogins) > 0 {
+		lines = append(lines, fmt.Sprintf("my_logins = %s", tomlValue(config.MyLogins)))
+	}
+	if len(config.BotLogins) > 0 {
+		lines = append(lines, fmt.Sprintf("bot_logins = %s", tomlValue(config.BotLogins)))
+	}
+	if len(config.WatchedLogins) > 0 {
+		lines = append(lines, fmt.Sprintf("watched_logins = %s", tomlValue(config.WatchedLogins)))
+	}
 	if tw := config.TwoWay; tw != nil {
 		lines = append(lines, "", "[two_way]", fmt.Sprintf("command = %s", tomlValue(tw.Command)))
 	}
@@ -281,6 +356,7 @@ func Save(path string, config Config) error {
 			fmt.Sprintf("script = %s", tomlValue(settings.Script)),
 			fmt.Sprintf("desktop_enabled = %s", tomlValue(settings.DesktopEnabled)),
 			fmt.Sprintf("two_way_enabled = %s", tomlValue(settings.TwoWayEnabled)),
+			fmt.Sprintf("notify_for = %s", tomlValue(notifyFor(settings))),
 		)
 	}
 	return files.WriteAtomic(path, strings.Join(lines, "\n")+"\n")

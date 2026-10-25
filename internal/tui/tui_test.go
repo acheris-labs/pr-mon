@@ -162,7 +162,8 @@ func (f *fakeLoginItem) SetEnabled(enabled bool) error {
 }
 
 func (f *fakeBackend) SaveNotifications(repo string, settings config.NotifyConfig) error {
-	f.record("save " + repo + " " + strings.Join(settings.Events, ",") + " " + settings.Message)
+	f.record("save " + repo + " " + strings.Join(settings.Events, ",") + " " + settings.Message +
+		" for:" + strings.Join(settings.NotifyFor, ","))
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	f.saved = &settings
@@ -549,6 +550,32 @@ func TestNotificationsDialog(t *testing.T) {
 	}
 }
 
+func TestNotificationsNotifyFor(t *testing.T) {
+	model, backend := newModel()
+	resize(model, 80, 24)
+	press(t, model, "S", "n", "right", "right") // Authors tab
+	view := model.View()
+	for _, want := range []string{"Notify about:", "[x] My PRs", "[x] Bot PRs",
+		"[x] Watched people's PRs", "[ ] Everyone's PRs"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view lacks %q:\n%s", want, view)
+		}
+	}
+	assertFits(t, view, 80, 24)
+	press(t, model, "up", "space") // the last row: Everyone's PRs
+	press(t, model, "up", "space") // Watched people's PRs, off
+	press(t, model, "ctrl+s")
+	saved := ""
+	for _, call := range backend.recorded() {
+		if strings.HasPrefix(call, "save ") {
+			saved = call
+		}
+	}
+	if !strings.HasSuffix(saved, " for:mine,bots,everyone") {
+		t.Errorf("saved = %q, want mine, bots and everyone in the form's order", saved)
+	}
+}
+
 func TestNotificationsTwoWayTab(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -566,7 +593,7 @@ func TestNotificationsTwoWayTab(t *testing.T) {
 			model, backend := newModel()
 			backend.status.TwoWay = tc.twoWay
 			press(t, model, "S", "n")
-			press(t, model, "right", "right", "right", "right") // Events, Script, Desktop, Two-way
+			press(t, model, "right", "right", "right", "right", "right") // Events, Authors, Script, Desktop, Two-way
 			view := model.View()
 			if !strings.Contains(view, " Two-way ") {
 				t.Fatalf("there should be a Two-way tab:\n%s", view)

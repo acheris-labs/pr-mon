@@ -212,6 +212,27 @@ func TestParseSettingsRejectsUnknownEvents(t *testing.T) {
 	}
 }
 
+func TestParseSettingsNotifyFor(t *testing.T) {
+	if _, err := protocol.ParseSettings([]byte(`{"notify_for": ["friends"]}`)); err == nil {
+		t.Error("an unknown notify_for value should be refused")
+	}
+	settings, err := protocol.ParseSettings([]byte(`{"notify_for": ["mine"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(settings.NotifyFor, []string{"mine"}) {
+		t.Errorf("notify_for = %v, want [mine]", settings.NotifyFor)
+	}
+	// An older client sends no notify_for; its repos keep notifying for everyone.
+	settings, err = protocol.ParseSettings([]byte(`{"events": ["READY"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(settings.NotifyFor, []string{"everyone"}) {
+		t.Errorf("notify_for = %v, want [everyone]", settings.NotifyFor)
+	}
+}
+
 func TestEncodeKeepsOneLine(t *testing.T) {
 	line, err := protocol.Encode(protocol.Toast{Message: "one\ntwo", Severity: "information"})
 	if err != nil {

@@ -131,11 +131,13 @@ type ActionOption struct {
 }
 
 type PullRequest struct {
-	ID             string  `json:"id"`
-	Number         int     `json:"number"`
-	Title          string  `json:"title"`
-	URL            string  `json:"url"`
-	Author         string  `json:"author"`
+	ID     string `json:"id"`
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	Author string `json:"author"`
+	// GitHub marks the author as a bot (an app). Backend-only, for notify_for.
+	AuthorIsBot    bool    `json:"-"`
 	CreatedAt      string  `json:"created_at"`
 	IsDraft        bool    `json:"is_draft"`
 	HeadRef        string  `json:"head_ref"`
