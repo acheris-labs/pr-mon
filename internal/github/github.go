@@ -21,9 +21,11 @@ import (
 )
 
 const (
-	APIURL     = "https://api.github.com/graphql"
-	PRLimit    = 50
-	CheckLimit = 20
+	APIURL  = "https://api.github.com/graphql"
+	PRLimit = 50
+	// GraphQL's page maximum. A PR's checks are judged as a whole (is any
+	// still running?), so a short page can call a PR failing too early.
+	CheckLimit = 100
 	// Issues a PR closes on merge. More than a handful is rare, and the list is
 	// there to be read in a details pane, not counted.
 	IssueLimit = 10
@@ -59,7 +61,7 @@ fragment PrFields on PullRequest {
               __typename
               ... on CheckRun {
                 name status conclusion startedAt
-                checkSuite { workflowRun { databaseId } }
+                checkSuite { workflowRun { databaseId workflow { name } } }
               }
               ... on StatusContext { context state createdAt }
             }

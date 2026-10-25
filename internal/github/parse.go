@@ -110,8 +110,33 @@ type checkNode struct {
 	CheckSuite *struct {
 		WorkflowRun *struct {
 			DatabaseID int `json:"databaseId"`
+			Workflow   *struct {
+				Name string `json:"name"`
+			} `json:"workflow"`
 		} `json:"workflowRun"`
 	} `json:"checkSuite"`
+}
+
+// key identifies the check across re-runs: a workflow that runs twice for one
+// commit reports each of its checks twice under the same names.
+func (c checkNode) key() string {
+	if c.TypeName == "StatusContext" {
+		return "status\x00" + c.Context
+	}
+	workflow := ""
+	if c.CheckSuite != nil && c.CheckSuite.WorkflowRun != nil && c.CheckSuite.WorkflowRun.Workflow != nil {
+		workflow = c.CheckSuite.WorkflowRun.Workflow.Name
+	}
+	return "run\x00" + workflow + "\x00" + c.Name
+}
+
+// newerThan reports whether check started after other. One that hasn't
+// started yet is the newest. ISO-8601 UTC timestamps sort correctly as strings.
+func newerThan(check, other models.Check) bool {
+	if check.StartedAt == nil {
+		return true
+	}
+	return other.StartedAt != nil && *check.StartedAt > *other.StartedAt
 }
 
 // runID is the Actions run this check belongs to, if it is one.
@@ -202,11 +227,21 @@ func (p prNode) toPullRequest() models.PullRequest {
 		if rollup := commit.StatusCheckRollup; rollup != nil {
 			pr.CheckState = models.Ptr(rollup.State)
 			pr.ChecksTotal = rollup.Contexts.TotalCount
+			seen := map[string]int{}
 			for _, node := range rollup.Contexts.Nodes {
 				if node.TypeName == "" && node.Name == "" && node.Context == "" {
 					continue // an empty node: a check type we didn't ask about
 				}
-				pr.Checks = append(pr.Checks, node.toCheck())
+				check := node.toCheck()
+				if i, ok := seen[node.key()]; ok {
+					pr.ChecksTotal--
+					if newerThan(check, pr.Checks[i]) {
+						pr.Checks[i] = check
+					}
+					continue
+				}
+				seen[node.key()] = len(pr.Checks)
+				pr.Checks = append(pr.Checks, check)
 			}
 		}
 	}
