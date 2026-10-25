@@ -4,6 +4,16 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.1]
+
+### Fixed
+
+- A PR green on GitHub no longer shows as failing because a check ran twice:
+  pr-mon now judges each check by its newest run, so a superseded (often
+  cancelled) run is ignored.
+- PRs with more than 20 checks are judged on all of them, up to 100, so one
+  still running is no longer missed and the PR reported as failing too early.
+
 ## [0.5.0]
 
 ### Added
