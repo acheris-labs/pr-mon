@@ -4,6 +4,7 @@ package github
 
 import (
 	"github.com/acheris-labs/pr-mon/internal/models"
+	"github.com/acheris-labs/pr-mon/internal/readiness"
 )
 
 type repoPayload struct {
@@ -163,6 +164,23 @@ func (c checkNode) toCheck() models.Check {
 	return models.Check{Name: c.Name, State: state, StartedAt: c.StartedAt, RunID: c.runID()}
 }
 
+// latestRunsState is the rollup state judged on each check's newest run.
+// GitHub's own rollup counts superseded runs whenever the query also asks for
+// its contexts, so a cancelled run that was re-run makes a green PR FAILURE.
+func latestRunsState(checks []models.Check) string {
+	pending := false
+	for _, check := range checks {
+		if readiness.CheckFailed(check) {
+			return "FAILURE"
+		}
+		pending = pending || readiness.CheckPending(check)
+	}
+	if pending {
+		return "PENDING"
+	}
+	return "SUCCESS"
+}
+
 func (p prNode) toPullRequest() models.PullRequest {
 	pr := models.PullRequest{
 		ID:             p.ID,
@@ -242,6 +260,9 @@ func (p prNode) toPullRequest() models.PullRequest {
 				}
 				seen[node.key()] = len(pr.Checks)
 				pr.Checks = append(pr.Checks, check)
+			}
+			if len(pr.Checks) > 0 && len(pr.Checks) == pr.ChecksTotal {
+				pr.CheckState = models.Ptr(latestRunsState(pr.Checks))
 			}
 		}
 	}
