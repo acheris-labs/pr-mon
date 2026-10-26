@@ -4,6 +4,18 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.4]
+
+### Added
+
+- A repo's dependency graph. In the dashboard, the details show the repo's
+  PRs in merge order while the repo tabs have the focus; in the Mac app,
+  selecting a repo with no PR selected draws its PRs as a graph, with an arrow
+  from each PR to the ones waiting on it.
+- `pr-mon dep` edits and shows dependencies from the command line:
+  `pr-mon dep add 912 on 911`, `pr-mon dep rm 912 on 911`, `pr-mon dep 912`
+  and `pr-mon dep graph`. A bare number is a PR in the git checkout you're in.
+
 ## [0.5.3]
 
 ### Changed
