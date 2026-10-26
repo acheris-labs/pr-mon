@@ -23,12 +23,14 @@ extension PRStatus {
 
     /// The chips under a PR in the list. Checks that have failed while others
     /// still run show both chips rather than a status of their own.
-    var chips: [(text: String, tint: Color)] {
-        switch self {
-        case .failing: [("Failed", .red)]
-        case .pending: [("Running", .blue)]
-        case .earlyFail: [("Failed", .red), ("Running", .blue)]
-        default: [(title, color)]
+    var chips: [(text: String, tint: Color, symbol: String)] {
+        let failed = ("Failed", Color.red, PRStatus.failing.symbol)
+        let running = ("Running", Color.blue, PRStatus.pending.symbol)
+        return switch self {
+        case .failing: [failed]
+        case .pending: [running]
+        case .earlyFail: [failed, running]
+        default: [(title, color, symbol)]
         }
     }
 

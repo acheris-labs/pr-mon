@@ -402,10 +402,10 @@ private struct PRRow: View {
                 .foregroundStyle(.secondary)
                 HStack(spacing: 4) {
                     ForEach(pr.status.chips, id: \.text) { chip in
-                        Chip(text: chip.text, tint: chip.tint)
+                        Chip(text: chip.text, tint: chip.tint, symbol: chip.symbol)
                     }
                     if pr.autoMerge != nil {
-                        Chip(text: "Auto-merge", tint: .green, symbol: "arrow.triangle.merge")
+                        Chip(text: "Auto-merge", tint: .teal, symbol: "arrow.triangle.merge")
                             .help("GitHub auto-merge is on")
                     } else if armed {
                         Chip(text: "Merge when ready", tint: .accentColor, symbol: "arrow.triangle.merge")
@@ -423,29 +423,21 @@ private struct PRRow: View {
 }
 
 /// A short tag under a PR's title, tinted by what it says: its status, or a
-/// merge waiting to happen (green for GitHub's auto-merge, the accent colour
+/// merge waiting to happen (teal for GitHub's auto-merge, the accent colour
 /// for pr-mon's).
 private struct Chip: View {
     let text: String
     let tint: Color
-    var symbol: String?
+    let symbol: String
 
     var body: some View {
-        label
+        Label(text, systemImage: symbol)
             .font(.caption.weight(.semibold))
             .foregroundStyle(tint)
             .padding(.vertical, 1)
             .padding(.horizontal, 6)
             .background(tint.opacity(0.15), in: Capsule())
             .fixedSize()
-    }
-
-    @ViewBuilder private var label: some View {
-        if let symbol {
-            Label(text, systemImage: symbol)
-        } else {
-            Text(text)
-        }
     }
 }
 
@@ -588,7 +580,7 @@ private struct PRDetail: View {
             // gets its own line and a colour of its own rather than more grey text.
             if let auto = pr.autoMerge {
                 chip("Auto-merge on (\(Format.method(auto.method)), by \(auto.enabledBy))",
-                     tint: .green)
+                     tint: .teal)
             } else if let armed {
                 chip("pr-mon merges when ready (\(Format.method(armed.method))"
                      + (armed.deleteBranch ? ", deletes branch)" : ")"),
