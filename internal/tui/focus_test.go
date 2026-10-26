@@ -110,6 +110,7 @@ func TestEnterInTheDetailsOpensTheActions(t *testing.T) {
 
 func TestTapOnTheDetailsFocusesThem(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs // the repo tabs show the repo's graph
 	tap(t, model, "Branch:")
 	if model.focus != paneDetails {
 		t.Errorf("focus %v", model.focus)
@@ -120,6 +121,7 @@ func TestTapOnTheDetailsFocusesThem(t *testing.T) {
 // not where pr-mon runs.
 func TestTheURLIsAHyperlink(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs // the repo tabs show the repo's graph
 	const url = "https://github.com/acme/api/pull/1"
 	row := line(model.View(), url)
 	open, shut := strings.Index(row, "\x1b]8;;"+url+"\x1b\\"), strings.LastIndex(row, "\x1b]8;;\x1b\\")
@@ -132,6 +134,7 @@ func TestTheURLIsAHyperlink(t *testing.T) {
 // line; a terminal takes either terminator, ST or BEL.
 func TestAWrappedURLIsALinkOnEachLine(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs // the repo tabs show the repo's graph
 	resize(model, 30, 40)
 	const url = "https://github.com/acme/api/pull/1"
 	linked := 0
@@ -161,18 +164,20 @@ func opened(model *Model) *[]string {
 
 func TestTapOnTheURLOpensIt(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs // the repo tabs show the repo's graph
 	urls := opened(model)
 	tap(t, model, "https://github.com/acme/api/pull/1")
 	if strings.Join(*urls, ",") != "https://github.com/acme/api/pull/1" {
 		t.Errorf("opened %v", *urls)
 	}
-	if model.focus != paneRepos {
+	if model.focus != panePRs {
 		t.Errorf("opening a link shouldn't move the focus, now %v", model.focus)
 	}
 }
 
 func TestTapOnAScrolledURLOpensIt(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs // the repo tabs show the repo's graph
 	urls := opened(model)
 	resize(model, 120, 14) // room for six lines of details
 	for range 6 {
@@ -186,6 +191,7 @@ func TestTapOnAScrolledURLOpensIt(t *testing.T) {
 
 func TestTapOnEitherLineOfAWrappedURLOpensIt(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs // the repo tabs show the repo's graph
 	urls := opened(model)
 	resize(model, 30, 40)
 	tap(t, model, "https://github.com/acme/api/")
@@ -197,6 +203,7 @@ func TestTapOnEitherLineOfAWrappedURLOpensIt(t *testing.T) {
 
 func TestTapBesideTheURLOnlyFocusesTheDetails(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs // the repo tabs show the repo's graph
 	urls := opened(model)
 	x, y := where(t, model, "https://github.com/acme/api/pull/1")
 	mouseAt(t, model, x+60, y, tea.MouseButtonLeft)
@@ -208,6 +215,7 @@ func TestTapBesideTheURLOnlyFocusesTheDetails(t *testing.T) {
 // Over ssh there is no opener: the browser would open on the far machine.
 func TestTapOnTheURLWithNothingToOpenIt(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs // the repo tabs show the repo's graph
 	tap(t, model, "https://github.com/acme/api/pull/1")
 	if model.focus != paneDetails {
 		t.Errorf("the tap should still focus the details, focus %v", model.focus)

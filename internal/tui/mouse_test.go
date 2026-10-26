@@ -156,6 +156,7 @@ func TestTapBehindADialogDoesNothing(t *testing.T) {
 
 func TestWheelActsOnWhatIsUnderIt(t *testing.T) {
 	model, _ := newModel()
+	model.focus = panePRs  // the repo tabs show the repo's graph
 	resize(model, 120, 14) // room for six lines of details
 	for range 20 {
 		wheel(t, model, "Details", tea.MouseButtonWheelDown)

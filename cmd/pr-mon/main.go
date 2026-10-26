@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -32,6 +33,7 @@ Commands:
   restart    restart the backend
   status     show whether the backend is running
   autostart  enable | disable | status: run the backend at login (macOS)
+  dep        add | rm | graph: PR dependencies; ` + "`pr-mon dep`" + ` for details
   --version  print the version
 `
 
@@ -61,6 +63,12 @@ func main() {
 			action = os.Args[2]
 		}
 		err = autostartCommand(paths, action)
+	case "dep", "deps":
+		err = depCommand(paths, os.Args[2:])
+		if errors.Is(err, errUsage) {
+			fmt.Fprint(os.Stderr, depUsage)
+			os.Exit(2)
+		}
 	case "--version", "-v", "version":
 		fmt.Printf("pr-mon %s\n", Version)
 	case "--help", "-h", "help":

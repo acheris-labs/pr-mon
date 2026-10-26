@@ -467,6 +467,9 @@ func (m *Model) detailsText() string {
 		}
 		return strings.Join(append(lines, dim.Render("No open pull requests")), "\n")
 	}
+	if m.focus == paneRepos {
+		return strings.Join(append(lines, RepoGraphText(name, m.prs())), "\n")
+	}
 	icon, style := statusStyle(pr.Status)
 	lines = append(lines,
 		bold.Render(fmt.Sprintf("#%d %s", pr.Number, pr.Title)),

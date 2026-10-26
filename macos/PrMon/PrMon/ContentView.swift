@@ -49,6 +49,7 @@ struct ContentView: View {
                     PRDetailColumn(
                         entry: entry, pr: selectedPR, state: state,
                         depend: { pr, command in depend(pr, command) },
+                        select: { number in prID = entry?.repo?.prs.first { $0.number == number }?.id },
                         stopWaiting: { pr, ref in
                             guard let repo = entry?.name else { return }
                             store.removeDependency(repo: repo, number: pr.number, on: ref.key)
@@ -448,6 +449,7 @@ private struct PRDetailColumn: View {
     let pr: PullRequest?
     let state: BackendState
     let depend: (PullRequest, DependencyCommand) -> Void
+    let select: (Int) -> Void
     let stopWaiting: (PullRequest, PRRef) -> Void
 
     var body: some View {
@@ -474,6 +476,8 @@ private struct PRDetailColumn: View {
                         .help("Open on GitHub")
                     }
                 }
+        } else if let repo = entry?.repo, !repo.prs.isEmpty {
+            RepoGraphView(repo: repo, select: select)
         } else {
             ContentUnavailableView("No Pull Request Selected", systemImage: "arrow.triangle.pull")
         }

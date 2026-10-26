@@ -418,3 +418,8 @@ func refLine(ref models.PRRef, repo string, width int) string {
 	}
 	return text + " " + style.Render(state)
 }
+
+// PRGraphText is a PR's dependency graph as text, unshortened.
+func PRGraphText(graph models.DependencyGraph) string {
+	return strings.Join(graphLines(graph, 0), "\n")
+}
