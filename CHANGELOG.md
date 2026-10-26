@@ -4,6 +4,13 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.3]
+
+### Changed
+
+- In the Mac app every chip under a PR has an icon, status chips included,
+  and Auto-merge is teal so it no longer looks like Ready.
+
 ## [0.5.2]
 
 ### Fixed
