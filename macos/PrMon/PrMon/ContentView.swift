@@ -9,6 +9,7 @@ struct ContentView: View {
     let selection: AppSelection
     @Environment(\.openSettings) private var openSettings
     @AppStorage("appearance") private var appearance = Appearance.system
+    @AppStorage("hideEmptyRepos") private var hideEmptyRepos = false
     @State private var repoName: String?
     @State private var prID: PullRequest.ID?
     @State private var request: ActionRequest?
@@ -26,6 +27,11 @@ struct ContentView: View {
     private var entry: BackendState.RepoEntry? {
         guard let repoName, state?.snapshot.config.repos.contains(repoName) == true else { return nil }
         return state?.entry(repoName)
+    }
+
+    /// The sidebar's groups, without empty repos if Settings says so.
+    private var owners: [BackendState.OwnerGroup] {
+        state?.owners(hidingEmpty: hideEmptyRepos, keeping: repoName) ?? []
     }
 
     private var selectedPR: PullRequest? {
@@ -48,7 +54,8 @@ struct ContentView: View {
             if let state {
                 NavigationSplitView(columnVisibility: $columns) {
                     Sidebar(
-                        store: store, state: state, selection: picked($repoName, in: .repos),
+                        store: store, state: state, owners: owners,
+                        selection: picked($repoName, in: .repos),
                         openRepoSettings: openRepoSettings
                     )
                         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 360)
@@ -178,7 +185,7 @@ struct ContentView: View {
     private var listJump: ListJump? {
         guard let state else { return nil }
         if listFocus == .repos {
-            let repos = state.owners.filter { !$0.collapsed }.flatMap(\.repos).prefix(9)
+            let repos = owners.filter { !$0.collapsed }.flatMap(\.repos).prefix(9)
             return ListJump(titles: repos.map(\.name)) { repoName = repos[repos.startIndex + $0].name }
         }
         let prs = (entry?.repo?.prs ?? []).prefix(9)
@@ -202,7 +209,8 @@ struct ContentView: View {
     }
 
     private func keepSelectionValid() {
-        guard let repos = state?.owners.flatMap({ $0.repos.map(\.name) }) else { return }
+        guard state != nil else { return }
+        let repos = owners.flatMap { $0.repos.map(\.name) }
         if repoName == nil || !repos.contains(repoName!) {
             repoName = repos.first
         }
@@ -259,12 +267,13 @@ private struct SearchField: NSViewRepresentable {
 private struct Sidebar: View {
     let store: PrMonStore
     let state: BackendState
+    let owners: [BackendState.OwnerGroup]
     @Binding var selection: String?
     let openRepoSettings: (String?) -> Void
 
     var body: some View {
         List(selection: $selection) {
-            ForEach(state.owners) { group in
+            ForEach(owners) { group in
                 Section(isExpanded: expanded(group)) {
                     ForEach(group.repos) { entry in
                         RepoRow(entry: entry)
@@ -303,6 +312,11 @@ private struct Sidebar: View {
                         Text("Your repositories are listed once the backend answers.")
                     }
                 }
+            } else if owners.isEmpty {
+                ContentUnavailableView(
+                    "No Open Pull Requests", systemImage: "checkmark.circle",
+                    description: Text("Repositories without any are hidden. Change this in Settings \u{203A} General.")
+                )
             }
         }
         .safeAreaInset(edge: .bottom) { ConnectionStatus(store: store) }

@@ -142,7 +142,23 @@ public struct BackendState: Sendable, Equatable {
     }
 
     /// Owner groups sorted by owner, repos sorted by name (case-insensitive).
-    public var owners: [OwnerGroup] {
+    public var owners: [OwnerGroup] { owners(hidingEmpty: false) }
+
+    /// Owner groups, optionally without loaded repos that have no open PRs
+    /// (and so without groups left empty). A repo still loading, one with an
+    /// error, and `keeping` (the selected repo) always stay.
+    public func owners(hidingEmpty: Bool, keeping: String? = nil) -> [OwnerGroup] {
+        guard hidingEmpty else { return allOwners }
+        return allOwners.compactMap { group in
+            var group = group
+            group.repos.removeAll { entry in
+                entry.name != keeping && entry.error == nil && entry.repo?.prTotal == 0
+            }
+            return group.repos.isEmpty ? nil : group
+        }
+    }
+
+    private var allOwners: [OwnerGroup] {
         let sorted = snapshot.config.repos.sorted {
             (Self.ownerKey($0), $0.lowercased()) < (Self.ownerKey($1), $1.lowercased())
         }

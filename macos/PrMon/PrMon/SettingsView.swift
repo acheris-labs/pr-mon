@@ -68,6 +68,7 @@ struct SettingsView: View {
 struct GeneralSettings: View {
     let store: PrMonStore
     @AppStorage("appearance") private var appearance = Appearance.system
+    @AppStorage("hideEmptyRepos") private var hideEmptyRepos = false
     @State private var openAtLogin = SMAppService.mainApp.status == .enabled
     @State private var backendAtLogin = Launcher.AutostartState.disabled
     @State private var error: String?
@@ -83,6 +84,16 @@ struct GeneralSettings: View {
                     ForEach(Appearance.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
+            }
+
+            Section {
+                Toggle("Hide repositories with no open pull requests", isOn: $hideEmptyRepos)
+            } header: {
+                Text("Sidebar")
+            } footer: {
+                Text("A repository still loading, one that couldn't load, and the one you have selected stay listed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -346,11 +357,19 @@ struct RepositorySettings: View {
 
     private var repoList: some View {
         VStack(spacing: 0) {
-            List(repos, id: \.self, selection: $selected) { name in
-                RepoListRow(entry: store.state?.entry(name))
-                    .listRowSeparator(.hidden)
+            // Grouped by owner, like the main window's sidebar.
+            List(selection: $selected) {
+                ForEach(store.state?.owners ?? []) { group in
+                    Section(group.owner) {
+                        ForEach(group.repos) { entry in
+                            RepoListRow(entry: entry)
+                                .tag(entry.name)
+                                .listRowSeparator(.hidden)
+                        }
+                    }
+                }
             }
-            .listStyle(.inset)
+            .listStyle(.sidebar)
             .onDeleteCommand { if selected != nil { confirmingRemoval = true } }
             Divider()
             HStack(spacing: 0) {
@@ -403,20 +422,21 @@ struct RepositorySettings: View {
 }
 
 private struct RepoListRow: View {
-    let entry: BackendState.RepoEntry?
+    let entry: BackendState.RepoEntry
 
     var body: some View {
         HStack {
-            Text(entry?.name ?? "")
+            Label(entry.shortName, systemImage: "shippingbox")
             Spacer()
-            if entry?.error != nil {
+            if let error = entry.error {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-                    .help(entry?.error ?? "")
-            } else if entry?.repo == nil {
+                    .help(error)
+            } else if entry.repo == nil {
                 ProgressView().controlSize(.mini)
             }
         }
+        .help(entry.name)
     }
 }
 
