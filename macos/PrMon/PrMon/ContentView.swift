@@ -75,29 +75,7 @@ struct ContentView: View {
                 ConnectionUnavailable(store: store)
             }
         }
-        .toolbar {
-            // A search field of our own: .searchable always puts it after Refresh.
-            if #available(macOS 26, *) {
-                // Drawn as its own capsule: the toolbar's glass would otherwise
-                // wrap the field and Refresh together.
-                ToolbarItem(placement: .primaryAction) {
-                    searchField
-                        .padding(.horizontal, 6)
-                        .frame(height: 34)
-                        .background(Capsule().fill(.quaternary))
-                }
-                .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: .primaryAction) { searchField }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button { store.refreshAll() } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .help("Check GitHub now")
-                .disabled(!store.isConnected)
-            }
-        }
+        .toolbar { toolbar }
         .overlay(alignment: .bottom) { ToastStack(toasts: store.toasts) }
         .sheet(item: $request) { request in
             ActionSheet(request: request) { action in
@@ -126,6 +104,37 @@ struct ContentView: View {
             keepSelectionValid()
             store.setFocus(repo: repoName, number: nil)
             NSApp.appearance = appearance.nsAppearance
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        // A search field of our own: .searchable always puts it after Refresh.
+        // The macOS 26 SDK's toolbar API needs Xcode 26; older Xcodes build
+        // without it.
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            // Drawn as its own capsule: the toolbar's glass would otherwise
+            // wrap the field and Refresh together.
+            ToolbarItem(placement: .primaryAction) {
+                searchField
+                    .padding(.horizontal, 6)
+                    .frame(height: 34)
+                    .background(Capsule().fill(.quaternary))
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .primaryAction) { searchField }
+        }
+        #else
+        ToolbarItem(placement: .primaryAction) { searchField }
+        #endif
+        ToolbarItem(placement: .primaryAction) {
+            Button { store.refreshAll() } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .help("Check GitHub now")
+            .disabled(!store.isConnected)
         }
     }
 
@@ -232,6 +241,7 @@ private struct SearchField: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
+    @MainActor
     final class Coordinator: NSObject {
         var text: Binding<String>
 
