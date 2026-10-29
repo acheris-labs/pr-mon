@@ -4,6 +4,19 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.6]
+
+### Added
+
+- Search in the Mac app. The field left of Refresh finds open PRs in every
+  repo by title, author or number (`#12`); results are grouped by repo, and
+  picking one jumps to it.
+
+### Changed
+
+- PRs a repo's skip lists exclude no longer count as unseen: they stay
+  listed but draw no badge in the sidebar, the Dock or the dashboard's tabs.
+
 ## [0.5.5]
 
 ### Added
