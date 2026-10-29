@@ -4,6 +4,19 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.8]
+
+### Added
+
+- Settings › General › Sidebar in the Mac app can hide repositories with no
+  open pull requests. Repos still loading, ones that couldn't load, and the
+  selected one stay listed.
+
+### Changed
+
+- Settings › Repositories in the Mac app lists repos under their owners, by
+  short name, like the main window's sidebar.
+
 ## [0.5.7]
 
 ### Added
