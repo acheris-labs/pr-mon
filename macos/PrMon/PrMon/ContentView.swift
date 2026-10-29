@@ -17,6 +17,9 @@ struct ContentView: View {
     @State private var columns = NavigationSplitViewVisibility.all
     /// The list you last picked a row in: Command-1 to Command-9 pick from it.
     @State private var listFocus = ListFocus.prs
+    @State private var query = ""
+    /// A search result in another repo: selected once the sidebar has moved there.
+    @State private var pendingPR: PullRequest.ID?
 
     private var state: BackendState? { store.state }
 
@@ -27,6 +30,17 @@ struct ContentView: View {
 
     private var selectedPR: PullRequest? {
         entry?.repo?.prs.first { $0.id == prID }
+    }
+
+    /// Search results, or nil when the search field is empty.
+    private var results: [BackendState.SearchResult]? {
+        guard let state, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return state.search(query)
+    }
+
+    /// The repo a PR belongs to, wherever it is listed.
+    private func repo(of pr: PullRequest) -> Repo? {
+        state?.repos.first { $0.repo?.prs.contains { $0.id == pr.id } == true }?.repo
     }
 
     var body: some View {
@@ -40,7 +54,8 @@ struct ContentView: View {
                         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 360)
                 } content: {
                     PRList(
-                        entry: entry, state: state, selection: picked($prID, in: .prs),
+                        entry: entry, results: results, query: query, state: state,
+                        selection: results == nil ? picked($prID, in: .prs) : searchSelection,
                         act: { pr, option in act(on: pr, option) },
                         depend: { pr, command in depend(pr, command) }
                     )
@@ -61,6 +76,20 @@ struct ContentView: View {
             }
         }
         .toolbar {
+            // A search field of our own: .searchable always puts it after Refresh.
+            if #available(macOS 26, *) {
+                // Drawn as its own capsule: the toolbar's glass would otherwise
+                // wrap the field and Refresh together.
+                ToolbarItem(placement: .primaryAction) {
+                    searchField
+                        .padding(.horizontal, 6)
+                        .frame(height: 34)
+                        .background(Capsule().fill(.quaternary))
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .primaryAction) { searchField }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button { store.refreshAll() } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
@@ -81,7 +110,8 @@ struct ContentView: View {
         .focusedSceneValue(\.listJump, listJump)
         .onChange(of: repoName) {
             selection.repo = repoName
-            prID = nil
+            prID = pendingPR
+            pendingPR = nil
             store.setFocus(repo: repoName, number: nil)
         }
         .onChange(of: prID) {
@@ -97,6 +127,12 @@ struct ContentView: View {
             store.setFocus(repo: repoName, number: nil)
             NSApp.appearance = appearance.nsAppearance
         }
+    }
+
+    private var searchField: some View {
+        SearchField(text: $query, prompt: "Title, author or #number")
+            .frame(minWidth: 180, idealWidth: 260, maxWidth: 320)
+            .disabled(state == nil)
     }
 
     private var focusedContext: PullRequestContext? {
@@ -116,6 +152,20 @@ struct ContentView: View {
         })
     }
 
+    /// Picking a search result moves the sidebar to its repo, then selects it.
+    private var searchSelection: Binding<PullRequest.ID?> {
+        Binding(get: { prID }, set: { id in
+            listFocus = .prs
+            let owner = state?.repos.first { $0.repo?.prs.contains { $0.id == id } == true }?.name
+            if let id, let owner, owner != repoName {
+                pendingPR = id
+                repoName = owner
+            } else {
+                prID = id
+            }
+        })
+    }
+
     private var listJump: ListJump? {
         guard let state else { return nil }
         if listFocus == .repos {
@@ -127,7 +177,7 @@ struct ContentView: View {
     }
 
     private func depend(_ pr: PullRequest, _ command: DependencyCommand) {
-        guard let repo = entry?.name else { return }
+        guard let repo = repo(of: pr)?.name else { return }
         let target = PRTarget(repo: repo, number: pr.number, title: pr.title)
         switch command {
         case .waitFor: waitingTarget = target
@@ -151,12 +201,45 @@ struct ContentView: View {
 
     /// Runs an option at once, or asks first when there is something to choose or confirm.
     private func act(on pr: PullRequest, _ option: ActionOption) {
-        guard let repo = entry?.repo, option.available else { return }
+        guard let repo = repo(of: pr), option.available else { return }
         let request = ActionRequest(repo: repo, pr: pr, option: option)
         if request.needsConfirmation {
             self.request = request
         } else {
             store.perform(repo: repo.name, number: pr.number, action: request.immediateAction)
+        }
+    }
+}
+
+/// An AppKit search field, so it can sit anywhere in the toolbar.
+private struct SearchField: NSViewRepresentable {
+    @Binding var text: String
+    let prompt: String
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = prompt
+        field.sendsSearchStringImmediately = true
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.changed(_:))
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.text = $text
+        if field.stringValue != text { field.stringValue = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject {
+        var text: Binding<String>
+
+        init(text: Binding<String>) { self.text = text }
+
+        /// Each keystroke, and the clear button.
+        @objc func changed(_ field: NSSearchField) {
+            text.wrappedValue = field.stringValue
         }
     }
 }
@@ -319,37 +402,66 @@ private struct ConnectionUnavailable: View {
 
 private struct PRList: View {
     let entry: BackendState.RepoEntry?
+    /// Search results, shown instead of the repo's PRs while searching.
+    let results: [BackendState.SearchResult]?
+    let query: String
     let state: BackendState
     @Binding var selection: PullRequest.ID?
     let act: (PullRequest, ActionOption) -> Void
     let depend: (PullRequest, DependencyCommand) -> Void
 
     var body: some View {
-        let prs = entry?.repo?.prs ?? []
-        List(prs, selection: $selection) { pr in
-            PRRow(
-                pr: pr,
-                unseen: entry?.unseen.contains(pr.number) == true,
-                armed: entry.map { state.armed(repo: $0.name, number: pr.number) != nil } ?? false
-            )
+        List(selection: $selection) {
+            if let results {
+                ForEach(results) { result in
+                    Section(result.entry.name) {
+                        ForEach(result.prs) { row($0, in: result.entry) }
+                    }
+                }
+            } else if let entry {
+                ForEach(entry.repo?.prs ?? []) { row($0, in: entry) }
+            }
         }
         .contextMenu(forSelectionType: PullRequest.ID.self) { ids in
-            if let id = ids.first, let pr = prs.first(where: { $0.id == id }), let repo = entry?.repo {
+            if let id = ids.first, let (repo, pr) = find(id) {
                 PRMenuItems(repo: repo, pr: pr, act: { act(pr, $0) }, depend: { depend(pr, $0) })
             }
         } primaryAction: { ids in
-            if let id = ids.first, let pr = prs.first(where: { $0.id == id }) {
+            if let id = ids.first, let (_, pr) = find(id) {
                 Browser.open(pr.url)
             }
         }
         .overlay { placeholder }
-        .navigationTitle(entry?.name ?? "pr-mon")
+        .navigationTitle(results == nil ? entry?.name ?? "pr-mon" : "Search")
         .navigationSubtitle(subtitle)
+    }
+
+    private func row(_ pr: PullRequest, in entry: BackendState.RepoEntry) -> some View {
+        PRRow(
+            pr: pr,
+            unseen: entry.unseen.contains(pr.number),
+            armed: state.armed(repo: entry.name, number: pr.number) != nil
+        )
+    }
+
+    /// A listed PR and its repo.
+    private func find(_ id: PullRequest.ID) -> (Repo, PullRequest)? {
+        let entries = results?.map(\.entry) ?? (entry.map { [$0] } ?? [])
+        for entry in entries {
+            if let repo = entry.repo, let pr = repo.prs.first(where: { $0.id == id }) {
+                return (repo, pr)
+            }
+        }
+        return nil
     }
 
     @ViewBuilder
     private var placeholder: some View {
-        if let entry {
+        if let results {
+            if results.isEmpty {
+                ContentUnavailableView.search(text: query)
+            }
+        } else if let entry {
             if let error = entry.error, entry.repo == nil {
                 ContentUnavailableView("Couldn't Load", systemImage: "exclamationmark.triangle",
                                        description: Text(error))
@@ -364,6 +476,10 @@ private struct PRList: View {
     }
 
     private var subtitle: String {
+        if let results {
+            let count = results.reduce(0) { $0 + $1.prs.count }
+            return count == 1 ? "1 pull request" : "\(count) pull requests"
+        }
         guard let repo = entry?.repo else { return "" }
         if repo.prTotal > repo.prs.count {
             return "Newest \(repo.prs.count) of \(repo.prTotal) open"

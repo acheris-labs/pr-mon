@@ -117,6 +117,21 @@ public struct BackendState: Sendable, Equatable {
         }
     }
 
+    /// One repo's PRs that a search found.
+    public struct SearchResult: Sendable, Equatable, Identifiable {
+        public var entry: RepoEntry
+        public var prs: [PullRequest]
+        public var id: String { entry.name }
+    }
+
+    /// Open PRs whose title, author or number match, by repo in config order.
+    public func search(_ query: String) -> [SearchResult] {
+        repos.compactMap { entry in
+            let prs = entry.repo?.prs.filter { $0.matches(query) } ?? []
+            return prs.isEmpty ? nil : SearchResult(entry: entry, prs: prs)
+        }
+    }
+
     public func entry(_ name: String) -> RepoEntry {
         RepoEntry(
             name: name,
@@ -147,5 +162,20 @@ public struct BackendState: Sendable, Equatable {
 
     public func armed(repo: String, number: Int) -> ArmedMerge? {
         snapshot.armed[repo]?[String(number)]
+    }
+}
+
+extension PullRequest {
+    /// Whether a search finds this PR: "#12" is its number exactly; other
+    /// text is a number, or part of its title or author ignoring case.
+    public func matches(_ query: String) -> Bool {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        if text.isEmpty { return false }
+        if text.hasPrefix("#"), let wanted = Int(text.dropFirst()) {
+            return wanted == number
+        }
+        return Int(text) == number
+            || title.localizedCaseInsensitiveContains(text)
+            || author.localizedCaseInsensitiveContains(text)
     }
 }
