@@ -83,6 +83,7 @@ upgrade, a crash, a signal) and starting it again is the right thing to do.
 | `save_notifications` | `repo`, `settings`: `NotifyConfig` | `null` | |
 | `send_test` | `repo`, `settings`: `NotifyConfig` | `null` | Sends a sample notification with these unsaved settings. |
 | `set_poll_interval` | `seconds`: int | `null` | How often the backend checks GitHub (10–3600). |
+| `save_logins` | `mine`, `bots`, `watched`: [string] | `null` | Replaces `Config.my_logins`, `bot_logins` and `watched_logins`. |
 | `notification_form` | none | `NotificationForm` | What a notification settings editor should offer. |
 | `preview_notification` | `repo`, `message`: string | `NotificationPreview` | Renders a template with sample values. |
 | `shutdown` | none | `null` | Stops the backend. |
@@ -159,6 +160,9 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `focus_interval` | int | Seconds between looks at the repo a client has focused (`set_focus`). |
 | `active_interval` | int | Seconds between looks at PRs in flight: checks running, or armed to merge. Only those PRs are fetched, not their repos. |
 | `notifications` | {name: `NotifyConfig`} | Repos without an entry never notify. |
+| `my_logins` | [string] | The user's GitHub logins. Empty means the gh login. |
+| `bot_logins` | [string] | Accounts treated as bots, besides the GitHub apps. |
+| `watched_logins` | [string] | People whose PRs `notify_for: watched` covers. |
 
 ### Object: `NotifyConfig`
 
@@ -171,7 +175,9 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `script` | string | Command run with the message on stdin. |
 | `desktop_enabled` | bool | |
 | `two_way_enabled` | bool | Send to the configured two-way channel (see Hello.two_way). |
-| `notify_for` | [string] | Whose PRs notify: any of `mine` (the user's logins), `bots` (GitHub apps and `bot_logins` in config.toml), `watched` (`watched_logins` in config.toml), `everyone`. Empty means `everyone`. Settings sent without it keep notifying for `everyone`. |
+| `notify_for` | [string] | Whose PRs notify: any of `mine` (`Config.my_logins`, or else the gh login), `bots` (GitHub apps and `Config.bot_logins`), `watched` (`Config.watched_logins`), `everyone`. Empty means `everyone`. Settings sent without it keep notifying for `everyone`. |
+| `skip_branches` | [string] | PRs whose head branch starts with any of these never notify, whatever `notify_for` says. |
+| `skip_authors` | [string] | PRs by these logins never notify, whatever `notify_for` says. |
 
 ### Object: `NotificationForm`
 

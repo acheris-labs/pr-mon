@@ -29,9 +29,24 @@
             "mine",
             "bots",
             "watched"
+          ],
+          "skip_branches": [
+            "release-please--"
+          ],
+          "skip_authors": [
+            "octocat"
           ]
         }
-      }
+      },
+      "my_logins": [
+        "alice"
+      ],
+      "bot_logins": [
+        "release-robot"
+      ],
+      "watched_logins": [
+        "teammate"
+      ]
     },
     "repos": {
       "Textualize/rich": {

@@ -177,6 +177,12 @@
           "mine",
           "bots",
           "watched"
+        ],
+        "skip_branches": [
+          "release-please--"
+        ],
+        "skip_authors": [
+          "octocat"
         ]
       }
     },
@@ -204,7 +210,9 @@
           "mine",
           "bots",
           "watched"
-        ]
+        ],
+        "skip_branches": [],
+        "skip_authors": []
       }
     },
     "id": 13,
@@ -229,6 +237,21 @@
     },
     "id": 16,
     "op": "set_poll_interval"
+  },
+  {
+    "args": {
+      "bots": [
+        "release-robot"
+      ],
+      "mine": [
+        "octocat"
+      ],
+      "watched": [
+        "teammate"
+      ]
+    },
+    "id": 26,
+    "op": "save_logins"
   },
   {
     "args": {

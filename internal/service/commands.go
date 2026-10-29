@@ -438,6 +438,23 @@ func (m *Monitor) SetPollInterval(seconds int) error {
 	return nil
 }
 
+// SaveLogins replaces the my_logins, bot_logins and watched_logins lists.
+func (m *Monitor) SaveLogins(mine, bots, watched []string) error {
+	m.mutex.Lock()
+	if err := m.requireSavableConfigLocked(); err != nil {
+		m.mutex.Unlock()
+		return err
+	}
+	m.config.MyLogins = config.CleanList(mine)
+	m.config.BotLogins = config.CleanList(bots)
+	m.config.WatchedLogins = config.CleanList(watched)
+	m.saveConfigLocked()
+	m.mutex.Unlock()
+	m.emit(Event{Kind: "config"})
+	m.toast("Authors saved")
+	return nil
+}
+
 func (m *Monitor) NotificationForm() notify.Form { return notify.NotificationForm() }
 
 func (m *Monitor) PreviewNotification(repo, message string) notify.Preview {

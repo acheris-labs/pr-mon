@@ -217,7 +217,7 @@ func ParseSettings(raw json.RawMessage) (config.NotifyConfig, error) {
 	if problem := config.UnknownSetting(settings); problem != "" {
 		return config.NotifyConfig{}, fmt.Errorf("invalid notification settings: %s", problem)
 	}
-	return settings, nil
+	return settings.Cleaned(), nil
 }
 
 // Encode writes one message as a line. JSON escapes newlines inside strings, so

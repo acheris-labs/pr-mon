@@ -66,11 +66,22 @@ type NotifyConfig struct {
 	TwoWayEnabled  bool     `json:"two_way_enabled" toml:"two_way_enabled"`
 	// Whose PRs notify: any of NotifyForNames. Empty means everyone's.
 	NotifyFor []string `json:"notify_for" toml:"notify_for"`
+	// PRs that never notify, whatever NotifyFor says: head branches starting
+	// with any of these, and these authors.
+	SkipBranches []string `json:"skip_branches" toml:"skip_branches"`
+	SkipAuthors  []string `json:"skip_authors" toml:"skip_authors"`
 }
 
 // ForEveryone reports whether every PR notifies, whoever wrote it.
 func (n NotifyConfig) ForEveryone() bool {
 	return len(n.NotifyFor) == 0 || slices.Contains(n.NotifyFor, NotifyEveryone)
+}
+
+// Cleaned is the settings with CleanList applied to the skip lists.
+func (n NotifyConfig) Cleaned() NotifyConfig {
+	n.SkipBranches = CleanList(n.SkipBranches)
+	n.SkipAuthors = CleanList(n.SkipAuthors)
+	return n
 }
 
 // LegacyNotifyConfig is the starting point for settings written before
@@ -110,9 +121,11 @@ func (t TwoWayConfig) Problem() string {
 
 func NewNotifyConfig() NotifyConfig {
 	return NotifyConfig{
-		Message:   DefaultMessage,
-		Events:    append([]string{}, DefaultEvents...),
-		NotifyFor: append([]string{}, DefaultNotifyFor...),
+		Message:      DefaultMessage,
+		Events:       append([]string{}, DefaultEvents...),
+		NotifyFor:    append([]string{}, DefaultNotifyFor...),
+		SkipBranches: []string{},
+		SkipAuthors:  []string{},
 	}
 }
 
@@ -123,7 +136,20 @@ func (n NotifyConfig) Equal(other NotifyConfig) bool {
 		n.DesktopEnabled != other.DesktopEnabled || n.TwoWayEnabled != other.TwoWayEnabled {
 		return false
 	}
-	return slices.Equal(n.Events, other.Events) && slices.Equal(n.NotifyFor, other.NotifyFor)
+	return slices.Equal(n.Events, other.Events) && slices.Equal(n.NotifyFor, other.NotifyFor) &&
+		slices.Equal(n.SkipBranches, other.SkipBranches) && slices.Equal(n.SkipAuthors, other.SkipAuthors)
+}
+
+// CleanList trims each entry and drops blank and repeated ones.
+func CleanList(values []string) []string {
+	cleaned := []string{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" && !slices.Contains(cleaned, value) {
+			cleaned = append(cleaned, value)
+		}
+	}
+	return cleaned
 }
 
 type Config struct {
@@ -135,12 +161,12 @@ type Config struct {
 	ActiveInterval int `json:"active_interval"`
 	// A repo without an entry never notifies.
 	Notifications map[string]NotifyConfig `json:"notifications"`
-	// Backend-only: the user's GitHub logins (empty: whoever gh is logged in
-	// as), accounts to treat as bots besides the ones GitHub marks, and
-	// people whose PRs the user wants to hear about.
-	MyLogins      []string `json:"-"`
-	BotLogins     []string `json:"-"`
-	WatchedLogins []string `json:"-"`
+	// The user's GitHub logins (empty: whoever gh is logged in as), accounts
+	// to treat as bots besides the ones GitHub marks, and people whose PRs
+	// the user wants to hear about.
+	MyLogins      []string `json:"my_logins"`
+	BotLogins     []string `json:"bot_logins"`
+	WatchedLogins []string `json:"watched_logins"`
 	// Backend-only; never sent to clients.
 	TwoWay *TwoWayConfig `json:"-"`
 	// Why the file on disk was ignored, if it was. Saving would then replace
@@ -155,6 +181,9 @@ func New() Config {
 		FocusInterval:  DefaultFocusInterval,
 		ActiveInterval: DefaultActiveInterval,
 		Notifications:  map[string]NotifyConfig{},
+		MyLogins:       []string{},
+		BotLogins:      []string{},
+		WatchedLogins:  []string{},
 	}
 }
 
@@ -194,6 +223,9 @@ func Load(path string) (Config, string) {
 		return ignore(fmt.Sprintf("Ignoring invalid config %s: bad 'repos' or 'poll_interval'", path))
 	}
 	config := New()
+	config.MyLogins = CleanList(parsed.MyLogins)
+	config.BotLogins = CleanList(parsed.BotLogins)
+	config.WatchedLogins = CleanList(parsed.WatchedLogins)
 	if parsed.Repos != nil {
 		config.Repos = parsed.Repos
 	}
@@ -209,9 +241,6 @@ func Load(path string) (Config, string) {
 	if parsed.TwoWay != nil {
 		config.TwoWay = parseTwoWay(meta, *parsed.TwoWay)
 	}
-	config.MyLogins = parsed.MyLogins
-	config.BotLogins = parsed.BotLogins
-	config.WatchedLogins = parsed.WatchedLogins
 	problems := []string{}
 	for repo, table := range parsed.Notifications {
 		settings, ok := parseNotify(meta, table)
@@ -245,7 +274,7 @@ func parseNotify(meta toml.MetaData, table toml.Primitive) (NotifyConfig, bool) 
 	if UnknownSetting(settings) != "" {
 		return NotifyConfig{}, false
 	}
-	return settings, true
+	return settings.Cleaned(), true
 }
 
 // UnknownSetting is the first event or notify_for value that isn't one we
@@ -358,6 +387,12 @@ func Save(path string, config Config) error {
 			fmt.Sprintf("two_way_enabled = %s", tomlValue(settings.TwoWayEnabled)),
 			fmt.Sprintf("notify_for = %s", tomlValue(notifyFor(settings))),
 		)
+		if len(settings.SkipBranches) > 0 {
+			lines = append(lines, fmt.Sprintf("skip_branches = %s", tomlValue(settings.SkipBranches)))
+		}
+		if len(settings.SkipAuthors) > 0 {
+			lines = append(lines, fmt.Sprintf("skip_authors = %s", tomlValue(settings.SkipAuthors)))
+		}
 	}
 	return files.WriteAtomic(path, strings.Join(lines, "\n")+"\n")
 }

@@ -1,4 +1,5 @@
-// Settings (⌘,): appearance and startup, repositories and their notifications, backend control.
+// Settings (⌘,): appearance and startup, repositories and their notifications,
+// whose PRs are whose, backend control.
 
 import PrMonKit
 import ServiceManagement
@@ -15,7 +16,7 @@ final class AppSelection {
 }
 
 enum SettingsTab: String {
-    case general, repositories, backend
+    case general, repositories, authors, backend
 }
 
 enum Appearance: String, CaseIterable, Identifiable {
@@ -51,6 +52,9 @@ struct SettingsView: View {
             RepositorySettings(store: store, selection: selection)
                 .tabItem { Label("Repositories", systemImage: "shippingbox") }
                 .tag(SettingsTab.repositories)
+            AuthorSettings(store: store)
+                .tabItem { Label("Authors", systemImage: "person.2") }
+                .tag(SettingsTab.authors)
             BackendSettings(store: store)
                 .tabItem { Label("Backend", systemImage: "bolt.horizontal") }
                 .tag(SettingsTab.backend)
@@ -471,6 +475,114 @@ private struct AddRepoSheet: View {
     }
 }
 
+// MARK: - authors
+
+/// The backend's login lists, for notify_for.
+private struct Logins: Equatable {
+    var mine: [String]
+    var bots: [String]
+    var watched: [String]
+}
+
+struct AuthorSettings: View {
+    let store: PrMonStore
+    /// The lists as last saved (or loaded); edits are compared against these.
+    @State private var saved: Logins?
+    @State private var edited: Logins?
+
+    private var backendLogins: Logins? {
+        guard let config = store.state?.snapshot.config else { return nil }
+        return Logins(mine: config.myLogins, bots: config.botLogins, watched: config.watchedLogins)
+    }
+
+    var body: some View {
+        Group {
+            if !store.isConnected {
+                ContentUnavailableView(
+                    "Not Connected", systemImage: "bolt.horizontal.circle",
+                    description: Text("Settings are stored by the pr-mon backend.")
+                )
+            } else if let binding = Binding($edited) {
+                editor(binding)
+            } else {
+                ProgressView()
+            }
+        }
+        .onAppear { reset() }
+        .onChange(of: backendLogins) {
+            // Another client saved: follow it unless there are unsaved edits here.
+            if edited == saved { reset() }
+        }
+    }
+
+    private func reset() {
+        saved = backendLogins
+        edited = backendLogins
+    }
+
+    private func editor(_ logins: Binding<Logins>) -> some View {
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    ListField(title: "My logins", values: logins.mine, prompt: "the gh login")
+                    ListField(title: "Bots", values: logins.bots, prompt: "logins")
+                    ListField(title: "Watched people", values: logins.watched, prompt: "logins")
+                } header: {
+                    Text("Whose PRs are whose")
+                } footer: {
+                    Text("Comma-separated GitHub logins, used by each repository's Notify about. "
+                        + "Empty logins mean whoever gh is logged in as; bots count along with GitHub apps.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+
+            Divider()
+            HStack {
+                Spacer()
+                Button("Revert") { reset() }
+                    .disabled(logins.wrappedValue == saved)
+                Button("Save") {
+                    let value = logins.wrappedValue
+                    store.saveLogins(mine: value.mine, bots: value.bots, watched: value.watched)
+                    saved = value
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(logins.wrappedValue == saved)
+            }
+            .padding(12)
+        }
+    }
+}
+
+/// A comma-separated text field over a list of strings.
+private struct ListField: View {
+    let title: String
+    @Binding var values: [String]
+    let prompt: String
+    @State private var text = ""
+
+    var body: some View {
+        TextField(title, text: $text, prompt: Text(prompt))
+            .onAppear { text = values.joined(separator: ", ") }
+            .onChange(of: text) { values = Self.split(text) }
+            .onChange(of: values) {
+                // Revert, or another client's save; typing a trailing comma leaves values alone.
+                if Self.split(text) != values { text = values.joined(separator: ", ") }
+            }
+    }
+
+    private static func split(_ text: String) -> [String] {
+        var values: [String] = []
+        for part in text.split(separator: ",") {
+            let value = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty && !values.contains(value) { values.append(value) }
+        }
+        return values
+    }
+}
+
 // MARK: - notifications
 
 private struct NotificationSettings: View {
@@ -570,10 +682,22 @@ private struct NotificationSettings: View {
                     } header: {
                         Text("Notify about")
                     } footer: {
-                        Text("Yours are my_logins in config.toml, or else the gh login. Bots are GitHub apps and bot_logins; watched people are watched_logins. None ticked means everyone's.")
+                        Text("Your logins, extra bots and watched people are set in the Authors tab. None ticked means everyone's.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                Section {
+                    ListField(title: "Branches starting with", values: settings.skipBranches,
+                              prompt: "e.g. release-please--")
+                    ListField(title: "Authors", values: settings.skipAuthors, prompt: "logins")
+                } header: {
+                    Text("Never notify about")
+                } footer: {
+                    Text("Comma-separated. These PRs stay quiet even when Notify about covers them.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {

@@ -134,6 +134,8 @@ func state() protocol.Snapshot {
 	settings.ScriptEnabled = true
 	settings.Script = "~/bin/im"
 	settings.TwoWayEnabled = true
+	settings.SkipBranches = []string{"release-please--"}
+	settings.SkipAuthors = []string{"octocat"}
 
 	pid := 4242
 	return protocol.Snapshot{
@@ -143,6 +145,9 @@ func state() protocol.Snapshot {
 			FocusInterval:  60,
 			ActiveInterval: 10,
 			Notifications:  map[string]config.NotifyConfig{"acme/api": settings},
+			MyLogins:       []string{"alice"},
+			BotLogins:      []string{"release-robot"},
+			WatchedLogins:  []string{"teammate"},
 		},
 		Repos: map[string]models.Repo{
 			"acme/api":        actions.WithActions(api, nil),
@@ -223,6 +228,8 @@ func requests(squash, merge models.MergeMethod) []map[string]any {
 	settings := config.NewNotifyConfig()
 	withScript := settings
 	withScript.Script = "im"
+	withScript.SkipBranches = []string{"release-please--"}
+	withScript.SkipAuthors = []string{"octocat"}
 	return []map[string]any{
 		{"id": 1, "op": "hello", "args": map[string]any{}},
 		{"id": 2, "op": "snapshot", "args": map[string]any{}},
@@ -248,6 +255,8 @@ func requests(squash, merge models.MergeMethod) []map[string]any {
 		{"id": 15, "op": "preview_notification",
 			"args": map[string]any{"repo": "acme/api", "message": "{{PR_NUM}}"}},
 		{"id": 16, "op": "set_poll_interval", "args": map[string]any{"seconds": 120}},
+		{"id": 26, "op": "save_logins", "args": map[string]any{
+			"mine": []string{"octocat"}, "bots": []string{"release-robot"}, "watched": []string{"teammate"}}},
 		{"id": 17, "op": "add_dependency",
 			"args": map[string]any{"repo": "acme/api", "number": 9, "on": "acme/api#2"}},
 		{"id": 18, "op": "remove_dependency",

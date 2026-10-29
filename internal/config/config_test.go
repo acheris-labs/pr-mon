@@ -146,8 +146,11 @@ func TestNotificationsRoundTrip(t *testing.T) {
 		Script:         "~/bin/send 'two words'",
 		DesktopEnabled: true,
 		NotifyFor:      []string{"mine", "bots"},
+		SkipBranches:   []string{"release-please--"},
+		SkipAuthors:    []string{"octocat"},
 	}
-	web := config.NotifyConfig{Events: []string{}, DesktopEnabled: true, NotifyFor: []string{"everyone"}}
+	web := config.NotifyConfig{Events: []string{}, DesktopEnabled: true, NotifyFor: []string{"everyone"},
+		SkipBranches: []string{}, SkipAuthors: []string{}}
 	saved := config.New()
 	saved.Repos = []string{"acme/api", "Acme.Org/web-app"}
 	saved.Notifications = map[string]config.NotifyConfig{"acme/api": api, "Acme.Org/web-app": web}
@@ -219,7 +222,7 @@ func TestEmptyNotifyForMeansEveryone(t *testing.T) {
 	}
 }
 
-func TestLoginsRoundTripAndStayOffTheWire(t *testing.T) {
+func TestLoginsRoundTripAndReachClients(t *testing.T) {
 	path := tempPath(t, "config.toml")
 	saved := config.New()
 	saved.Repos = []string{"acme/api"}
@@ -240,9 +243,10 @@ func TestLoginsRoundTripAndStayOffTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), "octocat") || strings.Contains(string(encoded), "release-robot") ||
-		strings.Contains(string(encoded), "teammate") {
-		t.Errorf("logins sent to clients: %s", encoded)
+	if !strings.Contains(string(encoded), `"my_logins":["octocat","work-cat"]`) ||
+		!strings.Contains(string(encoded), `"bot_logins":["release-robot"]`) ||
+		!strings.Contains(string(encoded), `"watched_logins":["teammate"]`) {
+		t.Errorf("logins missing for clients: %s", encoded)
 	}
 }
 

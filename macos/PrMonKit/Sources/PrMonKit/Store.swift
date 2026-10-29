@@ -251,6 +251,10 @@ public final class PrMonStore {
         run { try await $0.setPollInterval(seconds) }
     }
 
+    public func saveLogins(mine: [String], bots: [String], watched: [String]) {
+        run { try await $0.saveLogins(mine: mine, bots: bots, watched: watched) }
+    }
+
     public func saveNotifications(repo: String, settings: NotifyConfig) {
         run { try await $0.saveNotifications(repo: repo, settings: settings) }
     }

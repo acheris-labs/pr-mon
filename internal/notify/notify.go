@@ -92,8 +92,11 @@ type People struct {
 	Unknown bool
 }
 
-// Wants reports whether these settings notify about this PR's author.
+// Wants reports whether these settings notify about this PR's author and branch.
 func Wants(settings config.NotifyConfig, people People, pr models.PullRequest) bool {
+	if skipped(settings, pr) {
+		return false
+	}
 	if settings.ForEveryone() || people.Unknown {
 		return true
 	}
@@ -105,6 +108,16 @@ func Wants(settings config.NotifyConfig, people People, pr models.PullRequest) b
 	}
 	return slices.Contains(settings.NotifyFor, config.NotifyBots) &&
 		(pr.AuthorIsBot || hasLogin(people.Bots, pr.Author))
+}
+
+// skipped reports whether the PR's head branch or author is on a skip list.
+func skipped(settings config.NotifyConfig, pr models.PullRequest) bool {
+	for _, prefix := range settings.SkipBranches {
+		if prefix != "" && strings.HasPrefix(pr.HeadRef, prefix) {
+			return true
+		}
+	}
+	return hasLogin(settings.SkipAuthors, pr.Author)
 }
 
 // hasLogin compares as GitHub does, ignoring case; "name[bot]" (how the REST

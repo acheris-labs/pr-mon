@@ -107,11 +107,16 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
     public var twoWayEnabled: Bool
     /// Whose PRs notify: any of "mine", "bots", "watched", "everyone"; empty means everyone's.
     public var notifyFor: [String]
+    /// PRs that never notify, whatever notifyFor says: head branches with
+    /// these prefixes, and these authors.
+    public var skipBranches: [String]
+    public var skipAuthors: [String]
 
     public init(
         message: String, events: [String], includeDrafts: Bool = false,
         scriptEnabled: Bool = false, script: String = "", desktopEnabled: Bool = false,
-        twoWayEnabled: Bool = false, notifyFor: [String] = ["everyone"]
+        twoWayEnabled: Bool = false, notifyFor: [String] = ["everyone"],
+        skipBranches: [String] = [], skipAuthors: [String] = []
     ) {
         self.message = message
         self.events = events
@@ -121,10 +126,13 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
         self.desktopEnabled = desktopEnabled
         self.twoWayEnabled = twoWayEnabled
         self.notifyFor = notifyFor
+        self.skipBranches = skipBranches
+        self.skipAuthors = skipAuthors
     }
 
     /// A backend from before two-way notifications sends no two_way_enabled: off.
     /// One from before notify_for sends none: it notifies for everyone.
+    /// One from before the skip lists sends none: nothing is skipped.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         message = try container.decode(String.self, forKey: .message)
@@ -135,6 +143,8 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
         desktopEnabled = try container.decode(Bool.self, forKey: .desktopEnabled)
         twoWayEnabled = try container.decodeIfPresent(Bool.self, forKey: .twoWayEnabled) ?? false
         notifyFor = try container.decodeIfPresent([String].self, forKey: .notifyFor) ?? ["everyone"]
+        skipBranches = try container.decodeIfPresent([String].self, forKey: .skipBranches) ?? []
+        skipAuthors = try container.decodeIfPresent([String].self, forKey: .skipAuthors) ?? []
     }
 
     enum CodingKeys: String, CodingKey {
@@ -144,6 +154,8 @@ public struct NotifyConfig: Codable, Sendable, Equatable {
         case desktopEnabled = "desktop_enabled"
         case twoWayEnabled = "two_way_enabled"
         case notifyFor = "notify_for"
+        case skipBranches = "skip_branches"
+        case skipAuthors = "skip_authors"
     }
 }
 
@@ -155,12 +167,33 @@ public struct Config: Codable, Sendable, Equatable {
     public var focusInterval: Int
     public var activeInterval: Int
     public var notifications: [String: NotifyConfig]
+    /// The user's logins (empty: the gh login), extra bot accounts, and
+    /// watched people, for NotifyConfig.notifyFor.
+    public var myLogins: [String]
+    public var botLogins: [String]
+    public var watchedLogins: [String]
+
+    /// A backend from before the login lists were sent sends none.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        repos = try container.decode([String].self, forKey: .repos)
+        pollInterval = try container.decode(Int.self, forKey: .pollInterval)
+        focusInterval = try container.decode(Int.self, forKey: .focusInterval)
+        activeInterval = try container.decode(Int.self, forKey: .activeInterval)
+        notifications = try container.decode([String: NotifyConfig].self, forKey: .notifications)
+        myLogins = try container.decodeIfPresent([String].self, forKey: .myLogins) ?? []
+        botLogins = try container.decodeIfPresent([String].self, forKey: .botLogins) ?? []
+        watchedLogins = try container.decodeIfPresent([String].self, forKey: .watchedLogins) ?? []
+    }
 
     enum CodingKeys: String, CodingKey {
         case repos, notifications
         case pollInterval = "poll_interval"
         case focusInterval = "focus_interval"
         case activeInterval = "active_interval"
+        case myLogins = "my_logins"
+        case botLogins = "bot_logins"
+        case watchedLogins = "watched_logins"
     }
 }
 

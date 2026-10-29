@@ -274,6 +274,8 @@ fr.julienxx.oss.terminal-notifier` to be asked again).
   script = "im --deliver tgram"
   desktop_enabled = false
   notify_for = ["mine", "bots", "watched"]   # whose PRs notify: "mine", "bots", "watched", "everyone"
+  skip_branches = ["release-please--"]       # optional: head branches starting with these never notify
+  skip_authors = []                          # optional: these people's PRs never notify
   ```
 
   A repo set up before `notify_for` existed notifies for everyone until you

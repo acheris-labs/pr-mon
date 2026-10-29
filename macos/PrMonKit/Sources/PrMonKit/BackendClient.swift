@@ -134,6 +134,11 @@ public actor BackendClient {
         try await command("set_poll_interval", SecondsArgs(seconds: seconds))
     }
 
+    /// Replaces the my_logins, bot_logins and watched_logins lists.
+    public func saveLogins(mine: [String], bots: [String], watched: [String]) async throws {
+        try await command("save_logins", LoginsArgs(mine: mine, bots: bots, watched: watched))
+    }
+
     public func notificationForm() async throws -> NotificationForm {
         try await request("notification_form", NoArgs())
     }

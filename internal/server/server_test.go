@@ -499,7 +499,7 @@ func TestOpsCoverTheDocumentedRequests(t *testing.T) {
 		"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
 		"set_collapsed", "set_focus", "perform", "add_dependency", "remove_dependency",
 		"dependency_graph", "save_notifications", "send_test", "set_poll_interval",
-		"notification_form", "preview_notification", "shutdown",
+		"save_logins", "notification_form", "preview_notification", "shutdown",
 	}
 	if !reflect.DeepEqual(server.Ops, documented) {
 		t.Errorf("ops = %v, want %v", server.Ops, documented)

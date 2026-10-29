@@ -75,6 +75,12 @@ struct SecondsArgs: Encodable, Sendable {
     var seconds: Int
 }
 
+struct LoginsArgs: Encodable, Sendable {
+    var mine: [String]
+    var bots: [String]
+    var watched: [String]
+}
+
 struct PreviewArgs: Encodable, Sendable {
     var repo: String
     var message: String

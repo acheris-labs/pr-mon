@@ -51,6 +51,9 @@ enum Fixtures {
         #expect(snapshot.config.repos == ["acme/api", "acme/web", "Textualize/rich"])
         #expect(snapshot.config.notifications["acme/api"]?.scriptEnabled == true)
         #expect(snapshot.config.notifications["acme/api"]?.twoWayEnabled == true)
+        #expect(snapshot.config.notifications["acme/api"]?.skipBranches == ["release-please--"])
+        #expect(snapshot.config.myLogins == ["alice"] && snapshot.config.botLogins == ["release-robot"]
+                && snapshot.config.watchedLogins == ["teammate"])
         #expect(snapshot.status.twoWay == "Telegram")
         #expect(snapshot.config.pollInterval == 120 && snapshot.config.focusInterval == 60
                 && snapshot.config.activeInterval == 10)
@@ -213,6 +216,9 @@ enum Fixtures {
             PerformArgs(repo: "acme/api", number: 1,
                         action: Action(kind: kind, method: method, deleteBranch: delete))
         }
+        var withSkips = defaults(script: "im")
+        withSkips.skipBranches = ["release-please--"]
+        withSkips.skipAuthors = ["octocat"]
         let encoded: [Data] = [
             try Wire.encode(Request(id: 1, op: "hello", args: NoArgs())),
             try Wire.encode(Request(id: 2, op: "snapshot", args: NoArgs())),
@@ -234,13 +240,16 @@ enum Fixtures {
             try Wire.encode(Request(id: 21, op: "set_focus",
                                     args: FocusArgs(repo: "acme/api", number: 1))),
             try Wire.encode(Request(id: 12, op: "save_notifications",
-                                    args: SettingsArgs(repo: "acme/api", settings: defaults(script: "im")))),
+                                    args: SettingsArgs(repo: "acme/api", settings: withSkips))),
             try Wire.encode(Request(id: 13, op: "send_test",
                                     args: SettingsArgs(repo: "acme/api", settings: defaults()))),
             try Wire.encode(Request(id: 14, op: "notification_form", args: NoArgs())),
             try Wire.encode(Request(id: 15, op: "preview_notification",
                                     args: PreviewArgs(repo: "acme/api", message: "{{PR_NUM}}"))),
             try Wire.encode(Request(id: 16, op: "set_poll_interval", args: SecondsArgs(seconds: 120))),
+            try Wire.encode(Request(id: 26, op: "save_logins",
+                                    args: LoginsArgs(mine: ["octocat"], bots: ["release-robot"],
+                                                     watched: ["teammate"]))),
             try Wire.encode(Request(id: 17, op: "add_dependency",
                                     args: DependencyArgs(repo: "acme/api", number: 9, on: "acme/api#2"))),
             try Wire.encode(Request(id: 18, op: "remove_dependency",

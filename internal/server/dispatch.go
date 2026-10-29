@@ -52,6 +52,12 @@ type secondsArgs struct {
 	Seconds int `json:"seconds"`
 }
 
+type loginsArgs struct {
+	Mine    []string `json:"mine"`
+	Bots    []string `json:"bots"`
+	Watched []string `json:"watched"`
+}
+
 func decodeArgs[T any](raw json.RawMessage, op string) (T, error) {
 	var args T
 	if len(raw) == 0 {
@@ -68,7 +74,7 @@ var Ops = []string{
 	"hello", "snapshot", "refresh_all", "add_repo", "remove_repo", "mark_seen",
 	"set_collapsed", "set_focus", "perform", "add_dependency", "remove_dependency",
 	"dependency_graph", "save_notifications", "send_test", "set_poll_interval",
-	"notification_form", "preview_notification", "shutdown",
+	"save_logins", "notification_form", "preview_notification", "shutdown",
 }
 
 func (s *Server) dispatch(connection net.Conn, request protocol.Request) (any, error) {
@@ -216,6 +222,13 @@ func (s *Server) dispatch(connection net.Conn, request protocol.Request) (any, e
 			return nil, err
 		}
 		return nil, s.monitor.SetPollInterval(args.Seconds)
+
+	case "save_logins":
+		args, err := decodeArgs[loginsArgs](request.Args, request.Op)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.monitor.SaveLogins(args.Mine, args.Bots, args.Watched)
 
 	case "shutdown":
 		s.monitor.RequestShutdown()
