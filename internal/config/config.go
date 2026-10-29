@@ -66,8 +66,8 @@ type NotifyConfig struct {
 	TwoWayEnabled  bool     `json:"two_way_enabled" toml:"two_way_enabled"`
 	// Whose PRs notify: any of NotifyForNames. Empty means everyone's.
 	NotifyFor []string `json:"notify_for" toml:"notify_for"`
-	// PRs that never notify, whatever NotifyFor says: head branches starting
-	// with any of these, and these authors.
+	// PRs that never notify, whatever NotifyFor says: head branches matching
+	// any of these globs (see notify.Wants), and these authors.
 	SkipBranches []string `json:"skip_branches" toml:"skip_branches"`
 	SkipAuthors  []string `json:"skip_authors" toml:"skip_authors"`
 }

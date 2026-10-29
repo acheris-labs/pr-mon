@@ -176,7 +176,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `desktop_enabled` | bool | |
 | `two_way_enabled` | bool | Send to the configured two-way channel (see Hello.two_way). |
 | `notify_for` | [string] | Whose PRs notify: any of `mine` (`Config.my_logins`, or else the gh login), `bots` (GitHub apps and `Config.bot_logins`), `watched` (`Config.watched_logins`), `everyone`. Empty means `everyone`. Settings sent without it keep notifying for `everyone`. |
-| `skip_branches` | [string] | PRs whose head branch starts with any of these never notify, whatever `notify_for` says. |
+| `skip_branches` | [string] | PRs whose head branch matches any of these globs never notify, whatever `notify_for` says. `*` is any run of characters (slashes too), `?` one character; a pattern with neither matches as a prefix. |
 | `skip_authors` | [string] | PRs by these logins never notify, whatever `notify_for` says. |
 
 ### Object: `NotificationForm`

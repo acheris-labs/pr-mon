@@ -161,6 +161,33 @@ func TestWants(t *testing.T) {
 	}
 }
 
+func TestWantsSkipsBranches(t *testing.T) {
+	cases := []struct {
+		pattern string
+		branch  string
+		skipped bool
+	}{
+		{"release-please--", "release-please--branches--main", true}, // no wildcard: a prefix
+		{"release-please--", "my-release-please--x", false},
+		{"release-*", "release-1.0", true},
+		{"release-*", "release/1.0", false},
+		{"release*", "release/1.0", true}, // * crosses slashes
+		{"release-*", "prerelease-1.0", false},
+		{"*-hotfix", "jira-12-hotfix", true},
+		{"*-hotfix", "jira-12-hotfix-2", false},
+		{"v?.0", "v1.0", true},
+		{"v?.0", "v10.0", false},
+		{"v?.0", "v1x0", false}, // . is literal
+	}
+	for _, tc := range cases {
+		settings := config.NotifyConfig{SkipBranches: []string{tc.pattern}}
+		pr := testfixtures.PR(1, func(pr *models.PullRequest) { pr.HeadRef = tc.branch })
+		if got := notify.Wants(settings, notify.People{}, pr); got == tc.skipped {
+			t.Errorf("%q on %q: skipped = %v, want %v", tc.pattern, tc.branch, !got, tc.skipped)
+		}
+	}
+}
+
 func TestDetectDesktopNotifier(t *testing.T) {
 	cases := []struct {
 		present []string

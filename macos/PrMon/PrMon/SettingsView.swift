@@ -309,6 +309,7 @@ struct RepositorySettings: View {
     let store: PrMonStore
     let selection: AppSelection
     @State private var selected: String?
+    @State private var tab = RepoSettingsTab.delivery
     @State private var adding = false
     @State private var confirmingRemoval = false
 
@@ -379,7 +380,7 @@ struct RepositorySettings: View {
                 description: Text("Settings are stored by the pr-mon backend.")
             )
         } else if let selected {
-            NotificationSettings(store: store, repo: selected)
+            NotificationSettings(store: store, repo: selected, tab: $tab)
                 .id(selected)
         } else {
             ContentUnavailableView(
@@ -484,110 +485,252 @@ private struct Logins: Equatable {
     var watched: [String]
 }
 
+private enum LoginGroup: Hashable { case mine, bots, watched }
+
+/// One tab per login list, each a list with +/− buttons. Changes save at once.
 struct AuthorSettings: View {
     let store: PrMonStore
-    /// The lists as last saved (or loaded); edits are compared against these.
-    @State private var saved: Logins?
-    @State private var edited: Logins?
+    @State private var group = LoginGroup.mine
 
-    private var backendLogins: Logins? {
+    private var logins: Logins? {
         guard let config = store.state?.snapshot.config else { return nil }
         return Logins(mine: config.myLogins, bots: config.botLogins, watched: config.watchedLogins)
     }
 
     var body: some View {
-        Group {
-            if !store.isConnected {
-                ContentUnavailableView(
-                    "Not Connected", systemImage: "bolt.horizontal.circle",
-                    description: Text("Settings are stored by the pr-mon backend.")
-                )
-            } else if let binding = Binding($edited) {
-                editor(binding)
-            } else {
-                ProgressView()
-            }
-        }
-        .onAppear { reset() }
-        .onChange(of: backendLogins) {
-            // Another client saved: follow it unless there are unsaved edits here.
-            if edited == saved { reset() }
+        if !store.isConnected {
+            ContentUnavailableView(
+                "Not Connected", systemImage: "bolt.horizontal.circle",
+                description: Text("Settings are stored by the pr-mon backend.")
+            )
+        } else if let logins {
+            editor(logins)
+        } else {
+            ProgressView()
         }
     }
 
-    private func reset() {
-        saved = backendLogins
-        edited = backendLogins
+    private func editor(_ logins: Logins) -> some View {
+        VStack(spacing: 16) {
+            Picker("Group", selection: $group) {
+                Text("My Logins").tag(LoginGroup.mine)
+                Text("Bots").tag(LoginGroup.bots)
+                Text("Watched People").tag(LoginGroup.watched)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+
+            list(for: group, logins: logins)
+                .id(group)
+        }
+        .padding(20)
     }
 
-    private func editor(_ logins: Binding<Logins>) -> some View {
-        VStack(spacing: 0) {
-            Form {
-                Section {
-                    ListField(title: "My logins", values: logins.mine, prompt: "the gh login")
-                    ListField(title: "Bots", values: logins.bots, prompt: "logins")
-                    ListField(title: "Watched people", values: logins.watched, prompt: "logins")
-                } header: {
-                    Text("Whose PRs are whose")
-                } footer: {
-                    Text("Comma-separated GitHub logins, used by each repository's Notify about. "
-                        + "Empty logins mean whoever gh is logged in as; bots count along with GitHub apps.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .formStyle(.grouped)
+    @ViewBuilder
+    private func list(for group: LoginGroup, logins: Logins) -> some View {
+        switch group {
+        case .mine:
+            StringList(
+                items: logins.mine, kind: .login, icon: "person.crop.circle",
+                emptyTitle: "Using Your gh Login",
+                emptyDetail: "Add logins here if you open PRs from more than one account.",
+                footer: "PRs by these accounts count as yours in each repository's Notify about."
+            ) { save(Logins(mine: $0, bots: logins.bots, watched: logins.watched)) }
+        case .bots:
+            StringList(
+                items: logins.bots, kind: .login, icon: "gearshape.2",
+                emptyTitle: "No Extra Bots",
+                emptyDetail: "GitHub apps already count as bots. Add accounts that act like one.",
+                footer: "PRs by these accounts and by GitHub apps count as bots in Notify about."
+            ) { save(Logins(mine: logins.mine, bots: $0, watched: logins.watched)) }
+        case .watched:
+            StringList(
+                items: logins.watched, kind: .login, icon: "eye",
+                emptyTitle: "Nobody Watched",
+                emptyDetail: "Add people whose PRs you want to hear about.",
+                footer: "PRs by these people count as watched in Notify about."
+            ) { save(Logins(mine: logins.mine, bots: logins.bots, watched: $0)) }
+        }
+    }
 
-            Divider()
-            HStack {
-                Spacer()
-                Button("Revert") { reset() }
-                    .disabled(logins.wrappedValue == saved)
-                Button("Save") {
-                    let value = logins.wrappedValue
-                    store.saveLogins(mine: value.mine, bots: value.bots, watched: value.watched)
-                    saved = value
-                }
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(logins.wrappedValue == saved)
-            }
-            .padding(12)
+    private func save(_ logins: Logins) {
+        store.saveLogins(mine: logins.mine, bots: logins.bots, watched: logins.watched)
+    }
+}
+
+/// What a StringList holds.
+private enum ListItemKind {
+    /// GitHub logins: compared ignoring case, a leading "@" dropped.
+    case login
+    /// Branch name globs (* any run, ? one character): compared exactly.
+    case branchPattern
+
+    var prompt: String {
+        switch self {
+        case .login: "GitHub login"
+        case .branchPattern: "e.g. release-please-*"
+        }
+    }
+
+    var noun: String {
+        switch self {
+        case .login: "login"
+        case .branchPattern: "pattern"
+        }
+    }
+
+    var plural: String {
+        switch self {
+        case .login: "logins"
+        case .branchPattern: "patterns"
         }
     }
 }
 
-/// A comma-separated text field over a list of strings.
-private struct ListField: View {
-    let title: String
-    @Binding var values: [String]
-    let prompt: String
-    @State private var text = ""
+/// A bordered list of strings with +/− buttons beneath it.
+private struct StringList: View {
+    let items: [String]
+    let kind: ListItemKind
+    let icon: String
+    let emptyTitle: String
+    let emptyDetail: String
+    var footer: String?
+    let update: ([String]) -> Void
+    @State private var selected = Set<String>()
+    @State private var adding = false
 
     var body: some View {
-        TextField(title, text: $text, prompt: Text(prompt))
-            .onAppear { text = values.joined(separator: ", ") }
-            .onChange(of: text) { values = Self.split(text) }
-            .onChange(of: values) {
-                // Revert, or another client's save; typing a trailing comma leaves values alone.
-                if Self.split(text) != values { text = values.joined(separator: ", ") }
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(spacing: 0) {
+                List(items, id: \.self, selection: $selected) { item in
+                    Label(item, systemImage: icon)
+                }
+                .listStyle(.bordered(alternatesRowBackgrounds: true))
+                .onDeleteCommand(perform: remove)
+                .overlay {
+                    if items.isEmpty {
+                        VStack(spacing: 4) {
+                            Image(systemName: icon).font(.title2)
+                            Text(emptyTitle).font(.headline)
+                            Text(emptyDetail).font(.caption).multilineTextAlignment(.center)
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding()
+                    }
+                }
+                HStack(spacing: 0) {
+                    Button { adding = true } label: {
+                        Image(systemName: "plus").frame(width: 24, height: 20)
+                    }
+                    .help("Add a \(kind.noun)")
+                    .popover(isPresented: $adding, arrowEdge: .bottom) {
+                        AddItemPopover(kind: kind, existing: items) { update(items + [$0]) }
+                    }
+                    Divider().frame(height: 16)
+                    Button(action: remove) {
+                        Image(systemName: "minus").frame(width: 24, height: 20)
+                    }
+                    .help("Remove the selected \(kind.plural)")
+                    .disabled(selected.isEmpty)
+                    Spacer()
+                }
+                .buttonStyle(.borderless)
+                .padding(4)
+                .background(.background)
+                .overlay(alignment: .top) { Divider() }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
+
+            if let footer {
+                Text(footer)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onChange(of: items) { selected.formIntersection(items) }
     }
 
-    private static func split(_ text: String) -> [String] {
-        var values: [String] = []
-        for part in text.split(separator: ",") {
-            let value = part.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !value.isEmpty && !values.contains(value) { values.append(value) }
+    private func remove() {
+        guard !selected.isEmpty else { return }
+        update(items.filter { !selected.contains($0) })
+        selected = []
+    }
+}
+
+/// Asks for one list item; Return adds it.
+private struct AddItemPopover: View {
+    let kind: ListItemKind
+    let existing: [String]
+    let add: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    private var item: String {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if kind == .login, value.hasPrefix("@") { value.removeFirst() }
+        return value
+    }
+
+    private var problem: String? {
+        if item.contains(where: \.isWhitespace) { return "A \(kind.noun) has no spaces." }
+        let duplicate = existing.contains {
+            kind == .login ? $0.caseInsensitiveCompare(item) == .orderedSame : $0 == item
         }
-        return values
+        return duplicate ? "Already in the list." : nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField(kind.prompt, text: $text, prompt: Text(kind.prompt))
+                .labelsHidden()
+                .focused($focused)
+                .onSubmit(submit)
+            Text(problem ?? " ")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Add", action: submit)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(item.isEmpty || problem != nil)
+            }
+        }
+        .padding(12)
+        .frame(width: 240)
+        .onAppear { focused = true }
+    }
+
+    private func submit() {
+        guard !item.isEmpty, problem == nil else { return }
+        add(item)
+        dismiss()
     }
 }
 
 // MARK: - notifications
 
+/// The tabs of a repository's notification settings.
+private enum RepoSettingsTab: Hashable, CaseIterable {
+    case delivery, events, include, exclude, message
+
+    var title: String {
+        switch self {
+        case .delivery: "Delivery"
+        case .events: "Events"
+        case .include: "Include"
+        case .exclude: "Exclude"
+        case .message: "Message"
+        }
+    }
+}
+
 private struct NotificationSettings: View {
     let store: PrMonStore
     let repo: String
+    @Binding var tab: RepoSettingsTab
     @State private var form: NotificationForm?
     @State private var loadError: String?
     /// The settings as last saved (or loaded); edits are compared against these.
@@ -636,93 +779,24 @@ private struct NotificationSettings: View {
 
     private func editor(form: NotificationForm, settings: Binding<NotifyConfig>) -> some View {
         VStack(spacing: 0) {
-            Form {
-                Section {
-                    Toggle("Run a script", isOn: settings.scriptEnabled)
-                    TextField("Command", text: settings.script, prompt: Text("e.g. im --deliver tgram"))
-                        .disabled(!settings.wrappedValue.scriptEnabled)
-                    Toggle("Show a desktop notification", isOn: settings.desktopEnabled)
-                        .disabled(notifier == nil)
-                    Toggle("Send to \(twoWay ?? "a chat") with buttons", isOn: settings.twoWayEnabled)
-                        .disabled(twoWay == nil)
-                } header: {
-                    Text("Notify \(repo) by")
-                } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(form.scriptHelp)
-                        if let notifier {
-                            Text("Desktop notifications use \(notifier).")
-                        } else {
-                            Text("No desktop notifier found (install terminal-notifier).")
-                        }
-                        if let twoWay {
-                            Text("Two-way notifications use \(twoWay).")
-                        } else {
-                            Text("No two-way channel set up ([two_way] in config.toml).")
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
+            Picker("Section", selection: $tab) {
+                ForEach(RepoSettingsTab.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .padding(.top, 16)
 
-                Section {
-                    ForEach(form.events) { event in
-                        Toggle(event.label, isOn: eventBinding(event.name, settings: settings, form: form))
-                    }
-                    Toggle("Include draft PRs", isOn: settings.includeDrafts)
-                } header: {
-                    Text("When a PR becomes")
-                }
-
-                if !form.notifyFor.isEmpty {
-                    Section {
-                        ForEach(form.notifyFor) { option in
-                            Toggle(option.label, isOn: notifyForBinding(option.name, settings: settings, form: form))
-                        }
-                    } header: {
-                        Text("Notify about")
-                    } footer: {
-                        Text("Your logins, extra bots and watched people are set in the Authors tab. None ticked means everyone's.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section {
-                    ListField(title: "Branches starting with", values: settings.skipBranches,
-                              prompt: "e.g. release-please--")
-                    ListField(title: "Authors", values: settings.skipAuthors, prompt: "logins")
-                } header: {
-                    Text("Never notify about")
-                } footer: {
-                    Text("Comma-separated. These PRs stay quiet even when Notify about covers them.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    TextField("Template", text: settings.message, axis: .vertical)
-                        .lineLimit(1...3)
-                    LabeledContent("Preview") {
-                        Text(preview?.text ?? "")
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                    if let unknown = preview?.unknown, !unknown.isEmpty {
-                        Label("Unknown placeholders: \(unknown.joined(separator: ", "))",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                    }
-                } header: {
-                    Text("Message")
-                } footer: {
-                    Text("Placeholders: " + form.variables.map { "{{\($0)}}" }.joined(separator: " "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+            Group {
+                switch tab {
+                case .delivery: delivery(form: form, settings: settings)
+                case .events: events(form: form, settings: settings)
+                case .include: include(form: form, settings: settings)
+                case .exclude: exclude(settings: settings)
+                case .message: message(form: form, settings: settings)
                 }
             }
-            .formStyle(.grouped)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .task(id: settings.wrappedValue.message) { await updatePreview(settings.wrappedValue.message) }
 
             Divider()
@@ -742,6 +816,121 @@ private struct NotificationSettings: View {
             }
             .padding(12)
         }
+    }
+
+    private func delivery(form: NotificationForm, settings: Binding<NotifyConfig>) -> some View {
+        Form {
+            Section {
+                Toggle("Run a script", isOn: settings.scriptEnabled)
+                TextField("Command", text: settings.script, prompt: Text("e.g. im --deliver tgram"))
+                    .disabled(!settings.wrappedValue.scriptEnabled)
+                Toggle("Show a desktop notification", isOn: settings.desktopEnabled)
+                    .disabled(notifier == nil)
+                Toggle("Send to \(twoWay ?? "a chat") with buttons", isOn: settings.twoWayEnabled)
+                    .disabled(twoWay == nil)
+            } header: {
+                Text("Notify \(repo) by")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(form.scriptHelp)
+                    if let notifier {
+                        Text("Desktop notifications use \(notifier).")
+                    } else {
+                        Text("No desktop notifier found (install terminal-notifier).")
+                    }
+                    if let twoWay {
+                        Text("Two-way notifications use \(twoWay).")
+                    } else {
+                        Text("No two-way channel set up ([two_way] in config.toml).")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func events(form: NotificationForm, settings: Binding<NotifyConfig>) -> some View {
+        Form {
+            Section {
+                ForEach(form.events) { event in
+                    Toggle(event.label, isOn: eventBinding(event.name, settings: settings, form: form))
+                }
+                Toggle("Include draft PRs", isOn: settings.includeDrafts)
+            } header: {
+                Text("When a PR becomes")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func include(form: NotificationForm, settings: Binding<NotifyConfig>) -> some View {
+        Form {
+            Section {
+                ForEach(form.notifyFor) { option in
+                    Toggle(option.label, isOn: notifyForBinding(option.name, settings: settings, form: form))
+                }
+            } header: {
+                Text("Notify about")
+            } footer: {
+                Text("Your logins, extra bots and watched people are set in Settings → Authors. "
+                    + "None ticked means everyone's.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func exclude(settings: Binding<NotifyConfig>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Branches matching").font(.headline)
+            StringList(
+                items: settings.wrappedValue.skipBranches, kind: .branchPattern,
+                icon: "arrow.triangle.branch",
+                emptyTitle: "No Skipped Branches",
+                emptyDetail: "PRs from any branch can notify.",
+                footer: "Globs: * is any run of characters, ? is one. Without either, a pattern matches branches starting with it."
+            ) { settings.wrappedValue.skipBranches = $0 }
+
+            Text("Authors").font(.headline).padding(.top, 8)
+            StringList(
+                items: settings.wrappedValue.skipAuthors, kind: .login,
+                icon: "person.crop.circle.badge.xmark",
+                emptyTitle: "No Skipped Authors",
+                emptyDetail: "Use this to mute one person, or one bot, that Include lets through.",
+                footer: "These PRs never notify, whatever Include says."
+            ) { settings.wrappedValue.skipAuthors = $0 }
+        }
+        .padding(20)
+    }
+
+    private func message(form: NotificationForm, settings: Binding<NotifyConfig>) -> some View {
+        Form {
+            Section {
+                TextField("Template", text: settings.message, axis: .vertical)
+                    .lineLimit(1...3)
+                LabeledContent("Preview") {
+                    Text(preview?.text ?? "")
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                if let unknown = preview?.unknown, !unknown.isEmpty {
+                    Label("Unknown placeholders: \(unknown.joined(separator: ", "))",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Message")
+            } footer: {
+                Text("Placeholders: " + form.variables.map { "{{\($0)}}" }.joined(separator: " "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+        .formStyle(.grouped)
     }
 
     /// Without a notifier or a two-way channel that switch is disabled; keep

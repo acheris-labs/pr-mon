@@ -112,12 +112,35 @@ func Wants(settings config.NotifyConfig, people People, pr models.PullRequest) b
 
 // skipped reports whether the PR's head branch or author is on a skip list.
 func skipped(settings config.NotifyConfig, pr models.PullRequest) bool {
-	for _, prefix := range settings.SkipBranches {
-		if prefix != "" && strings.HasPrefix(pr.HeadRef, prefix) {
+	for _, pattern := range settings.SkipBranches {
+		if pattern != "" && branchMatches(pattern, pr.HeadRef) {
 			return true
 		}
 	}
 	return hasLogin(settings.SkipAuthors, pr.Author)
+}
+
+// branchMatches reports whether a head branch matches a skip_branches glob:
+// * is any run of characters, slashes included, and ? is one character. A
+// pattern with neither matches as a prefix, as skip_branches did before globs.
+func branchMatches(pattern, branch string) bool {
+	if !strings.ContainsAny(pattern, "*?") {
+		return strings.HasPrefix(branch, pattern)
+	}
+	var expression strings.Builder
+	expression.WriteString("^")
+	for _, r := range pattern {
+		switch r {
+		case '*':
+			expression.WriteString(".*")
+		case '?':
+			expression.WriteString(".")
+		default:
+			expression.WriteString(regexp.QuoteMeta(string(r)))
+		}
+	}
+	expression.WriteString("$")
+	return regexp.MustCompile(expression.String()).MatchString(branch)
 }
 
 // hasLogin compares as GitHub does, ignoring case; "name[bot]" (how the REST
