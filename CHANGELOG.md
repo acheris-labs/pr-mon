@@ -4,6 +4,24 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.5]
+
+### Added
+
+- Skip notifications by branch or author. Each repo's notification settings
+  take `skip_branches` and `skip_authors`: matching PRs never notify, whatever
+  `notify_for` says. Branches are globs (`release-please-*`, `*-hotfix`); `*`
+  is any run of characters, slashes included, and `?` is one character. A
+  pattern without either matches branches starting with it.
+- The Mac app's Authors settings tab edits your logins, extra bots and
+  watched people, one list each.
+
+### Changed
+
+- In the Mac app each repo's notification settings are split into Delivery,
+  Events, Include, Exclude and Message tabs, and lists of logins and branches
+  are edited with + and − buttons.
+
 ## [0.5.4]
 
 ### Added
