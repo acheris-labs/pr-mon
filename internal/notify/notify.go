@@ -94,7 +94,7 @@ type People struct {
 
 // Wants reports whether these settings notify about this PR's author and branch.
 func Wants(settings config.NotifyConfig, people People, pr models.PullRequest) bool {
-	if skipped(settings, pr) {
+	if Excluded(settings, pr) {
 		return false
 	}
 	if settings.ForEveryone() || people.Unknown {
@@ -110,8 +110,9 @@ func Wants(settings config.NotifyConfig, people People, pr models.PullRequest) b
 		(pr.AuthorIsBot || hasLogin(people.Bots, pr.Author))
 }
 
-// skipped reports whether the PR's head branch or author is on a skip list.
-func skipped(settings config.NotifyConfig, pr models.PullRequest) bool {
+// Excluded reports whether the PR's head branch or author is on a skip list:
+// it never notifies, and gets no unseen badge.
+func Excluded(settings config.NotifyConfig, pr models.PullRequest) bool {
 	for _, pattern := range settings.SkipBranches {
 		if pattern != "" && branchMatches(pattern, pr.HeadRef) {
 			return true

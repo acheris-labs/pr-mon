@@ -104,7 +104,7 @@ method. Dependencies are dropped when the waiting PR merges or closes.
 |:------|:-----|:--------|
 | `repos` | `Snapshot` | The repo list changed; replace all state. |
 | `repo` | `name`, `repo`: `Repo` or null, `error`: string or null, `unseen`: [int], `armed`: {number: `ArmedMerge`} | One repo was refreshed. `repo` is null until it has loaded. |
-| `seen` | `name`, `unseen`: [int] | New-PR markers changed. |
+| `seen` | `name`, `unseen`: [int] | New-PR markers changed, or the repo's skip lists did. |
 | `collapsed` | `collapsed`: [string] | Collapsed owner groups changed. |
 | `config` | `config`: `Config` | Settings changed. |
 | `status` | `status`: `Status` | Backend status changed (last update, rate limit, warnings). |
@@ -133,7 +133,7 @@ PR numbers used as keys (`armed`) are strings like `"12"`.
 | `config` | `Config` | |
 | `repos` | {name: `Repo`} | Loaded repos only. |
 | `errors` | {name: string} | Last fetch error per repo. |
-| `unseen` | {name: [int]} | PR numbers not yet seen, per configured repo. |
+| `unseen` | {name: [int]} | PR numbers not yet seen, per configured repo. PRs the repo's `skip_branches` or `skip_authors` cover are left out. |
 | `collapsed` | [string] | Collapsed owner groups. |
 | `armed` | {name: {number: `ArmedMerge`}} | PRs pr-mon will merge when ready. |
 | `status` | `Status` | |

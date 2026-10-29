@@ -400,6 +400,7 @@ func (m *Monitor) SaveNotifications(repo string, settings config.NotifyConfig) e
 	m.saveConfigLocked()
 	m.mutex.Unlock()
 	m.emit(Event{Kind: "config"})
+	m.emit(Event{Kind: "seen", Name: repo}) // the skip lists change which PRs are unseen
 	m.toast(fmt.Sprintf("Notification settings saved for %s", repo))
 	return nil
 }

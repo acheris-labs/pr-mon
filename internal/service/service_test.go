@@ -494,6 +494,29 @@ func TestPollLoadsRepos(t *testing.T) {
 	}
 }
 
+func TestUnseenLeavesOutExcludedPRs(t *testing.T) {
+	client := newFakeGitHub(repoWith("acme/api",
+		testfixtures.PR(1, func(pr *models.PullRequest) { pr.HeadRef = "release-please--main" }),
+		testfixtures.PR(2, func(pr *models.PullRequest) { pr.Author = "noisy" }),
+		testfixtures.PR(3)))
+	h := start(t, client, []string{"acme/api"}, nil)
+	if got := h.monitor.Unseen("acme/api"); len(got) != 3 {
+		t.Fatalf("unseen = %v, want all three before any exclusions", got)
+	}
+	settings := config.NewNotifyConfig()
+	settings.SkipBranches = []string{"release-please-*"}
+	settings.SkipAuthors = []string{"noisy"}
+	if err := h.monitor.SaveNotifications("acme/api", settings); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.monitor.Unseen("acme/api"); !slices.Equal(got, []int{3}) {
+		t.Errorf("unseen = %v, want only #3: excluded PRs get no badge", got)
+	}
+	if !slices.Contains(h.kinds(), "seen") {
+		t.Errorf("events = %v, want a seen update so clients redraw their badges", h.kinds())
+	}
+}
+
 func TestFetchErrorKeepsLastData(t *testing.T) {
 	client := newFakeGitHub(repoWith("acme/api", testfixtures.PR(1)))
 	h := start(t, client, []string{"acme/api"}, nil)

@@ -379,10 +379,21 @@ func (m *Monitor) Collapsed() []string {
 	return append([]string{}, m.state.Collapsed...)
 }
 
+// Unseen leaves out PRs the repo's skip lists exclude: those get no badge.
 func (m *Monitor) Unseen(name string) []int {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	return m.track.Unseen(name)
+	unseen := m.track.Unseen(name)
+	settings, configured := m.config.Notifications[name]
+	repo, loaded := m.repos[name]
+	if !configured || !loaded {
+		return unseen
+	}
+	excluded := map[int]bool{}
+	for _, pr := range repo.PRs {
+		excluded[pr.Number] = notify.Excluded(settings, pr)
+	}
+	return slices.DeleteFunc(unseen, func(number int) bool { return excluded[number] })
 }
 
 // Merging reports whether a merge (manual or pr-mon's) is in flight; restarting
