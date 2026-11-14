@@ -483,6 +483,9 @@ func (m *Model) detailsText() string {
 	if pr.LastCheckStartedAt != nil {
 		lines = append(lines, dim.Render("Last check:  ")+age(*pr.LastCheckStartedAt, m.now))
 	}
+	if build := buildTime(pr, m.now); build != "" {
+		lines = append(lines, dim.Render("Build:       ")+build)
+	}
 	if pr.HeadSha != nil {
 		lines = append(lines, dim.Render("Head SHA:    ")+*pr.HeadSha)
 	}

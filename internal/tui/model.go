@@ -400,6 +400,26 @@ func localTime(stamp string) string {
 }
 
 // age is a timestamp with a rough distance: "2026-09-16 09:10 (2h ago)".
+// buildTime is "took 6m41s" for a finished build, "running for 3m5s" for one
+// still going, and "" when there is none to show.
+func buildTime(pr models.PullRequest, now time.Time) string {
+	if pr.BuildStartedAt == nil {
+		return ""
+	}
+	started, err := time.Parse(time.RFC3339Nano, *pr.BuildStartedAt)
+	if err != nil {
+		return ""
+	}
+	if pr.BuildFinishedAt == nil {
+		return "running for " + max(now.Sub(started), 0).Round(time.Second).String()
+	}
+	finished, err := time.Parse(time.RFC3339Nano, *pr.BuildFinishedAt)
+	if err != nil {
+		return ""
+	}
+	return "took " + max(finished.Sub(started), 0).Round(time.Second).String()
+}
+
 func age(stamp string, now time.Time) string {
 	when, err := time.Parse(time.RFC3339Nano, stamp)
 	if err != nil {

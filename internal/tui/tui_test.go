@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -923,5 +924,27 @@ func TestFocusFollowsTheSelection(t *testing.T) {
 	press(t, model, "up")
 	if len(got) != 2 {
 		t.Errorf("calls = %v", got)
+	}
+}
+
+func TestBuildTime(t *testing.T) {
+	now := time.Date(2026, 9, 15, 1, 10, 0, 0, time.UTC)
+	cases := []struct {
+		name              string
+		started, finished *string
+		want              string
+	}{
+		{"finished", models.Ptr("2026-09-15T01:00:00Z"), models.Ptr("2026-09-15T01:06:41Z"), "took 6m41s"},
+		{"running", models.Ptr("2026-09-15T01:06:55Z"), nil, "running for 3m5s"},
+		{"no build", nil, nil, ""},
+		{"unparseable", models.Ptr("soon"), nil, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			pr := models.PullRequest{BuildStartedAt: c.started, BuildFinishedAt: c.finished}
+			if got := buildTime(pr, now); got != c.want {
+				t.Errorf("buildTime = %q, want %q", got, c.want)
+			}
+		})
 	}
 }
