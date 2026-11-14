@@ -4,6 +4,15 @@ All notable changes to pr-mon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 the git tags the release workflow builds from.
 
+## [0.5.9]
+
+### Added
+
+- PR details show how long the build took, or how long it has been running,
+  under "Last check" in both the Mac app and the dashboard. The build runs
+  from its earliest check's start to its last check's finish, so a check
+  re-run later counts the wait before it.
+
 ## [0.5.8]
 
 ### Added
