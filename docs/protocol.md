@@ -247,6 +247,8 @@ reimplement the rules.
 | `reasons` | [`Reason`] | Why it is (or isn't) mergeable, in display order. |
 | `strictly_ready` | bool | Safe to merge unattended (what merge when ready waits for). |
 | `last_check_started_at` | timestamp or null | |
+| `build_started_at` | timestamp or null | When the build began: the earliest check's start. Null with no started checks. |
+| `build_finished_at` | timestamp or null | When the build ended: the last check's finish. Null while any check is still running. |
 | `actions` | [`ActionOption`] | The PR's action menu, in display order. |
 | `muted` | bool | The user has silenced this PR's notifications (`mute`). |
 | `auto_retry` | bool | pr-mon will re-run this PR's failed checks once (`auto_retry_on`). |
@@ -260,6 +262,7 @@ reimplement the rules.
 | `name` | string | |
 | `state` | string | e.g. `SUCCESS`, `FAILURE`, `PENDING`. |
 | `started_at` | timestamp or null | |
+| `completed_at` | timestamp or null | Null while the check runs. |
 | `run_id` | int or null | The GitHub Actions run behind this check, which `rerun_checks` re-runs; null for anything that isn't an Actions run. |
 
 ### Object: `LinkedIssue`

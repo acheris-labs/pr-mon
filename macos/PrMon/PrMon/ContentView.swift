@@ -700,6 +700,12 @@ private struct PRDetail: View {
                         dateRow("Opened", pr.createdAt)
                         dateRow("Last commit", pr.lastCommitAt)
                         dateRow("Last check", pr.lastCheckStartedAt)
+                        if let started = Format.date(pr.buildStartedAt) {
+                            GridRow {
+                                Text("Build").foregroundStyle(.secondary).gridColumnAlignment(.trailing)
+                                BuildDuration(started: started, finished: Format.date(pr.buildFinishedAt))
+                            }
+                        }
                         if let sha = pr.headSha {
                             row("Head", Text(sha).font(.body.monospaced()))
                         }

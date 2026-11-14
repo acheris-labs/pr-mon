@@ -60,7 +60,7 @@ fragment PrFields on PullRequest {
             nodes {
               __typename
               ... on CheckRun {
-                name status conclusion startedAt
+                name status conclusion startedAt completedAt
                 checkSuite { workflowRun { databaseId workflow { name } } }
               }
               ... on StatusContext { context state createdAt }

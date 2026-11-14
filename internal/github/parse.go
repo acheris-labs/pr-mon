@@ -100,15 +100,16 @@ type prNode struct {
 }
 
 type checkNode struct {
-	TypeName   string  `json:"__typename"`
-	Name       string  `json:"name"`
-	Status     string  `json:"status"`
-	Conclusion string  `json:"conclusion"`
-	StartedAt  *string `json:"startedAt"`
-	Context    string  `json:"context"`
-	State      string  `json:"state"`
-	CreatedAt  *string `json:"createdAt"`
-	CheckSuite *struct {
+	TypeName    string  `json:"__typename"`
+	Name        string  `json:"name"`
+	Status      string  `json:"status"`
+	Conclusion  string  `json:"conclusion"`
+	StartedAt   *string `json:"startedAt"`
+	CompletedAt *string `json:"completedAt"`
+	Context     string  `json:"context"`
+	State       string  `json:"state"`
+	CreatedAt   *string `json:"createdAt"`
+	CheckSuite  *struct {
 		WorkflowRun *struct {
 			DatabaseID int `json:"databaseId"`
 			Workflow   *struct {
@@ -152,7 +153,13 @@ func (c checkNode) runID() *int {
 // toCheck flattens the two kinds of check GitHub reports into one shape.
 func (c checkNode) toCheck() models.Check {
 	if c.TypeName == "StatusContext" {
-		return models.Check{Name: c.Context, State: c.State, StartedAt: c.CreatedAt}
+		// A status reports only when it was last set, which for a final state
+		// is when it finished.
+		check := models.Check{Name: c.Context, State: c.State, StartedAt: c.CreatedAt}
+		if c.State != "PENDING" && c.State != "EXPECTED" {
+			check.CompletedAt = c.CreatedAt
+		}
+		return check
 	}
 	if c.Status != "COMPLETED" {
 		return models.Check{Name: c.Name, State: "PENDING", StartedAt: c.StartedAt, RunID: c.runID()}
@@ -161,7 +168,8 @@ func (c checkNode) toCheck() models.Check {
 	if state == "" {
 		state = "PENDING"
 	}
-	return models.Check{Name: c.Name, State: state, StartedAt: c.StartedAt, RunID: c.runID()}
+	return models.Check{Name: c.Name, State: state, StartedAt: c.StartedAt,
+		CompletedAt: c.CompletedAt, RunID: c.runID()}
 }
 
 // latestRunsState is the rollup state judged on each check's newest run.

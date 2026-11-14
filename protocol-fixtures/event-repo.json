@@ -51,6 +51,8 @@
           "reasons": [],
           "strictly_ready": true,
           "last_check_started_at": null,
+          "build_started_at": null,
+          "build_finished_at": null,
           "actions": [
             {
               "key": "merge",
@@ -120,6 +122,7 @@
               "name": "ci",
               "state": "PENDING",
               "started_at": "2026-09-15T01:30:00Z",
+              "completed_at": null,
               "run_id": null
             }
           ],
@@ -137,6 +140,8 @@
           ],
           "strictly_ready": false,
           "last_check_started_at": "2026-09-15T01:30:00Z",
+          "build_started_at": "2026-09-15T01:30:00Z",
+          "build_finished_at": null,
           "actions": [
             {
               "key": "merge",
@@ -215,12 +220,14 @@
               "name": "lint",
               "state": "FAILURE",
               "started_at": "2026-09-15T01:30:00Z",
+              "completed_at": "2026-09-15T01:34:10Z",
               "run_id": 4242
             },
             {
               "name": "deploy",
               "state": "SUCCESS",
               "started_at": "2026-09-15T01:00:00Z",
+              "completed_at": "2026-09-15T01:12:00Z",
               "run_id": 4242
             }
           ],
@@ -242,6 +249,8 @@
           ],
           "strictly_ready": false,
           "last_check_started_at": "2026-09-15T01:30:00Z",
+          "build_started_at": "2026-09-15T01:00:00Z",
+          "build_finished_at": "2026-09-15T01:34:10Z",
           "actions": [
             {
               "key": "merge",
@@ -341,6 +350,8 @@
           ],
           "strictly_ready": false,
           "last_check_started_at": null,
+          "build_started_at": null,
+          "build_finished_at": null,
           "actions": [
             {
               "key": "merge",
@@ -424,6 +435,8 @@
           ],
           "strictly_ready": false,
           "last_check_started_at": null,
+          "build_started_at": null,
+          "build_finished_at": null,
           "actions": [
             {
               "key": "merge",
@@ -513,6 +526,8 @@
           ],
           "strictly_ready": false,
           "last_check_started_at": null,
+          "build_started_at": null,
+          "build_finished_at": null,
           "actions": [
             {
               "key": "merge",
@@ -592,6 +607,8 @@
           ],
           "strictly_ready": false,
           "last_check_started_at": null,
+          "build_started_at": null,
+          "build_finished_at": null,
           "actions": [
             {
               "key": "merge",
@@ -669,6 +686,8 @@
           "reasons": [],
           "strictly_ready": false,
           "last_check_started_at": null,
+          "build_started_at": null,
+          "build_finished_at": null,
           "actions": [
             {
               "key": "merge",
@@ -748,6 +767,8 @@
           ],
           "strictly_ready": false,
           "last_check_started_at": null,
+          "build_started_at": null,
+          "build_finished_at": null,
           "actions": [
             {
               "key": "merge",

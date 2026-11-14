@@ -201,6 +201,8 @@ public struct Check: Codable, Sendable, Equatable {
     public var name: String
     public var state: String
     public var startedAt: String?
+    /// When it finished; nil while it runs, or from a backend older than build times.
+    public var completedAt: String?
     /// The GitHub Actions run behind this check, which `rerun_checks` re-runs;
     /// nil for anything that isn't an Actions run.
     public var runId: Int?
@@ -208,6 +210,7 @@ public struct Check: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case name, state
         case startedAt = "started_at"
+        case completedAt = "completed_at"
         case runId = "run_id"
     }
 }
@@ -370,6 +373,10 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
     public var reasons: [Reason]
     public var strictlyReady: Bool
     public var lastCheckStartedAt: String?
+    /// When the build began (its earliest check's start) and, once no check is
+    /// running, when it ended; nil from a backend older than build times.
+    public var buildStartedAt: String?
+    public var buildFinishedAt: String?
     public var actions: [ActionOption]
     /// The user has silenced its notifications; nil from a backend older than muting.
     public var muted: Bool?
@@ -404,6 +411,8 @@ public struct PullRequest: Codable, Sendable, Equatable, Identifiable {
         case headSha = "head_sha"
         case strictlyReady = "strictly_ready"
         case lastCheckStartedAt = "last_check_started_at"
+        case buildStartedAt = "build_started_at"
+        case buildFinishedAt = "build_finished_at"
         case autoRetry = "auto_retry"
     }
 }

@@ -85,9 +85,9 @@ func state() protocol.Snapshot {
 			testfixtures.Failing(p)
 			p.Checks = []models.Check{
 				{Name: "lint", State: "FAILURE", StartedAt: models.Ptr(checkStarted),
-					RunID: models.Ptr(4242)},
+					CompletedAt: models.Ptr("2026-09-15T01:34:10Z"), RunID: models.Ptr(4242)},
 				{Name: "deploy", State: "SUCCESS", StartedAt: models.Ptr("2026-09-15T01:00:00Z"),
-					RunID: models.Ptr(4242)},
+					CompletedAt: models.Ptr("2026-09-15T01:12:00Z"), RunID: models.Ptr(4242)},
 			}
 			p.ChecksTotal = 5
 			p.CanBypass = true // so it offers force merge

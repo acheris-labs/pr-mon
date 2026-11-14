@@ -44,6 +44,8 @@ type Check struct {
 	Name      string  `json:"name"`
 	State     string  `json:"state"`
 	StartedAt *string `json:"started_at"`
+	// When it finished; null while it runs.
+	CompletedAt *string `json:"completed_at"`
 	// The GitHub Actions run this check belongs to, for re-running it; null for
 	// a check that isn't an Actions run.
 	RunID *int `json:"run_id"`
@@ -158,11 +160,15 @@ type PullRequest struct {
 	LastCommitAt  *string       `json:"last_commit_at"`
 	HeadSha       *string       `json:"head_sha"`
 	// Filled in by the backend (readiness, actions); clients only display them.
-	Status             Status         `json:"status"`
-	Reasons            []Reason       `json:"reasons"`
-	StrictlyReady      bool           `json:"strictly_ready"`
-	LastCheckStartedAt *string        `json:"last_check_started_at"`
-	Actions            []ActionOption `json:"actions"`
+	Status             Status   `json:"status"`
+	Reasons            []Reason `json:"reasons"`
+	StrictlyReady      bool     `json:"strictly_ready"`
+	LastCheckStartedAt *string  `json:"last_check_started_at"`
+	// The build: its earliest check's start, and its last check's finish once
+	// none is still running.
+	BuildStartedAt  *string        `json:"build_started_at"`
+	BuildFinishedAt *string        `json:"build_finished_at"`
+	Actions         []ActionOption `json:"actions"`
 	// The user has silenced this PR's notifications.
 	Muted bool `json:"muted"`
 	// pr-mon re-runs this PR's failed Actions jobs once, when their run finishes.

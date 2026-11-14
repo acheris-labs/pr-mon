@@ -59,6 +59,8 @@ func TestRulesMatchTheFixtures(t *testing.T) {
 			stripped.Reasons = nil
 			stripped.StrictlyReady = false
 			stripped.LastCheckStartedAt = nil
+			stripped.BuildStartedAt = nil
+			stripped.BuildFinishedAt = nil
 			stripped.Actions = nil
 			bare.PRs = append(bare.PRs, readiness.Wait(readiness.Assess(stripped)))
 		}
@@ -77,6 +79,11 @@ func TestRulesMatchTheFixtures(t *testing.T) {
 				}
 				if !reflect.DeepEqual(pr.LastCheckStartedAt, want.LastCheckStartedAt) {
 					t.Errorf("last check = %v, want %v", pr.LastCheckStartedAt, want.LastCheckStartedAt)
+				}
+				if !reflect.DeepEqual(pr.BuildStartedAt, want.BuildStartedAt) ||
+					!reflect.DeepEqual(pr.BuildFinishedAt, want.BuildFinishedAt) {
+					t.Errorf("build = %v..%v, want %v..%v", pr.BuildStartedAt, pr.BuildFinishedAt,
+						want.BuildStartedAt, want.BuildFinishedAt)
 				}
 				if !reflect.DeepEqual(pr.Actions, want.Actions) {
 					t.Errorf("actions = %+v, want %+v", pr.Actions, want.Actions)

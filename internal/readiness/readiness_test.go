@@ -1,6 +1,7 @@
 package readiness_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/acheris-labs/pr-mon/internal/models"
@@ -227,6 +228,68 @@ func TestLastCheckStartedAt(t *testing.T) {
 	if got := assess().LastCheckStartedAt; got != nil {
 		t.Errorf("no checks should give nil, got %v", *got)
 	}
+}
+
+func TestBuildSpan(t *testing.T) {
+	cases := map[string]struct {
+		checks       []models.Check
+		checkState   *string
+		wantStarted  *string
+		wantFinished *string
+	}{
+		"no checks": {},
+		"finished": {
+			checks: []models.Check{
+				{Name: "lint", State: "SUCCESS", StartedAt: models.Ptr("2026-09-15T01:00:00Z"),
+					CompletedAt: models.Ptr("2026-09-15T01:02:00Z")},
+				{Name: "test", State: "FAILURE", StartedAt: models.Ptr("2026-09-15T01:01:00Z"),
+					CompletedAt: models.Ptr("2026-09-15T01:07:00Z")},
+			},
+			wantStarted:  models.Ptr("2026-09-15T01:00:00Z"),
+			wantFinished: models.Ptr("2026-09-15T01:07:00Z"),
+		},
+		"still running": {
+			checks: []models.Check{
+				{Name: "lint", State: "SUCCESS", StartedAt: models.Ptr("2026-09-15T01:00:00Z"),
+					CompletedAt: models.Ptr("2026-09-15T01:02:00Z")},
+				{Name: "test", State: "PENDING", StartedAt: models.Ptr("2026-09-15T01:01:00Z")},
+			},
+			wantStarted: models.Ptr("2026-09-15T01:00:00Z"),
+		},
+		"a check beyond the fetched ones is pending": {
+			checks: []models.Check{
+				{Name: "lint", State: "SUCCESS", StartedAt: models.Ptr("2026-09-15T01:00:00Z"),
+					CompletedAt: models.Ptr("2026-09-15T01:02:00Z")},
+			},
+			checkState:  models.Ptr("PENDING"),
+			wantStarted: models.Ptr("2026-09-15T01:00:00Z"),
+		},
+		"queued, nothing started": {
+			checks: []models.Check{{Name: "test", State: "PENDING"}},
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			pr := assess(func(p *models.PullRequest) {
+				p.Checks = c.checks
+				p.ChecksTotal = len(c.checks)
+				p.CheckState = c.checkState
+			})
+			if !reflect.DeepEqual(pr.BuildStartedAt, c.wantStarted) {
+				t.Errorf("build started = %v, want %v", deref(pr.BuildStartedAt), deref(c.wantStarted))
+			}
+			if !reflect.DeepEqual(pr.BuildFinishedAt, c.wantFinished) {
+				t.Errorf("build finished = %v, want %v", deref(pr.BuildFinishedAt), deref(c.wantFinished))
+			}
+		})
+	}
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return "<nil>"
+	}
+	return *s
 }
 
 func waitingOn(pr models.PullRequest, states ...string) models.PullRequest {

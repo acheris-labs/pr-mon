@@ -75,6 +75,11 @@ enum Fixtures {
         #expect(failing.reasons.first == Reason(text: "Check failed: lint", level: .error))
         #expect(failing.checks.count == 2)
         #expect(failing.lastCheckStartedAt == "2026-09-15T01:30:00Z")
+        #expect(failing.checks[0].completedAt == "2026-09-15T01:34:10Z")
+        #expect(failing.buildStartedAt == "2026-09-15T01:00:00Z")
+        #expect(failing.buildFinishedAt == "2026-09-15T01:34:10Z")
+        #expect(api.prs[1].buildStartedAt == "2026-09-15T01:30:00Z")
+        #expect(api.prs[1].buildFinishedAt == nil)
 
         let autoMerged = api.prs[7]
         #expect(autoMerged.autoMerge == AutoMerge(method: .rebase, enabledBy: "carol"))

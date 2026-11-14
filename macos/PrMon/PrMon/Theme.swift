@@ -163,6 +163,27 @@ struct Timestamp: View {
     }
 }
 
+/// "Took 6m 41s", or "Running for 3m 5s" ticking while the build runs.
+struct BuildDuration: View {
+    let started: Date
+    let finished: Date?
+
+    var body: some View {
+        if let finished {
+            Text("Took \(Self.format(finished.timeIntervalSince(started)))")
+        } else {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text("Running for \(Self.format(context.date.timeIntervalSince(started)))")
+            }
+        }
+    }
+
+    static func format(_ seconds: TimeInterval) -> String {
+        Duration.seconds(max(0, seconds.rounded()))
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .narrow))
+    }
+}
+
 enum Browser {
     /// Opens web links only.
     static func open(_ link: String) {

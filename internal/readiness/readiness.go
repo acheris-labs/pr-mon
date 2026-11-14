@@ -39,7 +39,30 @@ func Assess(pr models.PullRequest) models.PullRequest {
 	pr.Reasons = PRReasons(pr, status)
 	pr.StrictlyReady = IsStrictlyReady(pr, status)
 	pr.LastCheckStartedAt = lastCheckStartedAt(pr)
+	pr.BuildStartedAt, pr.BuildFinishedAt = buildSpan(pr)
 	return pr
+}
+
+// buildSpan is when the build began (its earliest check's start) and, once no
+// check is still running, when it ended (its last check's finish). A check
+// re-run later stretches the span to include the wait before it.
+func buildSpan(pr models.PullRequest) (started, finished *string) {
+	running := CheckPending(models.Check{State: checkState(pr)})
+	for _, check := range pr.Checks {
+		if CheckPending(check) {
+			running = true
+		}
+		if check.StartedAt != nil && (started == nil || *check.StartedAt < *started) {
+			started = check.StartedAt
+		}
+		if check.CompletedAt != nil && (finished == nil || *check.CompletedAt > *finished) {
+			finished = check.CompletedAt
+		}
+	}
+	if started == nil || running {
+		return started, nil
+	}
+	return started, finished
 }
 
 // ISO-8601 UTC timestamps from GitHub sort correctly as strings.
